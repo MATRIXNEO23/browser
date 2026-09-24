@@ -92,7 +92,7 @@ require_text(
 )
 require_text("fork/branding/browser-icon.svg", 'viewBox="0 0 512 512"', "#18d7ff", "#4768ff")
 require_text("fork/browser-chrome.css", "#navigator-toolbox", "#urlbar-background", "#PersonalToolbar", "#firefox-view-button")
-require_text("scripts/generate-brand-assets.py", "cairosvg", "firefox.ico", "default256.png")
+require_text("scripts/generate-brand-assets.py", "cairosvg", "firefox.ico", "default{size}.png")
 require_text("scripts/apply-fork-overlay.py", "browser-core", "MATRIXNEO23 Browser fork")
 require_text("docs/CANONICAL_PRODUCT_REQUIREMENTS.md", "NORMAL / TURBO / PRIVATE / GHOST", "SMART SEARCH", "maximum of 3 active background")
 
