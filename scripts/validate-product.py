@@ -39,6 +39,11 @@ if manifest_path.is_file():
         errors.append("manifest missing permissions: " + ", ".join(sorted(missing)))
     if "experiment_apis" not in manifest or "browserControl" not in manifest["experiment_apis"]:
         errors.append("manifest missing privileged browserControl experiment API")
+    action = manifest.get("action", {})
+    if action.get("default_area") != "navbar":
+        errors.append("Browser Control action is not pinned to navbar by default")
+    if action.get("default_icon") != "icons/browser.svg":
+        errors.append("Browser Control action does not use canonical Browser icon")
     if manifest.get("chrome_url_overrides", {}).get("newtab") != "newtab.html":
         errors.append("custom new tab not configured")
 
@@ -78,7 +83,16 @@ require_text("extension/newtab.js", "browser.search.search", "smart-search.html"
 require_text("extension/smart-search.js", "searchCandidates", "scoreCandidate", "inspectPage")
 require_text("extension/library.js", "browser.history", "browser.bookmarks", "browser.downloads")
 require_text("extension/addons.js", "browser.management.getAll", "browser.management.uninstall")
-require_text("fork/mozconfig.win64", "--with-app-name=browser", "--with-app-basename=Browser", "--with-branding=browser/branding/browser")
+require_text(
+    "fork/mozconfig.win64",
+    "--with-app-name=browser",
+    "--with-app-basename=Browser",
+    "--with-branding=browser/branding/browser",
+    "--enable-artifact-builds"
+)
+require_text("fork/branding/browser-icon.svg", 'viewBox="0 0 512 512"', "#18d7ff", "#4768ff")
+require_text("fork/browser-chrome.css", "#navigator-toolbox", "#urlbar-background", "#PersonalToolbar", "#firefox-view-button")
+require_text("scripts/generate-brand-assets.py", "cairosvg", "firefox.ico", "default256.png")
 require_text("scripts/apply-fork-overlay.py", "browser-core", "MATRIXNEO23 Browser fork")
 require_text("docs/CANONICAL_PRODUCT_REQUIREMENTS.md", "NORMAL / TURBO / PRIVATE / GHOST", "SMART SEARCH", "maximum of 3 active background")
 
