@@ -1,11 +1,18 @@
 const statusEl = document.getElementById('status');
+const adsButton = document.getElementById('ads');
 const buttons = [...document.querySelectorAll('[data-mode]')];
+let adsEnabled = true;
 
 function render(data) {
   const mode = data?.mode || 'NORMAL';
+  adsEnabled = data?.adsEnabled !== false;
+
   for (const button of buttons) {
     button.classList.toggle('active', button.dataset.mode === mode);
   }
+
+  adsButton.textContent = adsEnabled ? 'ADS: ON' : 'ADS: OFF';
+  adsButton.classList.toggle('active', adsEnabled);
 
   const s = data?.status;
   if (!s) {
@@ -19,6 +26,7 @@ function render(data) {
 
   statusEl.textContent =
     `Modalità: ${mode}` +
+    `\nADS: ${adsEnabled ? 'ON' : 'OFF'}` +
     `\nLimite background: ${s.limit}` +
     `\nAttive background: ${s.activeBackground}` +
     `\nProtette/non scaricabili: ${s.protectedBackground}` +
@@ -36,6 +44,11 @@ for (const button of buttons) {
     await refresh();
   });
 }
+
+adsButton.addEventListener('click', async () => {
+  await browser.runtime.sendMessage({ type: 'set-ads', enabled: !adsEnabled });
+  await refresh();
+});
 
 document.getElementById('enforce').addEventListener('click', async () => {
   await browser.runtime.sendMessage({ type: 'enforce-now' });
