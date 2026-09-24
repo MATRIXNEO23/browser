@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/mozilla-firefox/firefox.git",
+  "branch": "esr153",
+  "commit": "effb626ff45cbaa0bd3a4bbabc66fe2eb2380338",
+  "rationale": "Firefox ESR 153 line; pinned upstream for reproducible browser fork builds."
+}
