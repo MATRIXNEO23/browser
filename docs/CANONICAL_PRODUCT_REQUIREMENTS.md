@@ -21,16 +21,23 @@ This file is the binding product specification for the browser.
 - Audio/video and pinned tabs receive priority but still count toward the global budget.
 - Downloads must continue through the browser download manager where possible.
 - Automatic restore of discarded tabs on selection.
-- History.
-- Bookmarks.
+- History: searchable and deletable.
+- Bookmarks and bookmark manager.
 - Thin, non-invasive bookmarks bar.
 - Downloads manager.
-- Password manager / Firefox password infrastructure.
-- Search engine configuration.
+- Password manager / Gecko password infrastructure.
+- Configurable search engine.
 - Session restore.
-- Private browsing capabilities.
+- Private windows and private-browsing capabilities.
+- Zoom and fullscreen.
+- DevTools available.
+- Import/export for bookmarks and other browser data where supported by Gecko.
+- Cookie and site-data management.
+- Hardware acceleration toggle.
+- Performance / memory-saver controls.
+- Certificate and connection-security management.
 - Site permissions: camera, microphone, location, notifications, clipboard and popups.
-- Profiles/data separation only where technically required internally; never force the user to choose a profile before launch.
+- Optional normal user profiles may exist for separation such as personal/work use, but modes are never tied to a profile selector at startup.
 - Normal Firefox/WebExtensions addon compatibility.
 - Addon button with:
   - installed addon manager;
@@ -111,7 +118,10 @@ This file is the binding product specification for the browser.
 - Proxy support.
 - Network modes planned: DIRECT / SYSTEM PROXY / SOCKS / VPN integration.
 - Tor must remain a separate explicit path/environment rather than pretending a generic browser is Tor Browser.
-- Site permission controls.
+- Site permission controls for camera, microphone, location, notifications, clipboard and popups.
+- Advanced WebRTC / DNS / proxy controls.
+- Compatibility-for-this-site path to relax protections per site without disabling them globally.
+- Optional appearance choices: DARK / SYSTEM / BLACK; forced-dark websites remains optional.
 - No project telemetry by default.
 
 ## SMART SEARCH
