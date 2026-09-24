@@ -69,6 +69,26 @@ this.browserControl = class extends ExtensionAPI {
           return { mode, value };
         },
 
+        async getSettings() {
+          const trrMode = Services.prefs.getIntPref("network.trr.mode", 0);
+          const websiteAppearanceValue = Services.prefs.getIntPref(
+            "layout.css.prefers-color-scheme.content-override",
+            2
+          );
+
+          return {
+            hardwareAcceleration: !Services.prefs.getBoolPref("layers.acceleration.disabled", false),
+            httpsOnly: Services.prefs.getBoolPref("dom.security.https_only_mode", false),
+            secureDns: trrMode === 3 ? "strict" : trrMode === 2 ? "balanced" : "off",
+            websiteAppearance:
+              websiteAppearanceValue === 0
+                ? "dark"
+                : websiteAppearanceValue === 1
+                  ? "light"
+                  : "auto"
+          };
+        },
+
         async openInternalPage(page) {
           const targets = {
             settings: "about:preferences",
