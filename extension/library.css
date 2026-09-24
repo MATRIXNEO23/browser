@@ -33,3 +33,32 @@ button.active { background: #303030; border-color: #777; }
 .item a { color: #f2f2f2; text-decoration: none; }
 .item a:hover { text-decoration: underline; }
 .empty { color: #8f8f8f; padding: 20px 0; }
+
+
+.tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tools input {
+  width: 100%;
+  border: 1px solid #363636;
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: #181818;
+  color: #f2f2f2;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+button:disabled {
+  opacity: .45;
+  cursor: default;
+}
