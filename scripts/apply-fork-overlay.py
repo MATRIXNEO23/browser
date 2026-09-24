@@ -30,29 +30,12 @@ def patch_extensions_mozbuild(path: Path):
     text = text[:end] + '    "browser-core",\n' + text[end:]
     path.write_text(text, encoding="utf-8")
 
-def patch_bookmarks_css(path: Path):
+def patch_browser_chrome(path: Path, project: Path):
     text = path.read_text(encoding="utf-8")
     if MARKER in text:
         return
-    text += f"""
-\n{MARKER}
-#PersonalToolbar {{
-  min-height: 20px !important;
-  max-height: 22px !important;
-  padding-block: 0 !important;
-}}
-
-#PersonalToolbar toolbarbutton.bookmark-item:not(.subviewbutton) {{
-  margin-block: 0 !important;
-  padding-block: 0 !important;
-  font-size: 11px !important;
-}}
-
-#PersonalToolbar .bookmark-item > .toolbarbutton-icon {{
-  width: 14px !important;
-  height: 14px !important;
-}}
-"""
+    chrome_css = (project / "fork" / "browser-chrome.css").read_text(encoding="utf-8")
+    text += "\n" + MARKER + "\n" + chrome_css + "\n"
     path.write_text(text, encoding="utf-8")
 
 def main():
@@ -87,7 +70,10 @@ def main():
     )
 
     patch_extensions_mozbuild(firefox / "browser" / "extensions" / "moz.build")
-    patch_bookmarks_css(firefox / "browser" / "themes" / "shared" / "toolbarbuttons.css")
+    patch_browser_chrome(
+        firefox / "browser" / "themes" / "shared" / "toolbarbuttons.css",
+        project,
+    )
 
     shutil.copy2(project / args.mozconfig, firefox / "mozconfig")
 
