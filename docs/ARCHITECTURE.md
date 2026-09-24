@@ -1,90 +1,163 @@
-# Architettura V1
+# Architettura
 
-## Motore
+## 1. Prodotto
 
-La V1 usa Gecko/Firefox come runtime web. Non viene creato un motore HTML/JS proprietario.
-
-Motivi principali: compatibilità WebExtensions, cronologia/preferiti/download/password/profili maturi, privacy configurabile e possibilità di ottenere una V1 leggera senza mantenere un fork gigantesco.
-
-## Livelli
+Il prodotto è un **browser standalone**. Gecko/Firefox ESR è il motore web, non il prodotto visibile.
 
 ```text
-UI / Control Center
-        |
-Mode Controller
-NORMAL | TURBO | PRIVATE | GHOST
-        |
-Resource Controller ---- Ad/Tracker Controller
-        |                         |
-Profile / Session Layer ---- Privacy Layer
-        |                         |
-        +----------- Gecko -------+
-                     |
-               Network / DNS
+Browser.exe
+   |
+   +-- profilo unico del browser
+   |
+   +-- Gecko/Firefox ESR runtime
+   |
+   +-- Browser Control Core
+         |
+         +-- UI/Sidebar
+         +-- Mode Controller
+         +-- Resource Controller
+         +-- Privacy Controller
+         +-- ADS Controller
+         +-- SMART SEARCH
+         +-- Browser Library
+         +-- Network Controller
 ```
 
-## Modalità
+Non esiste selezione di profilo/modalità prima dell'avvio.
+
+## 2. UI
+
+La UI propria comprende:
+
+- nuova scheda personalizzata;
+- sidebar a scomparsa;
+- tema dark;
+- barra preferiti sottile;
+- SMART SEARCH;
+- Libreria;
+- Addon manager;
+- modalità live;
+- ADS;
+- rete;
+- stato background/RAM.
+
+## 3. Modalità live
+
+Tutte le modalità vengono applicate nel browser già aperto.
 
 ### NORMAL
-- cronologia e sessioni persistenti;
-- cookie e login normali con protezioni di base;
-- massimo 3 attività background;
-- addon abilitati normalmente.
+
+- dati persistenti;
+- protezione tracking di base;
+- WebRTC compatibile;
+- massimo 3 background.
 
 ### TURBO
-- massimo 2 attività background;
-- sospensione aggressiva delle schede inattive;
-- autoplay disabilitato;
-- prefetch/preload ridotti;
-- blocco ads/tracker consigliato ON.
+
+- massimo 3 background;
+- tab oltre il budget scaricate;
+- tab background inattive ~90 s scaricate anche se sotto il budget;
+- network prediction/prefetch ridotti;
+- autoplay limitato dalle preferenze del runtime;
+- ADS indipendente.
 
 ### PRIVATE
-- massimo 2 attività background;
-- isolamento storage/cookie rafforzato;
-- protezioni anti-tracking rafforzate;
-- WebRTC e referrer configurati in modo prudente.
+
+- cookie/storage più restrittivi;
+- anti-fingerprinting;
+- WebRTC limitato;
+- massimo 3 background.
 
 ### GHOST
-- profilo separato;
-- sessione non persistente per impostazione predefinita;
-- anti-fingerprinting più aggressivo;
-- nessuna condivisione di cookie/cache/sessioni con NORMAL;
-- massimo 2 attività background.
 
-GHOST non viene dichiarata equivalente a Tor Browser.
+- cookie trattati come sessione;
+- anti-fingerprinting forte;
+- referrer ridotto;
+- WebRTC disabilitato;
+- registrazione locale dell'intervallo/host visitati durante la fase;
+- all'uscita: pulizia mirata di cookie, IndexedDB, localStorage, service worker, cronologia e form data prodotti durante la fase, dove supportato;
+- massimo 3 background.
 
-## Gestione schede e finestre
+GHOST non equivale a Tor Browser.
 
-Il limite è globale e considera tab e finestre.
+## 4. Resource Controller
+
+Budget globale:
+
+```text
+foreground: 1
+background_active_max: 3
+rest: discard/unload quando possibile
+```
 
 Priorità:
-1. contenuto in primo piano;
-2. audio/video attivo;
-3. upload/download in corso;
-4. tab recenti fino al limite di background;
-5. resto sospeso/scaricato.
 
-Default: NORMAL 3 background; TURBO 2; PRIVATE 2; GHOST 2.
+1. foreground;
+2. audio/video;
+3. pinned;
+4. background più recenti;
+5. resto scaricato.
 
-## Blocco pubblicità
+Le tab selezionate in finestre non focalizzate possono essere non scaricabili dal motore; il controller segnala il degrado invece di nasconderlo.
 
-Il controllo ADS è indipendente dalla modalità. Stati iniziali: OFF e ON. La V1 deve essere compatibile con uBlock Origin; un'integrazione nativa del motore filtri verrà valutata solo dopo benchmark CPU/RAM.
+## 5. SMART SEARCH
 
-## Fingerprinting
+Pipeline:
 
-Non randomizzare indiscriminatamente User-Agent, GPU, Canvas, font, timezone e dimensioni finestra. La strategia è ridurre API ad alta entropia, partizionare storage, minimizzare leak WebRTC, usare protezioni coerenti e mantenere GHOST separato.
+```text
+query
+  -> motore web
+  -> <= ~30 candidati
+  -> deduplica
+  -> ranking locale titolo/snippet/dominio
+  -> top 5: lettura HTML limitata
+  -> reranking
+  -> top risultati spiegati
+```
 
-## Prestazioni
+Nessun LLM remoto necessario.
 
-Target: Core i3 di vecchia generazione.
+## 6. Rete
 
-Regole: pochi processi contenuto, niente feed/news nella nuova scheda, niente preload aggressivo, autoplay off in TURBO, tab inattive candidate a unload, diagnostica RAM/CPU nel Control Center.
+Controlli live:
 
-## Roadmap
+- DIRECT;
+- SYSTEM / VPN;
+- SOCKS5 con DNS attraverso proxy.
 
-- M0 bootstrap: struttura, configurazione canonica, launcher Windows, profili base.
-- M1 lifecycle tabs: limite background, eccezioni audio/download/pinned, contatore attività.
-- M2 mode controller: NORMAL/TURBO/PRIVATE/GHOST.
-- M3 privacy/adblock: ADS, DNS sicuro, WebRTC/referrer/storage policies, test fingerprinting.
-- M4 UI: tema dark, toolbar compatta, indicatori modalità/ADS/RAM/CPU.
-- M5 benchmark: cold start, RAM 1/5/10/20 tab, CPU idle, compatibilità addon e siti pesanti.
+Una VPN di sistema resta gestita da Windows; il browser non finge di implementare una VPN propria.
+
+## 7. Dati browser
+
+Il Browser Control Core espone pagine proprie per:
+
+- cronologia;
+- preferiti;
+- download;
+- addon.
+
+Il password manager e le funzionalità di sicurezza native del motore restano disponibili come infrastruttura browser.
+
+## 8. Privacy
+
+Strategia:
+
+- niente fingerprint casuale;
+- riduzione/normalizzazione dell'entropia;
+- cookie partitioning;
+- tracking protection;
+- WebRTC protection;
+- referrer reduction in modalità forti;
+- GHOST con pulizia effimera;
+- niente telemetria del progetto.
+
+## 9. Build
+
+Il runtime viene incluso nella distribuzione Windows.
+
+Una build è consegnata solo quando:
+
+- CI PASS;
+- ZIP persistito come GitHub Release;
+- SHA-256 pubblicato;
+- commit sorgente esatto registrato.
