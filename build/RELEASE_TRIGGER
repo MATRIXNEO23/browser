@@ -1,6 +1,6 @@
 release_request: final
-source_head_before_trigger: 0fe60adc8a13e12025356ba009ca7251cbbd775b
+source_head_before_trigger: 17cdca036ab88e1a3503a2222fce3d52b788d942
 product_gate: required
 windows_smoke: required
 stable_release_only: true
-rerun_reason: install_wine_for_artifact_build
+rerun_reason: artifact_package_browser_exe
