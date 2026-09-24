@@ -174,9 +174,86 @@ async function applyRuntimePrivacy(mode) {
   }
 }
 
+async function beginGhostSession() {
+  await browser.storage.local.set({
+    ghostSession: {
+      startedAt: Date.now(),
+      hosts: []
+    }
+  });
+}
+
+async function recordGhostHost(url) {
+  if (!url) return;
+
+  const mode = await getMode();
+  if (mode !== 'GHOST') return;
+
+  try {
+    const hostname = new URL(url).hostname;
+    if (!hostname) return;
+
+    const data = await browser.storage.local.get('ghostSession');
+    const session = data.ghostSession || { startedAt: Date.now(), hosts: [] };
+
+    if (!session.hosts.includes(hostname)) {
+      session.hosts.push(hostname);
+      if (session.hosts.length > 200) session.hosts = session.hosts.slice(-200);
+      await browser.storage.local.set({ ghostSession: session });
+    }
+  } catch (_) {
+    // Ignore non-web URLs such as about: pages.
+  }
+}
+
+async function endGhostSession() {
+  const data = await browser.storage.local.get('ghostSession');
+  const session = data.ghostSession;
+
+  if (!session?.startedAt) {
+    await browser.storage.local.remove('ghostSession');
+    return;
+  }
+
+  const hosts = Array.isArray(session.hosts) ? session.hosts : [];
+
+  try {
+    if (hosts.length) {
+      await browser.browsingData.remove(
+        { hostnames: hosts },
+        {
+          cookies: true,
+          indexedDB: true,
+          localStorage: true,
+          serviceWorkers: true
+        }
+      );
+    }
+
+    await browser.browsingData.remove(
+      { since: session.startedAt },
+      {
+        history: true,
+        formData: true
+      }
+    );
+  } catch (error) {
+    console.warn('Ghost cleanup incomplete', error);
+  } finally {
+    await browser.storage.local.remove('ghostSession');
+  }
+}
+
 async function initialize() {
   await applyDarkTheme();
-  await applyRuntimePrivacy(await getMode());
+  const mode = await getMode();
+  await applyRuntimePrivacy(mode);
+
+  if (mode === 'GHOST') {
+    const data = await browser.storage.local.get('ghostSession');
+    if (!data.ghostSession) await beginGhostSession();
+  }
+
   await enforceBackgroundLimit();
 }
 
@@ -207,7 +284,11 @@ browser.action.onClicked.addListener(async () => {
 browser.tabs.onActivated.addListener(scheduleEnforcement);
 browser.tabs.onCreated.addListener(scheduleEnforcement);
 browser.tabs.onRemoved.addListener(scheduleEnforcement);
-browser.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+browser.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+  if ('url' in changeInfo || 'status' in changeInfo) {
+    recordGhostHost(changeInfo.url || tab?.url);
+  }
+
   if ('audible' in changeInfo || 'pinned' in changeInfo || 'status' in changeInfo) {
     scheduleEnforcement();
   }
@@ -216,7 +297,18 @@ browser.windows.onFocusChanged.addListener(scheduleEnforcement);
 
 browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type === 'set-mode' && MODE_LIMITS[message.mode]) {
+    const previousMode = await getMode();
+
+    if (previousMode === 'GHOST' && message.mode !== 'GHOST') {
+      await endGhostSession();
+    }
+
     await browser.storage.local.set({ mode: message.mode });
+
+    if (message.mode === 'GHOST' && previousMode !== 'GHOST') {
+      await beginGhostSession();
+    }
+
     await applyRuntimePrivacy(message.mode);
     await enforceBackgroundLimit();
     return { ok: true, mode: message.mode };
