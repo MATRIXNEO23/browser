@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Browser Resource Controller",
+  "version": "0.1.0",
+  "description": "Controls background tab pressure for the lightweight browser profiles.",
+  "permissions": ["tabs", "storage", "downloads"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_title": "Browser modes",
+    "default_popup": "popup.html"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "resource-controller@matrixneo23.browser",
+      "strict_min_version": "128.0"
+    }
+  }
+}
