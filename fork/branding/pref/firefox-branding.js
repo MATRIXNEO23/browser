@@ -1,0 +1,12 @@
+pref("startup.homepage_override_url", "");
+pref("startup.homepage_welcome_url", "");
+pref("startup.homepage_welcome_url.additional", "");
+pref("browser.toolbars.bookmarks.visibility", "always");
+pref("browser.uidensity", 1);
+pref("network.prefetch-next", false);
+pref("network.dns.disablePrefetch", true);
+pref("media.autoplay.default", 1);
+pref("browser.tabs.unloadOnLowMemory", true);
+pref("browser.newtabpage.activity-stream.showSponsored", false);
+pref("browser.newtabpage.activity-stream.showSponsoredTopSites", false);
+pref("browser.newtabpage.activity-stream.feeds.section.topstories", false);
