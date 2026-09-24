@@ -1,15 +1,19 @@
 {
   "manifest_version": 3,
-  "name": "Browser Resource Controller",
-  "version": "0.2.0",
-  "description": "Controls modes, background tab pressure, dark UI and lightweight ad blocking.",
+  "name": "Browser Control Core",
+  "version": "0.3.0",
+  "description": "Integrated control core for modes, privacy, resources, dark UI and ad blocking.",
   "permissions": ["tabs", "storage", "downloads", "theme", "declarativeNetRequest"],
   "background": {
     "scripts": ["background.js"]
   },
   "action": {
-    "default_title": "Browser modes",
-    "default_popup": "popup.html"
+    "default_title": "Apri/chiudi impostazioni"
+  },
+  "sidebar_action": {
+    "default_title": "Impostazioni Browser",
+    "default_panel": "sidebar.html",
+    "open_at_install": false
   },
   "declarative_net_request": {
     "rule_resources": [
