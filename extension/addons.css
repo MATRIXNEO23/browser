@@ -1,0 +1,40 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: #111;
+  color: #f3f3f3;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #111; }
+main { max-width: 900px; margin: 0 auto; padding: 24px; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; }
+h1 { margin: 0 0 4px; font-size: 24px; }
+p { margin: 0; color: #aaa; }
+button {
+  border: 1px solid #3a3a3a;
+  border-radius: 7px;
+  padding: 8px 11px;
+  background: #1d1d1d;
+  color: #f3f3f3;
+  cursor: pointer;
+}
+button:hover { background: #292929; }
+.addon {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid #282828;
+}
+.addon h2 { margin: 0 0 4px; font-size: 15px; }
+.addon .meta { color: #9d9d9d; font-size: 12px; overflow-wrap: anywhere; }
+.addon .actions { display: flex; align-items: center; gap: 7px; }
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #282828;
+  color: #bbb;
+  font-size: 10px;
+}
