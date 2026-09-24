@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: browser-fork-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -47,7 +47,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/apply-fork-overlay.py
+          python3 -m py_compile scripts/apply-fork-overlay.py scripts/validate-product.py
+          python3 scripts/validate-product.py
           python3 -m json.tool fork/UPSTREAM.json >/dev/null
           python3 -m json.tool extension/manifest.json >/dev/null
           python3 -m json.tool distribution/policies.json >/dev/null
