@@ -1,0 +1,9 @@
+ac_add_options --enable-project=browser
+ac_add_options --target=x86_64-pc-windows-msvc
+ac_add_options --enable-bootstrap
+ac_add_options --with-app-name=browser
+ac_add_options --with-app-basename=Browser
+ac_add_options --with-branding=browser/branding/browser
+ac_add_options --disable-tests
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-browser-win64
+mk_add_options AUTOCLOBBER=1
