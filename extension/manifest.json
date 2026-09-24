@@ -25,12 +25,15 @@
     ]
   },
   "action": {
-    "default_title": "Apri/chiudi impostazioni"
+    "default_title": "Browser Control Center",
+    "default_area": "navbar",
+    "default_icon": "icons/browser.svg"
   },
   "sidebar_action": {
     "default_title": "Impostazioni Browser",
     "default_panel": "sidebar.html",
-    "open_at_install": false
+    "open_at_install": false,
+    "default_icon": "icons/browser.svg"
   },
   "declarative_net_request": {
     "rule_resources": [
