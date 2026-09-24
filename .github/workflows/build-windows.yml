@@ -27,15 +27,21 @@ jobs:
           $url = "https://download.mozilla.org/?product=firefox-esr-latest-ssl&os=win64&lang=it"
           Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\firefox-esr.exe"
 
-      - name: Extract Firefox ESR
+      - name: Install Firefox ESR into staging
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $out = "$env:RUNNER_TEMP\firefox-esr"
-          New-Item -ItemType Directory -Force -Path $out | Out-Null
-          Start-Process -FilePath "$env:RUNNER_TEMP\firefox-esr.exe" -ArgumentList "-ms","/S","/D=$out" -Wait
+          $args = @(
+            "/S",
+            "/InstallDirectoryPath=$out",
+            "/DesktopShortcut=false",
+            "/TaskbarShortcut=false",
+            "/MaintenanceService=false"
+          )
+          Start-Process -FilePath "$env:RUNNER_TEMP\firefox-esr.exe" -ArgumentList $args -Wait
           if (-not (Test-Path "$out\firefox.exe")) {
-            throw "Firefox ESR extraction/install directory not found."
+            throw "Firefox ESR staging install not found."
           }
 
       - name: Enable MSVC environment
