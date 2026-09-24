@@ -6,19 +6,18 @@ on:
     branches: [ main ]
     paths:
       - "build/RELEASE_TRIGGER"
-      - ".github/workflows/build-windows.yml"
 
 permissions:
   contents: write
 
 concurrency:
-  group: browser-fork-${{ github.ref }}
+  group: browser-final-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 240
 
     steps:
       - name: Checkout Browser project
@@ -33,24 +32,26 @@ jobs:
           sudo rm -rf /usr/local/.ghcup || true
           df -h
 
-      - name: Install cross-build prerequisites
+      - name: Install build prerequisites
         shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y msitools zip unzip mercurial python3 python3-pip python3-pil python3-cairosvg
           rustup target add x86_64-pc-windows-msvc
 
-      - name: Validate Browser sources
+      - name: Product completeness gate
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/apply-fork-overlay.py scripts/validate-product.py
+          python3 -m py_compile scripts/apply-fork-overlay.py scripts/validate-product.py scripts/generate-brand-assets.py
           python3 scripts/validate-product.py
           python3 -m json.tool fork/UPSTREAM.json >/dev/null
           python3 -m json.tool extension/manifest.json >/dev/null
           python3 -m json.tool distribution/policies.json >/dev/null
           python3 -m json.tool config/defaults.json >/dev/null
-          while IFS= read -r -d '' file; do node --check "$file"; done < <(find extension -name '*.js' -print0)
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done < <(find extension -name '*.js' -print0)
 
       - name: Clone pinned Firefox ESR
         shell: bash
@@ -64,21 +65,24 @@ jobs:
           git fetch --depth=1 origin "$UPSTREAM_COMMIT"
           git checkout --detach FETCH_HEAD
           test "$(git rev-parse HEAD)" = "$UPSTREAM_COMMIT"
-          git rev-parse HEAD
 
-      - name: Apply Browser fork overlay
+      - name: Apply Browser fork overlay and branding
         shell: bash
         run: |
+          set -euo pipefail
           python3 scripts/apply-fork-overlay.py --firefox-source firefox-src --project-root "$GITHUB_WORKSPACE" --mozconfig fork/mozconfig.win64
+          python3 scripts/generate-brand-assets.py --source fork/branding/browser-icon.svg --output firefox-src/browser/branding/browser
+
           grep -n "browser-core" firefox-src/browser/extensions/moz.build
           grep -n "MATRIXNEO23 Browser fork" firefox-src/browser/themes/shared/toolbarbuttons.css
           grep -n "#navigator-toolbox" firefox-src/browser/themes/shared/toolbarbuttons.css
-          python3 scripts/generate-brand-assets.py --source fork/branding/browser-icon.svg --output firefox-src/browser/branding/browser
+          grep -n -- "--enable-artifact-builds" firefox-src/mozconfig
+
+          test -f firefox-src/browser/extensions/browser-core/extension/manifest.json
           test -f firefox-src/browser/branding/browser/firefox.ico
           test -f firefox-src/browser/branding/browser/default256.png
-          cat firefox-src/mozconfig
 
-      - name: Build native Windows Browser fork
+      - name: Build native Windows Browser
         shell: bash
         working-directory: firefox-src
         run: |
@@ -86,10 +90,11 @@ jobs:
           ./mach build
           ./mach package
 
-      - name: Assemble persistent Browser ZIP
+      - name: Assemble Browser package
         shell: bash
         run: |
           set -euo pipefail
+
           PACKAGE=$(find firefox-src/obj-browser-win64/dist -maxdepth 1 -type f -name '*.zip' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
           if [ -z "$PACKAGE" ]; then
             echo "No Windows package zip produced."
@@ -102,7 +107,7 @@ jobs:
 
           BROWSER_EXE=$(find dist/stage -type f -iname 'browser.exe' | head -1)
           if [ -z "$BROWSER_EXE" ]; then
-            echo "browser.exe not found in native fork package."
+            echo "browser.exe not found."
             find dist/stage -maxdepth 3 -type f | head -100
             exit 1
           fi
@@ -110,6 +115,25 @@ jobs:
           APP_DIR=$(dirname "$BROWSER_EXE")
           mkdir -p "$APP_DIR/distribution"
           cp distribution/policies.json "$APP_DIR/distribution/policies.json"
+
+          OMNI_MATCHES=$(find "$APP_DIR" -type f -name 'omni.ja' -print)
+          if [ -z "$OMNI_MATCHES" ]; then
+            echo "omni.ja missing."
+            exit 1
+          fi
+
+          BUILTIN_FOUND=0
+          while IFS= read -r omni; do
+            if unzip -l "$omni" 2>/dev/null | grep -q 'builtin-addons/browser-core/manifest.json'; then
+              BUILTIN_FOUND=1
+              break
+            fi
+          done <<< "$OMNI_MATCHES"
+
+          if [ "$BUILTIN_FOUND" -ne 1 ]; then
+            echo "Browser Control Core not found in built-in addon resources."
+            exit 1
+          fi
 
           (
             cd dist/stage
@@ -120,7 +144,7 @@ jobs:
           ls -lh dist/Browser-Windows-x64.zip
           cat dist/SHA256SUMS.txt
 
-      - name: Upload temporary CI copy
+      - name: Upload build for Windows smoke test
         uses: actions/upload-artifact@v4
         with:
           name: Browser-Windows-x64
@@ -128,13 +152,113 @@ jobs:
             dist/Browser-Windows-x64.zip
             dist/SHA256SUMS.txt
           if-no-files-found: error
+          retention-days: 7
 
-      - name: Publish persistent repository release
+  smoke-windows:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Download Browser build
+        uses: actions/download-artifact@v4
+        with:
+          name: Browser-Windows-x64
+          path: artifact
+
+      - name: Verify checksum and package identity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $zip = Resolve-Path ".\artifact\Browser-Windows-x64.zip"
+          $sumLine = (Get-Content ".\artifact\SHA256SUMS.txt" -Raw).Trim()
+          $expected = ($sumLine -split "\s+")[0].ToLowerInvariant()
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          if ($actual -ne $expected) { throw "SHA256 mismatch." }
+
+          Expand-Archive -Path $zip -DestinationPath ".\stage"
+          $exe = Get-ChildItem ".\stage" -Recurse -Filter "browser.exe" | Select-Object -First 1
+          if (-not $exe) { throw "browser.exe missing from final package." }
+
+          $product = $exe.VersionInfo.ProductName
+          Write-Host "ProductName: $product"
+          Write-Host "Executable: $($exe.FullName)"
+          if ($product -and $product -notmatch "Browser") { throw "Unexpected Windows ProductName: $product" }
+
+          "BROWSER_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "APP_DIR=$($exe.Directory.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Verify built-in Browser core
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $found = $false
+
+          Get-ChildItem $env:APP_DIR -Recurse -Filter "omni.ja" | ForEach-Object {
+            $listing = (& 7z l $_.FullName | Out-String)
+            if ($listing -match "builtin-addons[\\/]browser-core[\\/]manifest.json") { $found = $true }
+          }
+
+          if (-not $found) { throw "Browser Control Core is not registered in packaged omni resources." }
+
+      - name: Launch Browser and render custom New Tab
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $profile = Join-Path $env:RUNNER_TEMP "browser-smoke-profile"
+          $shot = Join-Path $env:GITHUB_WORKSPACE "Browser-NewTab-Smoke.png"
+          New-Item -ItemType Directory -Force -Path $profile | Out-Null
+
+          $args = @(
+            "-headless",
+            "-no-remote",
+            "-profile", $profile,
+            "-screenshot", $shot,
+            "about:newtab"
+          )
+
+          $p = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Browser headless launch failed with exit code $($p.ExitCode)." }
+          if (-not (Test-Path $shot)) { throw "Browser did not render the New Tab screenshot." }
+          if ((Get-Item $shot).Length -lt 4096) { throw "New Tab smoke screenshot is unexpectedly small." }
+
+          Write-Host "Windows launch + New Tab render passed."
+
+      - name: Upload visual smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: Browser-Visual-Smoke
+          path: Browser-NewTab-Smoke.png
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    needs: [build, smoke-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download validated build
+        uses: actions/download-artifact@v4
+        with:
+          name: Browser-Windows-x64
+          path: artifact
+
+      - name: Publish stable repository release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           SHORT="${GITHUB_SHA:0:7}"
-          TAG="fork-$SHORT"
-          gh release create "$TAG"             dist/Browser-Windows-x64.zip             dist/SHA256SUMS.txt             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Browser native fork $SHORT"             --notes "Native Browser Windows x64 fork built from pinned Firefox ESR 153 plus repository overlay. Source commit: $GITHUB_SHA"             --prerelease
+          TAG="browser-$SHORT"
+
+          gh release create "$TAG" \
+            artifact/Browser-Windows-x64.zip \
+            artifact/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Browser Windows x64 $SHORT" \
+            --notes "Stable Browser Windows x64 build. Passed source completeness gate, native package validation, built-in core verification, SHA256 verification and Windows headless New Tab smoke test. Source commit: $GITHUB_SHA"
