@@ -266,6 +266,9 @@ async function initialize() {
   await applyDarkTheme();
   const mode = await getMode();
   await applyRuntimePrivacy(mode);
+  if (browser.browserControl?.applyMode) {
+    await browser.browserControl.applyMode(mode);
+  }
 
   if (mode === 'GHOST') {
     const data = await browser.storage.local.get('ghostSession');
@@ -332,6 +335,9 @@ browser.runtime.onMessage.addListener(async (message) => {
     }
 
     await applyRuntimePrivacy(message.mode);
+    if (browser.browserControl?.applyMode) {
+      await browser.browserControl.applyMode(message.mode);
+    }
     await enforceBackgroundLimit();
     return { ok: true, mode: message.mode };
   }
@@ -343,10 +349,18 @@ browser.runtime.onMessage.addListener(async (message) => {
 
   if (message?.type === 'get-status') {
     const data = await browser.storage.local.get(['mode', 'status']);
+    let processStats = null;
+    try {
+      processStats = browser.browserControl?.getProcessStats
+        ? await browser.browserControl.getProcessStats()
+        : null;
+    } catch (_) {}
+
     return {
       mode: data.mode || DEFAULT_MODE,
       adsEnabled: await getAdsEnabled(),
-      status: data.status || null
+      status: data.status || null,
+      processStats
     };
   }
 
@@ -368,5 +382,17 @@ browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type === 'open-smart-search') {
     await browser.tabs.create({ url: browser.runtime.getURL('smart-search.html') });
     return { ok: true };
+  }
+
+  if (message?.type === 'set-hardware-acceleration' && typeof message.enabled === 'boolean') {
+    return browser.browserControl.setHardwareAcceleration(message.enabled);
+  }
+
+  if (message?.type === 'set-https-only' && typeof message.enabled === 'boolean') {
+    return browser.browserControl.setHttpsOnly(message.enabled);
+  }
+
+  if (message?.type === 'set-secure-dns' && ['off', 'balanced', 'strict'].includes(message.level)) {
+    return browser.browserControl.setSecureDns(message.level);
   }
 });
