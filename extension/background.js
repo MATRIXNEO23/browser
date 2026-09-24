@@ -76,8 +76,21 @@ async function enforceBackgroundLimit() {
     .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
 
   const candidateSlots = Math.max(0, limit - protectedBackground.length);
-  const keptCandidates = candidates.slice(0, candidateSlots);
-  const toDiscard = candidates.slice(candidateSlots);
+  const initiallyKept = candidates.slice(0, candidateSlots);
+  const overflow = candidates.slice(candidateSlots);
+
+  const turboIdleMs = 90 * 1000;
+  const now = Date.now();
+  const turboExpired = mode === 'TURBO'
+    ? initiallyKept.filter((tab) => now - (tab.lastAccessed || now) >= turboIdleMs)
+    : [];
+
+  const expiredIds = new Set(turboExpired.map((tab) => tab.id));
+  const keptCandidates = initiallyKept.filter((tab) => !expiredIds.has(tab.id));
+
+  const discardById = new Map();
+  for (const tab of [...overflow, ...turboExpired]) discardById.set(tab.id, tab);
+  const toDiscard = [...discardById.values()];
 
   let discardedNow = 0;
   for (const tab of toDiscard) {
@@ -101,6 +114,7 @@ async function enforceBackgroundLimit() {
       keptCandidates: keptCandidates.length,
       discardedNow,
       degradedByProtectedTabs: degraded,
+      turboIdleDiscardMs: mode === 'TURBO' ? turboIdleMs : null,
       updatedAt: Date.now()
     }
   });
@@ -245,6 +259,10 @@ async function endGhostSession() {
 }
 
 async function initialize() {
+  try {
+    browser.alarms.create('resource-sweep', { periodInMinutes: 1 });
+  } catch (_) {}
+
   await applyDarkTheme();
   const mode = await getMode();
   await applyRuntimePrivacy(mode);
@@ -294,6 +312,10 @@ browser.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
   }
 });
 browser.windows.onFocusChanged.addListener(scheduleEnforcement);
+
+browser.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'resource-sweep') scheduleEnforcement();
+});
 
 browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type === 'set-mode' && MODE_LIMITS[message.mode]) {
