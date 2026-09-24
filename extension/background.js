@@ -1,4 +1,4 @@
-const MODE_LIMITS = { NORMAL: 3, TURBO: 2, PRIVATE: 2, GHOST: 2 };
+const MODE_LIMITS = { NORMAL: 3, TURBO: 3, PRIVATE: 3, GHOST: 3 };
 const DEFAULT_MODE = 'NORMAL';
 const ADS_RULESET_ID = 'ads_basic';
 
@@ -11,7 +11,9 @@ const DARK_THEME = {
     toolbar_field: '#202020',
     toolbar_field_text: '#f2f2f2',
     popup: '#171717',
-    popup_text: '#f2f2f2'
+    popup_text: '#f2f2f2',
+    sidebar: '#111111',
+    sidebar_text: '#f2f2f2'
   }
 };
 
@@ -119,6 +121,20 @@ async function scheduleEnforcement() {
 
 browser.runtime.onInstalled.addListener(initialize);
 browser.runtime.onStartup.addListener(initialize);
+
+browser.action.onClicked.addListener(async () => {
+  try {
+    const open = await browser.sidebarAction.isOpen({});
+    if (open) {
+      await browser.sidebarAction.close();
+    } else {
+      await browser.sidebarAction.open();
+    }
+  } catch (error) {
+    console.error('Unable to toggle sidebar', error);
+  }
+});
+
 browser.tabs.onActivated.addListener(scheduleEnforcement);
 browser.tabs.onCreated.addListener(scheduleEnforcement);
 browser.tabs.onRemoved.addListener(scheduleEnforcement);
@@ -152,6 +168,16 @@ browser.runtime.onMessage.addListener(async (message) => {
 
   if (message?.type === 'enforce-now') {
     await enforceBackgroundLimit();
+    return { ok: true };
+  }
+
+  if (message?.type === 'open-addons-installed') {
+    await browser.tabs.create({ url: 'about:addons' });
+    return { ok: true };
+  }
+
+  if (message?.type === 'open-addons-store') {
+    await browser.tabs.create({ url: 'https://addons.mozilla.org/firefox/extensions/' });
     return { ok: true };
   }
 });
