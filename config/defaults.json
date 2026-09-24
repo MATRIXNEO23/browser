@@ -16,9 +16,9 @@
     "private_background_limit": 3,
     "ghost_background_limit": 3,
     "protect_audio": true,
-    "protect_downloads": true,
     "protect_pinned": true,
-    "unload_inactive": true
+    "unload_inactive": true,
+    "downloads_continue_via_manager": true
   },
   "ads": {
     "default_enabled": true,
@@ -39,5 +39,10 @@
     "suspend_background_timers": true,
     "prefer_low_memory_mode": true
   },
-  "modes": ["NORMAL", "TURBO", "PRIVATE", "GHOST"]
+  "modes": [
+    "NORMAL",
+    "TURBO",
+    "PRIVATE",
+    "GHOST"
+  ]
 }
