@@ -395,4 +395,12 @@ browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type === 'set-secure-dns' && ['off', 'balanced', 'strict'].includes(message.level)) {
     return browser.browserControl.setSecureDns(message.level);
   }
+
+  if (message?.type === 'set-website-appearance' && ['auto', 'dark', 'light'].includes(message.mode)) {
+    return browser.browserControl.setWebsiteAppearance(message.mode);
+  }
+
+  if (message?.type === 'open-internal-page' && ['settings', 'privacy', 'passwords', 'profiles', 'processes'].includes(message.page)) {
+    return browser.browserControl.openInternalPage(message.page);
+  }
 });
