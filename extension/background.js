@@ -17,6 +17,21 @@ const DARK_THEME = {
   }
 };
 
+const BLACK_THEME = {
+  colors: {
+    frame: '#000000',
+    toolbar: '#050505',
+    tab_background_text: '#ffffff',
+    toolbar_text: '#ffffff',
+    toolbar_field: '#0b0b0b',
+    toolbar_field_text: '#ffffff',
+    popup: '#050505',
+    popup_text: '#ffffff',
+    sidebar: '#000000',
+    sidebar_text: '#ffffff'
+  }
+};
+
 async function getMode() {
   const saved = await browser.storage.local.get('mode');
   return MODE_LIMITS[saved.mode] ? saved.mode : DEFAULT_MODE;
@@ -37,10 +52,23 @@ async function setAdsEnabled(enabled) {
 
 async function applyDarkTheme() {
   try {
-    await browser.theme.update(DARK_THEME);
+    const saved = await browser.storage.local.get('browserTheme');
+    const mode = saved.browserTheme || 'dark';
+
+    if (mode === 'system') {
+      await browser.theme.reset();
+    } else {
+      await browser.theme.update(mode === 'black' ? BLACK_THEME : DARK_THEME);
+    }
   } catch (error) {
-    console.warn('Unable to apply dark theme', error);
+    console.warn('Unable to apply browser theme', error);
   }
+}
+
+async function setBrowserTheme(mode) {
+  await browser.storage.local.set({ browserTheme: mode });
+  await applyDarkTheme();
+  return { mode };
 }
 
 function isDiscarded(tab) {
@@ -398,6 +426,19 @@ browser.runtime.onMessage.addListener(async (message) => {
 
   if (message?.type === 'set-website-appearance' && ['auto', 'dark', 'light'].includes(message.mode)) {
     return browser.browserControl.setWebsiteAppearance(message.mode);
+  }
+
+  if (message?.type === 'get-advanced-settings') {
+    const settings = await browser.browserControl.getSettings();
+    const stored = await browser.storage.local.get('browserTheme');
+    return {
+      ...settings,
+      browserTheme: stored.browserTheme || 'dark'
+    };
+  }
+
+  if (message?.type === 'set-browser-theme' && ['dark', 'system', 'black'].includes(message.mode)) {
+    return setBrowserTheme(message.mode);
   }
 
   if (message?.type === 'open-internal-page' && ['settings', 'privacy', 'passwords', 'profiles', 'processes'].includes(message.page)) {
