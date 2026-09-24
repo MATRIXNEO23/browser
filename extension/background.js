@@ -106,8 +106,77 @@ async function enforceBackgroundLimit() {
   });
 }
 
+async function applyRuntimePrivacy(mode) {
+  const safeSet = async (setting, value) => {
+    try {
+      await setting.set({ value });
+    } catch (error) {
+      console.warn('Privacy setting not applied', error);
+    }
+  };
+
+  if (mode === 'NORMAL') {
+    await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
+    await safeSet(browser.privacy.websites.cookieConfig, {
+      behavior: 'reject_trackers_and_partition_foreign',
+      nonPersistentCookies: false
+    });
+    await safeSet(browser.privacy.websites.resistFingerprinting, false);
+    await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
+    await safeSet(browser.privacy.websites.referrersEnabled, true);
+    await safeSet(browser.privacy.network.networkPredictionEnabled, false);
+    await safeSet(browser.privacy.network.peerConnectionEnabled, true);
+    await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'default_public_interface_only');
+    return;
+  }
+
+  if (mode === 'TURBO') {
+    await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
+    await safeSet(browser.privacy.websites.cookieConfig, {
+      behavior: 'reject_trackers_and_partition_foreign',
+      nonPersistentCookies: false
+    });
+    await safeSet(browser.privacy.websites.resistFingerprinting, false);
+    await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
+    await safeSet(browser.privacy.websites.referrersEnabled, true);
+    await safeSet(browser.privacy.network.networkPredictionEnabled, false);
+    await safeSet(browser.privacy.network.peerConnectionEnabled, true);
+    await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'default_public_interface_only');
+    return;
+  }
+
+  if (mode === 'PRIVATE') {
+    await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
+    await safeSet(browser.privacy.websites.cookieConfig, {
+      behavior: 'reject_trackers_and_partition_foreign',
+      nonPersistentCookies: false
+    });
+    await safeSet(browser.privacy.websites.resistFingerprinting, true);
+    await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
+    await safeSet(browser.privacy.websites.referrersEnabled, true);
+    await safeSet(browser.privacy.network.networkPredictionEnabled, false);
+    await safeSet(browser.privacy.network.peerConnectionEnabled, true);
+    await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'disable_non_proxied_udp');
+    return;
+  }
+
+  if (mode === 'GHOST') {
+    await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
+    await safeSet(browser.privacy.websites.cookieConfig, {
+      behavior: 'reject_trackers_and_partition_foreign',
+      nonPersistentCookies: true
+    });
+    await safeSet(browser.privacy.websites.resistFingerprinting, true);
+    await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
+    await safeSet(browser.privacy.websites.referrersEnabled, false);
+    await safeSet(browser.privacy.network.networkPredictionEnabled, false);
+    await safeSet(browser.privacy.network.peerConnectionEnabled, false);
+  }
+}
+
 async function initialize() {
   await applyDarkTheme();
+  await applyRuntimePrivacy(await getMode());
   await enforceBackgroundLimit();
 }
 
@@ -148,6 +217,7 @@ browser.windows.onFocusChanged.addListener(scheduleEnforcement);
 browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type === 'set-mode' && MODE_LIMITS[message.mode]) {
     await browser.storage.local.set({ mode: message.mode });
+    await applyRuntimePrivacy(message.mode);
     await enforceBackgroundLimit();
     return { ok: true, mode: message.mode };
   }
@@ -172,7 +242,7 @@ browser.runtime.onMessage.addListener(async (message) => {
   }
 
   if (message?.type === 'open-addons-installed') {
-    await browser.tabs.create({ url: 'about:addons' });
+    await browser.tabs.create({ url: browser.runtime.getURL('addons.html') });
     return { ok: true };
   }
 
