@@ -1,6 +1,6 @@
 release_request: final
-source_head_before_trigger: dd6a12205c5cfaeaf1408cfcb6c90a76090eed86
+source_head_before_trigger: a2d23d96a36c4f2faba388cd501c1c0cd8df223c
 product_gate: required
 windows_smoke: required
 stable_release_only: true
-rerun_reason: direct_filum_png_and_final_windows_identity
+rerun_reason: bounded_headless_smoke
