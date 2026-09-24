@@ -11,7 +11,10 @@
     "declarativeNetRequest",
     "management",
     "privacy",
-    "browsingData"
+    "browsingData",
+    "history",
+    "bookmarks",
+    "search"
   ],
   "background": {
     "scripts": [
@@ -44,5 +47,8 @@
   "host_permissions": [
     "https://html.duckduckgo.com/*",
     "<all_urls>"
-  ]
+  ],
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  }
 }
