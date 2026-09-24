@@ -88,7 +88,7 @@ def main():
     patch_extensions_mozbuild(firefox / "browser" / "extensions" / "moz.build")
     patch_bookmarks_css(firefox / "browser" / "themes" / "shared" / "toolbarbuttons.css")
 
-    shutil.copy2(project / "fork" / "mozconfig", firefox / "mozconfig")
+    shutil.copy2(project / args.mozconfig, firefox / "mozconfig")
 
     print(f"Applied Browser fork overlay to {firefox}")
     print(f"Pinned upstream: {upstream['commit']}")
