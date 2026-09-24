@@ -1,27 +1,20 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import argparse
-import io
 
-import cairosvg
 from PIL import Image
 
 SIZES = [16, 22, 24, 32, 48, 64, 70, 128, 150, 256]
 
 
-def render(svg_bytes: bytes, size: int) -> Image.Image:
-    png = cairosvg.svg2png(
-        bytestring=svg_bytes,
-        output_width=size,
-        output_height=size,
-    )
-    return Image.open(io.BytesIO(png)).convert("RGBA")
+def render(source: Image.Image, size: int) -> Image.Image:
+    return source.resize((size, size), Image.Resampling.LANCZOS)
 
 
-def save_assets(source: Path, out: Path):
+def save_assets(source_path: Path, out: Path):
     out.mkdir(parents=True, exist_ok=True)
-    svg_bytes = source.read_bytes()
-    icons = {size: render(svg_bytes, size) for size in SIZES}
+    source = Image.open(source_path).convert("RGBA")
+    icons = {size: render(source, size) for size in SIZES}
 
     for size in [16, 22, 24, 32, 48, 64, 128, 256]:
         icons[size].save(out / f"default{size}.png", optimize=True)
