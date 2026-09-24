@@ -45,6 +45,12 @@
         "installation_mode": "allowed",
         "private_browsing": true
       }
-    }
+    },
+    "DNSOverHTTPS": {
+      "Enabled": true,
+      "Locked": false,
+      "Fallback": true
+    },
+    "HttpsOnlyMode": "enabled"
   }
 }
