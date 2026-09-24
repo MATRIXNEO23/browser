@@ -32,10 +32,21 @@ Write-Host 'Applico policy del browser...'
 Copy-Item -Path (Join-Path $Root 'distribution\policies.json') -Destination (Join-Path $DistributionOut 'policies.json') -Force
 
 Write-Host 'Creo profili iniziali...'
+$CommonTemplate = Join-Path $Root 'profiles\templates\common'
 foreach ($mode in @('normal', 'turbo', 'private', 'ghost')) {
     $dest = Join-Path $ProfilesOut $mode
+    $ModeTemplate = Join-Path $Root ('profiles\templates\' + $mode)
+
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    Copy-Item -Path (Join-Path $Root ('profiles\templates\' + $mode + '\user.js')) -Destination (Join-Path $dest 'user.js') -Force
+
+    $commonPrefs = Get-Content -Raw (Join-Path $CommonTemplate 'user.js')
+    $modePrefs = Get-Content -Raw (Join-Path $ModeTemplate 'user.js')
+    Set-Content -Path (Join-Path $dest 'user.js') -Value ($commonPrefs + [Environment]::NewLine + $modePrefs) -Encoding UTF8
+
+    $CommonChrome = Join-Path $CommonTemplate 'chrome'
+    if (Test-Path $CommonChrome) {
+        Copy-Item -Path $CommonChrome -Destination $dest -Recurse -Force
+    }
 }
 
 Write-Host 'Impacchetto componente interno...'
