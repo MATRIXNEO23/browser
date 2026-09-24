@@ -90,7 +90,8 @@ require_text(
     "--with-branding=browser/branding/browser",
     "--enable-artifact-builds"
 )
-require_text("fork/branding/browser-icon.svg", 'viewBox="0 0 512 512"', "#18d7ff", "#4768ff")
+require_text("fork/branding/browser-icon.svg", 'viewBox="0 0 256 256"', "data:image/jpeg;base64,")
+require_text("extension/icons/browser.svg", 'viewBox="0 0 256 256"', "data:image/jpeg;base64,")
 require_text("fork/browser-chrome.css", "#navigator-toolbox", "#urlbar-background", "#PersonalToolbar", "#firefox-view-button")
 require_text("scripts/generate-brand-assets.py", "cairosvg", "firefox.ico", "default{size}.png")
 require_text("scripts/apply-fork-overlay.py", "browser-core", "MATRIXNEO23 Browser fork")
@@ -103,6 +104,9 @@ for control_id in re.findall(r'id="([^"]+)"', sidebar_html):
     if control_id not in sidebar_js and f"data-{control_id}" not in sidebar_html:
         errors.append(f"sidebar control #{control_id} is not referenced by sidebar.js")
 
+require_text("scripts/apply-fork-overlay.py", "patch_windows_identity", 'name=\"Browser\"', "WIN32_MODULE_COMPANYNAME=MATRIXNEO23")
+require_text(".github/workflows/build-windows.yml", "resedit-cli@3.1.0", "Browser-Windows-x64-final", "Apply final Windows identity and FILUM icon")
+
 if errors:
     print("PRODUCT GATE FAILED")
     for error in errors:
@@ -112,4 +116,3 @@ if errors:
 print("PRODUCT GATE PASSED")
 print("Required visual and functional surfaces are present and wired.")
 
-require_text("scripts/apply-fork-overlay.py", "patch_windows_identity", 'name=\"Browser\"', "WIN32_MODULE_COMPANYNAME=MATRIXNEO23")
