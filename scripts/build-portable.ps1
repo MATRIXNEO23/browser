@@ -21,9 +21,9 @@ if (Test-Path $OutputPath) { Remove-Item -Recurse -Force $OutputPath }
 $RuntimeOut = Join-Path $OutputPath 'runtime\firefox'
 $DistributionOut = Join-Path $RuntimeOut 'distribution'
 $ExtensionsOut = Join-Path $DistributionOut 'extensions'
-$ProfilesOut = Join-Path $OutputPath 'profiles'
+$ProfileOut = Join-Path $OutputPath 'profile'
 
-New-Item -ItemType Directory -Force -Path $RuntimeOut, $DistributionOut, $ExtensionsOut, $ProfilesOut | Out-Null
+New-Item -ItemType Directory -Force -Path $RuntimeOut, $DistributionOut, $ExtensionsOut, $ProfileOut | Out-Null
 
 Write-Host 'Copio runtime Gecko/Firefox...'
 Copy-Item -Path (Join-Path $FirefoxRuntimePath '*') -Destination $RuntimeOut -Recurse -Force
@@ -31,22 +31,17 @@ Copy-Item -Path (Join-Path $FirefoxRuntimePath '*') -Destination $RuntimeOut -Re
 Write-Host 'Applico policy del browser...'
 Copy-Item -Path (Join-Path $Root 'distribution\policies.json') -Destination (Join-Path $DistributionOut 'policies.json') -Force
 
-Write-Host 'Creo profili iniziali...'
+Write-Host 'Creo profilo unico del browser...'
 $CommonTemplate = Join-Path $Root 'profiles\templates\common'
-foreach ($mode in @('normal', 'turbo', 'private', 'ghost')) {
-    $dest = Join-Path $ProfilesOut $mode
-    $ModeTemplate = Join-Path $Root ('profiles\templates\' + $mode)
+$NormalTemplate = Join-Path $Root 'profiles\templates\normal'
 
-    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+$commonPrefs = Get-Content -Raw (Join-Path $CommonTemplate 'user.js')
+$normalPrefs = Get-Content -Raw (Join-Path $NormalTemplate 'user.js')
+Set-Content -Path (Join-Path $ProfileOut 'user.js') -Value ($commonPrefs + [Environment]::NewLine + $normalPrefs) -Encoding UTF8
 
-    $commonPrefs = Get-Content -Raw (Join-Path $CommonTemplate 'user.js')
-    $modePrefs = Get-Content -Raw (Join-Path $ModeTemplate 'user.js')
-    Set-Content -Path (Join-Path $dest 'user.js') -Value ($commonPrefs + [Environment]::NewLine + $modePrefs) -Encoding UTF8
-
-    $CommonChrome = Join-Path $CommonTemplate 'chrome'
-    if (Test-Path $CommonChrome) {
-        Copy-Item -Path $CommonChrome -Destination $dest -Recurse -Force
-    }
+$CommonChrome = Join-Path $CommonTemplate 'chrome'
+if (Test-Path $CommonChrome) {
+    Copy-Item -Path $CommonChrome -Destination $ProfileOut -Recurse -Force
 }
 
 Write-Host 'Impacchetto componente interno...'
@@ -64,7 +59,7 @@ if (-not $SkipLauncherBuild) {
     }
     Push-Location $Root
     try {
-        & $cl.Source /nologo /std:c++17 /O2 /EHsc /DUNICODE /D_UNICODE /Fe:$OutputPath\Browser.exe src\launcher\main.cpp user32.lib gdi32.lib shell32.lib
+        & $cl.Source /nologo /std:c++17 /O2 /EHsc /DUNICODE /D_UNICODE /Fe:$OutputPath\Browser.exe src\launcher\main.cpp user32.lib
         if ($LASTEXITCODE -ne 0) { throw 'Compilazione Browser.exe fallita.' }
     }
     finally { Pop-Location }
