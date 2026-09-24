@@ -32,6 +32,26 @@
     </section>
 
     <section>
+      <h2>Browser</h2>
+      <button id="library">Cronologia · Preferiti · Download</button>
+    </section>
+
+    <section>
+      <h2>Rete</h2>
+      <select id="network-mode">
+        <option value="direct">DIRECT</option>
+        <option value="system">SYSTEM / VPN</option>
+        <option value="socks">SOCKS5</option>
+      </select>
+      <div id="socks-fields">
+        <input id="socks-host" placeholder="Host SOCKS">
+        <input id="socks-port" type="number" min="1" max="65535" placeholder="Porta">
+      </div>
+      <button id="apply-network">Applica rete</button>
+      <p class="hint">SYSTEM/VPN usa il routing e l'eventuale VPN attiva in Windows.</p>
+    </section>
+
+    <section>
       <h2>Ricerca</h2>
       <button id="smart-search">SMART SEARCH</button>
       <p class="hint">Riordina localmente i risultati e approfondisce solo i migliori.</p>
