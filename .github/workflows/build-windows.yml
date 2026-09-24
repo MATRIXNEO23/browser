@@ -1,15 +1,14 @@
-name: build-windows-browser
+name: build-windows-browser-fork
 
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
     paths:
-      - "src/**"
       - "extension/**"
-      - "profiles/**"
+      - "fork/**"
       - "distribution/**"
-      - "scripts/**"
+      - "scripts/apply-fork-overlay.py"
       - ".github/workflows/build-windows.yml"
 
 permissions:
@@ -17,68 +16,102 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
 
     steps:
-      - name: Checkout
+      - name: Checkout Browser project
         uses: actions/checkout@v4
 
-      - name: Validate browser sources
-        shell: pwsh
+      - name: Free build disk
+        shell: bash
         run: |
-          $ErrorActionPreference = "Stop"
-          Get-ChildItem -Path ".\extension" -Recurse -Filter "*.js" | ForEach-Object {
-            Write-Host "node --check $($_.FullName)"
-            node --check $_.FullName
-            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $($_.FullName)" }
-          }
-          Get-ChildItem -Path ".\extension" -Recurse -Filter "*.json" | ForEach-Object {
-            Get-Content -Raw $_.FullName | ConvertFrom-Json | Out-Null
-          }
-          Get-Content -Raw ".\distribution\policies.json" | ConvertFrom-Json | Out-Null
-          Get-Content -Raw ".\config\defaults.json" | ConvertFrom-Json | Out-Null
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/.ghcup || true
+          df -h
 
-      - name: Download Firefox ESR runtime
-        shell: pwsh
+      - name: Install cross-build prerequisites
+        shell: bash
         run: |
-          $ErrorActionPreference = "Stop"
-          $url = "https://download.mozilla.org/?product=firefox-esr-latest-ssl&os=win64&lang=it"
-          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\firefox-esr.exe"
+          sudo apt-get update
+          sudo apt-get install -y msitools zip unzip mercurial python3 python3-pip
+          rustup target add x86_64-pc-windows-msvc
 
-      - name: Install Firefox ESR into staging
-        shell: pwsh
+      - name: Validate Browser sources
+        shell: bash
         run: |
-          $ErrorActionPreference = "Stop"
-          $out = "$env:RUNNER_TEMP\firefox-esr"
-          $args = @(
-            "/S",
-            "/InstallDirectoryPath=$out",
-            "/DesktopShortcut=false",
-            "/TaskbarShortcut=false",
-            "/MaintenanceService=false"
+          set -euo pipefail
+          python3 -m py_compile scripts/apply-fork-overlay.py
+          python3 -m json.tool fork/UPSTREAM.json >/dev/null
+          python3 -m json.tool extension/manifest.json >/dev/null
+          python3 -m json.tool distribution/policies.json >/dev/null
+          python3 -m json.tool config/defaults.json >/dev/null
+          while IFS= read -r -d '' file; do node --check "$file"; done < <(find extension -name '*.js' -print0)
+
+      - name: Clone pinned Firefox ESR
+        shell: bash
+        run: |
+          set -euo pipefail
+          UPSTREAM_COMMIT=$(python3 -c "import json; print(json.load(open('fork/UPSTREAM.json'))['commit'])")
+          git clone --filter=blob:none --no-checkout https://github.com/mozilla-firefox/firefox.git firefox-src
+          cd firefox-src
+          git fetch --depth=1 origin "$UPSTREAM_COMMIT"
+          git checkout --detach "$UPSTREAM_COMMIT"
+          git rev-parse HEAD
+
+      - name: Apply Browser fork overlay
+        shell: bash
+        run: |
+          python3 scripts/apply-fork-overlay.py --firefox-source firefox-src --project-root "$GITHUB_WORKSPACE" --mozconfig fork/mozconfig.win64
+          grep -n "browser-core" firefox-src/browser/extensions/moz.build
+          grep -n "MATRIXNEO23 Browser fork" firefox-src/browser/themes/shared/toolbarbuttons.css
+          cat firefox-src/mozconfig
+
+      - name: Build native Windows Browser fork
+        shell: bash
+        working-directory: firefox-src
+        run: |
+          set -euo pipefail
+          ./mach build
+          ./mach package
+
+      - name: Assemble persistent Browser ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE=$(find firefox-src/obj-browser-win64/dist -maxdepth 1 -type f -name '*.zip' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
+          if [ -z "$PACKAGE" ]; then
+            echo "No Windows package zip produced."
+            exit 1
+          fi
+
+          rm -rf dist
+          mkdir -p dist/stage
+          unzip -q "$PACKAGE" -d dist/stage
+
+          BROWSER_EXE=$(find dist/stage -type f -iname 'browser.exe' | head -1)
+          if [ -z "$BROWSER_EXE" ]; then
+            echo "browser.exe not found in native fork package."
+            find dist/stage -maxdepth 3 -type f | head -100
+            exit 1
+          fi
+
+          APP_DIR=$(dirname "$BROWSER_EXE")
+          mkdir -p "$APP_DIR/distribution"
+          cp distribution/policies.json "$APP_DIR/distribution/policies.json"
+
+          (
+            cd dist/stage
+            zip -qr ../Browser-Windows-x64.zip .
           )
-          Start-Process -FilePath "$env:RUNNER_TEMP\firefox-esr.exe" -ArgumentList $args -Wait
-          if (-not (Test-Path "$out\firefox.exe")) {
-            throw "Firefox ESR staging install not found."
-          }
 
-      - name: Enable MSVC environment
-        uses: ilammy/msvc-dev-cmd@v1
+          sha256sum dist/Browser-Windows-x64.zip > dist/SHA256SUMS.txt
+          ls -lh dist/Browser-Windows-x64.zip
+          cat dist/SHA256SUMS.txt
 
-      - name: Build portable browser
-        shell: pwsh
-        run: |
-          .\scripts\build-portable.ps1 -FirefoxRuntimePath "$env:RUNNER_TEMP\firefox-esr"
-
-      - name: Archive browser and checksum
-        shell: pwsh
-        run: |
-          $zip = ".\dist\Browser-Windows-x64.zip"
-          Compress-Archive -Path ".\dist\Browser\*" -DestinationPath $zip -CompressionLevel Optimal
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
-          "$hash  Browser-Windows-x64.zip" | Set-Content ".\dist\SHA256SUMS.txt" -Encoding ascii
-
-      - name: Upload temporary workflow artifact
+      - name: Upload temporary CI copy
         uses: actions/upload-artifact@v4
         with:
           name: Browser-Windows-x64
@@ -88,13 +121,11 @@ jobs:
           if-no-files-found: error
 
       - name: Publish persistent repository release
-        shell: pwsh
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = "Stop"
-          $short = $env:GITHUB_SHA.Substring(0, 7)
-          $tag = "build-$short"
-          $title = "Browser build $short"
-          $notes = "Persistent Windows x64 build from commit $env:GITHUB_SHA. Includes SHA256SUMS.txt."
-          gh release create $tag ".\dist\Browser-Windows-x64.zip" ".\dist\SHA256SUMS.txt" --repo "$env:GITHUB_REPOSITORY" --target "$env:GITHUB_SHA" --title "$title" --notes "$notes" --prerelease
+          set -euo pipefail
+          SHORT="${GITHUB_SHA:0:7}"
+          TAG="fork-$SHORT"
+          gh release create "$TAG"             dist/Browser-Windows-x64.zip             dist/SHA256SUMS.txt             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --title "Browser native fork $SHORT"             --notes "Native Browser Windows x64 fork built from pinned Firefox ESR 153 plus repository overlay. Source commit: $GITHUB_SHA"             --prerelease
