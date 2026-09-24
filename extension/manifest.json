@@ -53,5 +53,21 @@
   ],
   "chrome_url_overrides": {
     "newtab": "newtab.html"
+  },
+  "experiment_apis": {
+    "browserControl": {
+      "schema": "experiment-apis/browserControl.json",
+      "parent": {
+        "scopes": [
+          "addon_parent"
+        ],
+        "script": "experiment-apis/browserControl.js",
+        "paths": [
+          [
+            "browserControl"
+          ]
+        ]
+      }
+    }
   }
 }
