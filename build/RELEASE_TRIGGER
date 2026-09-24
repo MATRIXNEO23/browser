@@ -1,6 +1,6 @@
 release_request: final
-source_head_before_trigger: 48da4c4111a925fed9b5eae11dba800789195189
+source_head_before_trigger: 0fe60adc8a13e12025356ba009ca7251cbbd775b
 product_gate: required
 windows_smoke: required
 stable_release_only: true
-rerun_reason: fixed_branding_gate
+rerun_reason: install_wine_for_artifact_build
