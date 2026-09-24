@@ -1,0 +1,28 @@
+/* Browser UI: thin, non-invasive bookmarks bar */
+#PersonalToolbar {
+  min-height: 20px !important;
+  max-height: 22px !important;
+  padding: 0 3px !important;
+  border-top: 0 !important;
+  border-bottom: 1px solid rgba(255,255,255,.06) !important;
+}
+
+#PlacesToolbarItems {
+  min-height: 20px !important;
+}
+
+#PersonalToolbar .bookmark-item {
+  min-height: 18px !important;
+  padding: 0 4px !important;
+  margin: 0 1px !important;
+  font-size: 11px !important;
+}
+
+#PersonalToolbar .toolbarbutton-icon {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+#PersonalToolbar .toolbarbutton-text {
+  margin-inline-start: 3px !important;
+}
