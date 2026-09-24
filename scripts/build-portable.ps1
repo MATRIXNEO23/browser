@@ -64,7 +64,7 @@ if (-not $SkipLauncherBuild) {
     }
     Push-Location $Root
     try {
-        & $cl.Source /nologo /std:c++17 /O2 /EHsc /DUNICODE /D_UNICODE /Fe:$OutputPath\Browser.exe src\launcher\main.cpp user32.lib
+        & $cl.Source /nologo /std:c++17 /O2 /EHsc /DUNICODE /D_UNICODE /Fe:$OutputPath\Browser.exe src\launcher\main.cpp user32.lib gdi32.lib shell32.lib
         if ($LASTEXITCODE -ne 0) { throw 'Compilazione Browser.exe fallita.' }
     }
     finally { Pop-Location }
