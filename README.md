@@ -1,66 +1,82 @@
 # Browser
 
-Browser personale standalone per Windows, orientato a **leggerezza, privacy e controllo locale**, pensato anche per hardware datato.
+Browser personale standalone per Windows, orientato a leggerezza, privacy e controllo locale.
 
-## Prodotto
+## Identità del prodotto
 
-Questo repository costruisce un **browser completo e distribuibile**, non una semplice estensione.
+Questo progetto costruisce **un browser completo**, non un'estensione da installare sopra Firefox.
 
-La base di rendering è Gecko/Firefox per mantenere:
-- compatibilità con addon Firefox/WebExtensions;
-- cronologia, preferiti, download, password e profili;
-- sandbox e compatibilità web mature.
+Gecko/Firefox ESR viene usato come motore web per compatibilità con siti e addon, ma interfaccia, nuova scheda, controlli, modalità, Smart Search, gestione risorse, privacy e comportamento sono definiti dal progetto.
 
-Il pacchetto finale deve includere il runtime browser, le policy, i profili, il tema, il launcher e i componenti interni necessari. L'utente non deve installare manualmente l'estensione di progetto.
+Il browser si apre direttamente. Non esiste più alcun selettore di modalità prima dell'avvio.
 
-## Funzioni V1
+## Modalità live
 
-- UI dark.
-- Finestre e schede normali.
-- Cronologia, preferiti, download e password.
-- Addon Firefox normali.
-- Pulsante ADS ON/OFF integrato.
-- Modalità:
-  - **NORMAL** — compatibilità e persistenza normali.
-  - **TURBO** — riduzione aggressiva di CPU, RAM e traffico.
-  - **PRIVATE** — isolamento e anti-tracking rafforzati.
-  - **GHOST** — profilo separato, minima persistenza e protezioni privacy più aggressive.
-- Limite globale di massimo **3 attività background** in NORMAL e massimo **2** in TURBO/PRIVATE/GHOST.
-- Sospensione/scaricamento dalla RAM delle schede eccedenti quando Gecko lo consente.
+Le modalità si cambiano mentre il browser è aperto:
+
+- **NORMAL** — sessione persistente e massima compatibilità.
+- **TURBO** — stesso browser, ma con scaricamento più aggressivo delle tab inattive e riduzione del lavoro in background.
+- **PRIVATE** — tracking/cookie/fingerprinting/WebRTC più restrittivi.
+- **GHOST** — fase di navigazione effimera; cookie/storage/cronologia creati durante la fase vengono ripuliti quando si esce dalla modalità, dove tecnicamente supportato.
+
+GHOST non viene presentata come equivalente a Tor Browser e non promette invisibilità assoluta.
+
+## Funzioni integrate
+
+- UI dark e compatta.
+- Sidebar impostazioni a scomparsa.
+- Nuova scheda personalizzata.
+- Schede e finestre multiple.
+- Massimo **3 attività background globali**.
+- Scaricamento automatico dalla RAM delle tab eccedenti.
+- In TURBO, scaricamento anche delle tab background inattive da circa 90 secondi.
+- Barra preferiti sottile.
+- Cronologia.
+- Preferiti.
+- Download.
+- Password manager del motore.
+- Addon Firefox/WebExtensions.
+- Pagina addon installati.
+- Collegamento diretto al catalogo addon.
+- ADS ON/OFF indipendente dalle modalità.
+- Blocco richieste pubblicitarie leggero integrato.
+- SMART SEARCH con ranking locale e approfondimento limitato dei risultati migliori.
+- Rete selezionabile: DIRECT / SYSTEM-VPN / SOCKS5.
+- Protezioni cookie/storage, tracking, fingerprint e WebRTC.
 - Nessuna telemetria proprietaria.
 
-## Architettura
+## Ricerca
 
-```text
-Browser.exe
-   |
-   +-- runtime Gecko/Firefox incluso
-   |
-   +-- distribution/
-   |     +-- policies
-   |     +-- configurazione
-   |
-   +-- profili NORMAL/TURBO/PRIVATE/GHOST
-   |
-   +-- componente interno
-         +-- gestione tab/RAM
-         +-- ADS ON/OFF
-         +-- tema/UI
-         +-- diagnostica
-```
+La nuova scheda offre:
 
-La cartella `extension/` contiene **un componente interno del browser**. Non è il prodotto finale e non deve essere installato separatamente dall'utente.
+- ricerca web normale;
+- SMART SEARCH.
 
-## Privacy
+SMART SEARCH usa il motore web solo per raccogliere un insieme limitato di candidati e poi li riordina localmente in base alla richiesta dell'utente.
 
-Non viene promessa "invisibilità" assoluta. L'obiettivo è ridurre in modo misurabile tracking, fingerprinting, storage cross-site e dispersione di metadati senza creare fingerprint casuali e troppo unici.
+## Prestazioni
 
-GHOST non viene dichiarata equivalente a Tor Browser.
+Target iniziale:
 
-## Target
+- Windows x64;
+- vecchi Core i3;
+- poca RAM;
+- minimo lavoro in background.
 
-- Windows 10/11 64 bit.
-- Hardware di riferimento: Intel Core i3 di vecchia generazione.
-- Priorità: avvio rapido, poca RAM, poco lavoro in background.
+Non viene usato Electron e non viene incluso un secondo motore web.
 
-Vedi [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+## Build
+
+Le build Windows consegnabili vengono:
+
+1. compilate da GitHub Actions;
+2. validate sintatticamente;
+3. pubblicate come GitHub Release;
+4. accompagnate da SHA-256.
+
+Gli artifact temporanei di Actions non sono considerati storage canonico.
+
+Vedi:
+
+- [Requisiti canonici](docs/CANONICAL_PRODUCT_REQUIREMENTS.md)
+- [Architettura](docs/ARCHITECTURE.md)
