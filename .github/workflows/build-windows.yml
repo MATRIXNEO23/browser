@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y msitools zip unzip mercurial python3 python3-pip
+          sudo apt-get install -y msitools zip unzip mercurial python3 python3-pip python3-pil
           rustup target add x86_64-pc-windows-msvc
 
       - name: Validate Browser sources
@@ -72,6 +72,10 @@ jobs:
           python3 scripts/apply-fork-overlay.py --firefox-source firefox-src --project-root "$GITHUB_WORKSPACE" --mozconfig fork/mozconfig.win64
           grep -n "browser-core" firefox-src/browser/extensions/moz.build
           grep -n "MATRIXNEO23 Browser fork" firefox-src/browser/themes/shared/toolbarbuttons.css
+          grep -n "#navigator-toolbox" firefox-src/browser/themes/shared/toolbarbuttons.css
+          python3 scripts/generate-brand-assets.py --output firefox-src/browser/branding/browser
+          test -f firefox-src/browser/branding/browser/firefox.ico
+          test -f firefox-src/browser/branding/browser/default256.png
           cat firefox-src/mozconfig
 
       - name: Build native Windows Browser fork
