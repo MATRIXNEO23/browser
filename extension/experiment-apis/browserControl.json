@@ -11,7 +11,12 @@
           {
             "name": "mode",
             "type": "string",
-            "enum": ["NORMAL", "TURBO", "PRIVATE", "GHOST"]
+            "enum": [
+              "NORMAL",
+              "TURBO",
+              "PRIVATE",
+              "GHOST"
+            ]
           }
         ]
       },
@@ -26,7 +31,10 @@
         "type": "function",
         "async": true,
         "parameters": [
-          { "name": "enabled", "type": "boolean" }
+          {
+            "name": "enabled",
+            "type": "boolean"
+          }
         ]
       },
       {
@@ -34,7 +42,10 @@
         "type": "function",
         "async": true,
         "parameters": [
-          { "name": "enabled", "type": "boolean" }
+          {
+            "name": "enabled",
+            "type": "boolean"
+          }
         ]
       },
       {
@@ -45,7 +56,45 @@
           {
             "name": "level",
             "type": "string",
-            "enum": ["off", "balanced", "strict"]
+            "enum": [
+              "off",
+              "balanced",
+              "strict"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setWebsiteAppearance",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "mode",
+            "type": "string",
+            "enum": [
+              "auto",
+              "dark",
+              "light"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "openInternalPage",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "page",
+            "type": "string",
+            "enum": [
+              "settings",
+              "privacy",
+              "passwords",
+              "profiles",
+              "processes"
+            ]
           }
         ]
       }
