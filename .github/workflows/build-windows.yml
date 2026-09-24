@@ -1,0 +1,59 @@
+name: build-windows-browser
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - "src/**"
+      - "extension/**"
+      - "profiles/**"
+      - "distribution/**"
+      - "scripts/**"
+      - ".github/workflows/build-windows.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Firefox ESR runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $url = "https://download.mozilla.org/?product=firefox-esr-latest-ssl&os=win64&lang=it"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\firefox-esr.exe"
+
+      - name: Extract Firefox ESR
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = "$env:RUNNER_TEMP\firefox-esr"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Start-Process -FilePath "$env:RUNNER_TEMP\firefox-esr.exe" -ArgumentList "-ms","/S","/D=$out" -Wait
+          if (-not (Test-Path "$out\firefox.exe")) {
+            throw "Firefox ESR extraction/install directory not found."
+          }
+
+      - name: Enable MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build portable browser
+        shell: pwsh
+        run: |
+          .\scripts\build-portable.ps1 -FirefoxRuntimePath "$env:RUNNER_TEMP\firefox-esr"
+
+      - name: Archive browser
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ".\dist\Browser\*" -DestinationPath ".\dist\Browser-Windows-x64.zip" -CompressionLevel Optimal
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Browser-Windows-x64
+          path: dist/Browser-Windows-x64.zip
+          if-no-files-found: error
