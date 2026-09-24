@@ -10,8 +10,7 @@
     "theme",
     "declarativeNetRequest",
     "management",
-    "privacy",
-    "unlimitedStorage"
+    "privacy"
   ],
   "background": {
     "scripts": [
