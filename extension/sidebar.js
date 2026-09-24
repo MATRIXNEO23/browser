@@ -65,3 +65,8 @@ document.getElementById('close').addEventListener('click', async () => {
 });
 
 refresh();
+
+
+document.getElementById('smart-search').addEventListener('click', async () => {
+  await browser.runtime.sendMessage({ type: 'open-smart-search' });
+});
