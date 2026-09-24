@@ -16,7 +16,8 @@
     "bookmarks",
     "search",
     "browserSettings",
-    "proxy"
+    "proxy",
+    "alarms"
   ],
   "background": {
     "scripts": [
