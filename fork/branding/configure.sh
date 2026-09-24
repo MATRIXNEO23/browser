@@ -1,0 +1,2 @@
+MOZ_APP_DISPLAYNAME=Browser
+MOZ_MACBUNDLE_ID=browser.matrixneo23
