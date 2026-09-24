@@ -1,0 +1,62 @@
+:root {
+  color-scheme: dark;
+  font-family: Segoe UI, system-ui, sans-serif;
+  background: #121212;
+  color: #f2f2f2;
+}
+
+body {
+  margin: 0;
+  min-width: 280px;
+  background: #121212;
+}
+
+main {
+  padding: 14px;
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+button {
+  border: 1px solid #343434;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #1d1d1d;
+  color: #f2f2f2;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #262626;
+}
+
+button.active {
+  border-color: #8a8a8a;
+  background: #303030;
+  font-weight: 700;
+}
+
+#status {
+  margin: 12px 0;
+  padding: 10px;
+  white-space: pre-line;
+  border: 1px solid #2c2c2c;
+  border-radius: 8px;
+  background: #181818;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+#enforce {
+  width: 100%;
+}
