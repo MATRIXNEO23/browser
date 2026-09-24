@@ -38,6 +38,26 @@ def patch_browser_chrome(path: Path, project: Path):
     text += "\n" + MARKER + "\n" + chrome_css + "\n"
     path.write_text(text, encoding="utf-8")
 
+def patch_windows_identity(firefox: Path):
+    manifest = firefox / "browser" / "app" / "firefox.exe.manifest"
+    text = manifest.read_text(encoding="utf-8")
+    text = text.replace('name="Firefox"', 'name="Browser"')
+    text = text.replace("<description>Firefox</description>", "<description>Browser</description>")
+    manifest.write_text(text, encoding="utf-8")
+
+    module_ver = firefox / "browser" / "app" / "module.ver"
+    module_ver.write_text(
+        "WIN32_MODULE_COMPANYNAME=MATRIXNEO23\n"
+        "WIN32_MODULE_COPYRIGHT=Browser contributors; Gecko/Firefox code under MPL 2.0.\n"
+        "WIN32_MODULE_PRODUCTVERSION=@MOZ_APP_WINVERSION@\n"
+        "WIN32_MODULE_PRODUCTVERSION_STRING=@MOZ_APP_VERSION@\n"
+        "WIN32_MODULE_TRADEMARKS=\n"
+        "WIN32_MODULE_DESCRIPTION=@MOZ_APP_DISPLAYNAME@\n"
+        "WIN32_MODULE_PRODUCTNAME=@MOZ_APP_DISPLAYNAME@\n"
+        "WIN32_MODULE_NAME=@MOZ_APP_DISPLAYNAME@\n",
+        encoding="utf-8",
+    )
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--firefox-source", required=True)
@@ -74,6 +94,7 @@ def main():
         firefox / "browser" / "themes" / "shared" / "toolbarbuttons.css",
         project,
     )
+    patch_windows_identity(firefox)
 
     shutil.copy2(project / args.mozconfig, firefox / "mozconfig")
 
