@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "target": {
     "platform": "windows",
     "architecture": "x64",
@@ -12,9 +12,9 @@
   },
   "tabs": {
     "normal_background_limit": 3,
-    "turbo_background_limit": 2,
-    "private_background_limit": 2,
-    "ghost_background_limit": 2,
+    "turbo_background_limit": 3,
+    "private_background_limit": 3,
+    "ghost_background_limit": 3,
     "protect_audio": true,
     "protect_downloads": true,
     "protect_pinned": true,
@@ -29,7 +29,9 @@
     "block_third_party_tracking": true,
     "reduce_webrtc_leaks": true,
     "strip_tracking_parameters": true,
-    "randomize_fingerprint": false
+    "randomize_fingerprint": false,
+    "https_only_private": true,
+    "https_only_ghost": true
   },
   "performance": {
     "disable_autoplay_in_turbo": true,
