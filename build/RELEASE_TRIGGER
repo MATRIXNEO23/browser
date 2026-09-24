@@ -1,6 +1,6 @@
 release_request: final
-source_head_before_trigger: 078d658dbfc0b89f7db28c1a97c684f70e37216e
+source_head_before_trigger: e81051fb1b7defe7cd5ca54027c9876dbb813690
 product_gate: required
 windows_smoke: required
 stable_release_only: true
-rerun_reason: assemble_from_dist_browser
+rerun_reason: final_windows_identity_and_filum_icon
