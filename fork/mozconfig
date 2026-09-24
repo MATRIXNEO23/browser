@@ -1,0 +1,7 @@
+ac_add_options --enable-artifact-builds
+ac_add_options --enable-project=browser
+ac_add_options --with-app-name=browser
+ac_add_options --with-app-basename=Browser
+ac_add_options --with-branding=browser/branding/browser
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-browser
+mk_add_options AUTOCLOBBER=1
