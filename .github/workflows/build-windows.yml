@@ -20,6 +20,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate browser sources
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Get-ChildItem -Path ".\extension" -Recurse -Filter "*.js" | ForEach-Object {
+            Write-Host "node --check $($_.FullName)"
+            node --check $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $($_.FullName)" }
+          }
+          Get-ChildItem -Path ".\extension" -Recurse -Filter "*.json" | ForEach-Object {
+            Get-Content -Raw $_.FullName | ConvertFrom-Json | Out-Null
+          }
+          Get-Content -Raw ".\distribution\policies.json" | ConvertFrom-Json | Out-Null
+          Get-Content -Raw ".\config\defaults.json" | ConvertFrom-Json | Out-Null
+
       - name: Download Firefox ESR runtime
         shell: pwsh
         run: |
