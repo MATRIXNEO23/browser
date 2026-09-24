@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "target": {
+    "platform": "windows",
+    "architecture": "x64",
+    "hardware_class": "legacy-core-i3"
+  },
+  "ui": {
+    "theme": "dark",
+    "compact": true,
+    "show_resource_meter": true
+  },
+  "tabs": {
+    "normal_background_limit": 3,
+    "turbo_background_limit": 2,
+    "private_background_limit": 2,
+    "ghost_background_limit": 2,
+    "protect_audio": true,
+    "protect_downloads": true,
+    "protect_pinned": true,
+    "unload_inactive": true
+  },
+  "ads": {
+    "default_enabled": true,
+    "independent_toggle": true
+  },
+  "privacy": {
+    "partition_storage": true,
+    "block_third_party_tracking": true,
+    "reduce_webrtc_leaks": true,
+    "strip_tracking_parameters": true,
+    "randomize_fingerprint": false
+  },
+  "performance": {
+    "disable_autoplay_in_turbo": true,
+    "disable_speculative_preload_in_turbo": true,
+    "suspend_background_timers": true,
+    "prefer_low_memory_mode": true
+  },
+  "modes": ["NORMAL", "TURBO", "PRIVATE", "GHOST"]
+}
