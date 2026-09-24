@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Smart Search</title>
+  <link rel="stylesheet" href="smart-search.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>SMART SEARCH</h1>
+        <p>Il motore trova i candidati; il browser li riordina per la tua richiesta.</p>
+      </div>
+    </header>
+
+    <form id="search-form">
+      <input id="query" type="search" autocomplete="off"
+        placeholder='Cerca... usa +obbligatorio, -escluso o "frase esatta"' required>
+
+      <div class="options">
+        <label><input id="deep" type="checkbox" checked> Approfondisci i migliori 5</label>
+        <label><input id="prefer-direct" type="checkbox" checked> Preferisci fonti dirette/tecniche</label>
+        <label><input id="penalize-shopping" type="checkbox"> Penalizza shopping</label>
+        <label><input id="penalize-social" type="checkbox"> Penalizza social</label>
+      </div>
+
+      <div class="actions">
+        <button type="submit">Cerca per me</button>
+        <button id="stop" type="button" disabled>Ferma</button>
+      </div>
+    </form>
+
+    <section id="summary" class="summary"></section>
+    <section id="results" class="results"></section>
+  </main>
+  <script src="smart-search.js"></script>
+</body>
+</html>
