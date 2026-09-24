@@ -105,44 +105,32 @@ jobs:
         run: |
           set -euo pipefail
 
-          PACKAGE=$(find firefox-src/obj-browser-win64/dist -maxdepth 1 -type f -name '*.zip' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
-          if [ -z "$PACKAGE" ]; then
-            echo "No Windows package zip produced."
+          RUNTIME="firefox-src/obj-browser-win64/dist/bin"
+          if [ ! -f "$RUNTIME/browser.exe" ]; then
+            echo "browser.exe not found after explicit browser/app build."
+            find "$RUNTIME" -maxdepth 2 -type f | head -100
             exit 1
           fi
 
           rm -rf dist
-          mkdir -p dist/stage
-          unzip -q "$PACKAGE" -d dist/stage
+          mkdir -p dist/stage/Browser
+          cp -a "$RUNTIME"/. dist/stage/Browser/
 
-          BROWSER_EXE=$(find dist/stage -type f -iname 'browser.exe' | head -1)
-          if [ -z "$BROWSER_EXE" ]; then
-            echo "browser.exe not found."
-            find dist/stage -maxdepth 3 -type f | head -100
-            exit 1
+          # Do not expose the upstream artifact executable as a second browser entry point.
+          rm -f dist/stage/Browser/firefox.exe
+
+          mkdir -p dist/stage/Browser/distribution
+          cp distribution/policies.json dist/stage/Browser/distribution/policies.json
+
+          # Preserve MPL and third-party licensing material with the distribution.
+          if [ -f firefox-src/LICENSE ]; then
+            cp firefox-src/LICENSE dist/stage/Browser/LICENSE
+          fi
+          if [ -f firefox-src/toolkit/content/license.html ]; then
+            cp firefox-src/toolkit/content/license.html dist/stage/Browser/LICENSE.html
           fi
 
-          # Artifact mode reuses Mozilla's precompiled PE. Rebrand the actual
-          # Windows executable resource table so Explorer/taskbar/file details
-          # expose this product, not the upstream engine.
-          BRANDED_EXE="${BROWSER_EXE}.branded"
-          npx --yes resedit-cli@3.1.1 "$BROWSER_EXE" "$BRANDED_EXE" \
-            --ignore-signed \
-            --icon "1,firefox-src/browser/branding/browser/firefox.ico" \
-            --product-name "Browser" \
-            --file-description "Browser" \
-            --company-name "MATRIXNEO23" \
-            --internal-name "Browser" \
-            --original-filename "browser.exe" \
-            --file-version "1.0.0.0" \
-            --product-version "1.0.0.0"
-          mv "$BRANDED_EXE" "$BROWSER_EXE"
-
-          APP_DIR=$(dirname "$BROWSER_EXE")
-          mkdir -p "$APP_DIR/distribution"
-          cp distribution/policies.json "$APP_DIR/distribution/policies.json"
-
-          OMNI_MATCHES=$(find "$APP_DIR" -type f -name 'omni.ja' -print)
+          OMNI_MATCHES=$(find dist/stage/Browser -type f -name 'omni.ja' -print)
           if [ -z "$OMNI_MATCHES" ]; then
             echo "omni.ja missing."
             exit 1
@@ -163,7 +151,7 @@ jobs:
 
           (
             cd dist/stage
-            zip -qr ../Browser-Windows-x64.zip .
+            zip -qr ../Browser-Windows-x64.zip Browser
           )
 
           sha256sum dist/Browser-Windows-x64.zip > dist/SHA256SUMS.txt
