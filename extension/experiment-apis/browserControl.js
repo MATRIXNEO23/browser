@@ -61,6 +61,35 @@ this.browserControl = class extends ExtensionAPI {
           const mode = level === "strict" ? 3 : level === "balanced" ? 2 : 5;
           setInt("network.trr.mode", mode);
           return { level, mode };
+        },
+
+        async setWebsiteAppearance(mode) {
+          const value = mode === "dark" ? 0 : mode === "light" ? 1 : 2;
+          setInt("layout.css.prefers-color-scheme.content-override", value);
+          return { mode, value };
+        },
+
+        async openInternalPage(page) {
+          const targets = {
+            settings: "about:preferences",
+            privacy: "about:preferences#privacy",
+            passwords: "about:logins",
+            profiles: "about:profiles",
+            processes: "about:processes"
+          };
+
+          const url = targets[page];
+          if (!url) {
+            throw new Error("Unsupported internal page");
+          }
+
+          const win = Services.wm.getMostRecentWindow("navigator:browser");
+          if (!win) {
+            throw new Error("No browser window");
+          }
+
+          win.openTrustedLinkIn(url, "tab");
+          return { page, opened: true };
         }
       }
     };
