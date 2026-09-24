@@ -42,7 +42,7 @@ if manifest_path.is_file():
     action = manifest.get("action", {})
     if action.get("default_area") != "navbar":
         errors.append("Browser Control action is not pinned to navbar by default")
-    if action.get("default_icon") != "icons/browser.svg":
+    if action.get("default_icon") != "icons/browser.png":
         errors.append("Browser Control action does not use canonical Browser icon")
     if manifest.get("chrome_url_overrides", {}).get("newtab") != "newtab.html":
         errors.append("custom new tab not configured")
@@ -90,10 +90,10 @@ require_text(
     "--with-branding=browser/branding/browser",
     "--enable-artifact-builds"
 )
-require_text("fork/branding/browser-icon.svg", 'viewBox="0 0 256 256"', "data:image/jpeg;base64,")
-require_text("extension/icons/browser.svg", 'viewBox="0 0 256 256"', "data:image/jpeg;base64,")
+require_file("fork/branding/browser-icon.png")
+require_file("extension/icons/browser.png")
 require_text("fork/browser-chrome.css", "#navigator-toolbox", "#urlbar-background", "#PersonalToolbar", "#firefox-view-button")
-require_text("scripts/generate-brand-assets.py", "cairosvg", "firefox.ico", "default{size}.png")
+require_text("scripts/generate-brand-assets.py", "Image.open", "firefox.ico", "default{size}.png")
 require_text("scripts/apply-fork-overlay.py", "browser-core", "MATRIXNEO23 Browser fork")
 require_text("docs/CANONICAL_PRODUCT_REQUIREMENTS.md", "NORMAL / TURBO / PRIVATE / GHOST", "SMART SEARCH", "maximum of 3 active background")
 
