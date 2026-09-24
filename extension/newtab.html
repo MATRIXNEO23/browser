@@ -8,16 +8,40 @@
 </head>
 <body>
   <main>
+    <section class="topline">
+      <div class="brandline">
+        <span class="brand-mark">B</span>
+        <div>
+          <strong>Browser</strong>
+          <span class="mode-label">Pronto</span>
+        </div>
+      </div>
+      <div class="clock-block">
+        <strong class="clock">--:--</strong>
+        <span class="date">—</span>
+      </div>
+    </section>
+
     <section class="hero">
-      <h1>Browser</h1>
+      <p class="eyebrow">NAVIGA SENZA RUMORE</p>
+      <h1>Cosa vuoi trovare?</h1>
       <form id="normal-search">
-        <input id="q" type="search" autocomplete="off" placeholder="Cerca sul web" autofocus>
+        <input id="q" type="search" autocomplete="off" placeholder="Cerca sul web o digita quello che ti serve" autofocus>
         <button type="submit">Cerca</button>
       </form>
       <div class="actions">
-        <button id="smart">SMART SEARCH</button>
-        <button id="library">Libreria</button>
-        <button id="addons">Addon</button>
+        <button id="smart" class="primary">
+          <b>SMART SEARCH</b>
+          <span>Filtra e riordina i risultati per pertinenza reale</span>
+        </button>
+        <button id="library">
+          <b>Libreria</b>
+          <span>Cronologia · Preferiti · Download</span>
+        </button>
+        <button id="addons">
+          <b>Addon</b>
+          <span>Gestisci o trova estensioni</span>
+        </button>
       </div>
     </section>
   </main>
