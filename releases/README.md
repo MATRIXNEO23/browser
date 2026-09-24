@@ -23,3 +23,14 @@ The release points to the exact source commit used to produce the binary.
 ## Rule
 
 A build is not considered delivered until the corresponding GitHub Release exists successfully.
+
+
+## Native fork rule
+
+Legacy tags named `build-*` are wrapper/prototype builds and are superseded.
+
+Canonical Browser releases use:
+
+`fork-<short commit sha>`
+
+A native fork release is valid only if CI verifies that the package contains `browser.exe`. A package containing only `firefox.exe` must fail and must not be published as a Browser release.
