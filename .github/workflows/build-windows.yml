@@ -122,6 +122,22 @@ jobs:
             exit 1
           fi
 
+          # Artifact mode reuses Mozilla's precompiled PE. Rebrand the actual
+          # Windows executable resource table so Explorer/taskbar/file details
+          # expose this product, not the upstream engine.
+          BRANDED_EXE="${BROWSER_EXE}.branded"
+          npx --yes resedit-cli@3.1.1 "$BROWSER_EXE" "$BRANDED_EXE" \
+            --ignore-signed \
+            --icon "1,firefox-src/browser/branding/browser/firefox.ico" \
+            --product-name "Browser" \
+            --file-description "Browser" \
+            --company-name "MATRIXNEO23" \
+            --internal-name "Browser" \
+            --original-filename "browser.exe" \
+            --file-version "1.0.0.0" \
+            --product-version "1.0.0.0"
+          mv "$BRANDED_EXE" "$BROWSER_EXE"
+
           APP_DIR=$(dirname "$BROWSER_EXE")
           mkdir -p "$APP_DIR/distribution"
           cp distribution/policies.json "$APP_DIR/distribution/policies.json"
