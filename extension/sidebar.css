@@ -89,3 +89,22 @@ button.active {
   font-size: 10px;
   line-height: 1.35;
 }
+
+
+select,
+input {
+  width: 100%;
+  border: 1px solid #333;
+  border-radius: 7px;
+  padding: 8px;
+  background: #181818;
+  color: #f2f2f2;
+  margin-bottom: 6px;
+}
+
+#socks-fields {
+  display: none;
+  grid-template-columns: 1fr 86px;
+  gap: 6px;
+  margin-top: 6px;
+}
