@@ -111,3 +111,5 @@ if errors:
 
 print("PRODUCT GATE PASSED")
 print("Required visual and functional surfaces are present and wired.")
+
+require_text("scripts/apply-fork-overlay.py", "patch_windows_identity", 'name=\"Browser\"', "WIN32_MODULE_COMPANYNAME=MATRIXNEO23")
