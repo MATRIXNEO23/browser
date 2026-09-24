@@ -3,9 +3,19 @@
   "name": "Browser Control Core",
   "version": "0.3.0",
   "description": "Integrated control core for modes, privacy, resources, dark UI and ad blocking.",
-  "permissions": ["tabs", "storage", "downloads", "theme", "declarativeNetRequest"],
+  "permissions": [
+    "tabs",
+    "storage",
+    "downloads",
+    "theme",
+    "declarativeNetRequest",
+    "management",
+    "privacy"
+  ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "action": {
     "default_title": "Apri/chiudi impostazioni"
