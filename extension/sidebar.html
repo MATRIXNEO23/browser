@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Impostazioni Browser</title>
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <main>
+    <header>
+      <strong>Browser</strong>
+      <button id="close" title="Chiudi">×</button>
+    </header>
+
+    <section>
+      <h2>Modalità</h2>
+      <div class="grid">
+        <button data-mode="NORMAL">NORMAL</button>
+        <button data-mode="TURBO">TURBO</button>
+        <button data-mode="PRIVATE">PRIVATE</button>
+        <button data-mode="GHOST">GHOST</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Privacy e prestazioni</h2>
+      <button id="ads">ADS: ON</button>
+      <button id="enforce">Libera RAM ora</button>
+      <div id="status">Caricamento…</div>
+    </section>
+
+    <section>
+      <h2>Addon</h2>
+      <div class="grid">
+        <button id="addons-installed">Installati</button>
+        <button id="addons-store">Catalogo</button>
+      </div>
+    </section>
+  </main>
+  <script src="sidebar.js"></script>
+</body>
+</html>
