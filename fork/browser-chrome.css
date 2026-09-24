@@ -1,0 +1,137 @@
+/* Browser product chrome overrides.
+ * Keep Gecko functionality intact while giving the product its own compact identity.
+ */
+
+:root {
+  --browser-product-bg: #0b0d10;
+  --browser-product-panel: #11151a;
+  --browser-product-panel-2: #171c22;
+  --browser-product-line: #28313b;
+  --browser-product-text: #f5f7fa;
+  --browser-product-muted: #8d98a5;
+  --browser-product-accent: #8cb8ff;
+}
+
+#navigator-toolbox {
+  background: var(--browser-product-bg) !important;
+  border-bottom: 1px solid var(--browser-product-line) !important;
+}
+
+#TabsToolbar,
+#nav-bar,
+#PersonalToolbar {
+  background-color: var(--browser-product-bg) !important;
+  background-image: none !important;
+}
+
+#TabsToolbar {
+  min-height: 34px !important;
+}
+
+.tabbrowser-tab {
+  padding-inline: 2px !important;
+}
+
+.tabbrowser-tab .tab-background {
+  margin-block: 3px 2px !important;
+  border-radius: 9px !important;
+  border: 1px solid transparent !important;
+}
+
+.tabbrowser-tab[selected] .tab-background {
+  background: var(--browser-product-panel-2) !important;
+  border-color: var(--browser-product-line) !important;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%) !important;
+}
+
+.tabbrowser-tab:not([selected]):hover .tab-background {
+  background: #12171d !important;
+}
+
+#nav-bar {
+  min-height: 38px !important;
+  padding-block: 2px !important;
+}
+
+#urlbar-background {
+  background: var(--browser-product-panel) !important;
+  border: 1px solid var(--browser-product-line) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+#urlbar[focused] #urlbar-background,
+#urlbar[open] #urlbar-background {
+  border-color: #4b6077 !important;
+  box-shadow: 0 0 0 1px rgb(140 184 255 / 12%) !important;
+}
+
+#urlbar-input {
+  color: var(--browser-product-text) !important;
+}
+
+#PersonalToolbar {
+  min-height: 20px !important;
+  max-height: 22px !important;
+  padding: 0 4px !important;
+  border-top: 0 !important;
+  border-bottom: 1px solid rgb(255 255 255 / 5%) !important;
+}
+
+#PersonalToolbar toolbarbutton.bookmark-item:not(.subviewbutton) {
+  min-height: 18px !important;
+  margin: 0 1px !important;
+  padding: 0 4px !important;
+  border-radius: 6px !important;
+  font-size: 11px !important;
+}
+
+#PersonalToolbar .bookmark-item > .toolbarbutton-icon {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+#PersonalToolbar .toolbarbutton-text {
+  margin-inline-start: 3px !important;
+}
+
+.toolbarbutton-1 > .toolbarbutton-icon,
+.toolbarbutton-1 > .toolbarbutton-badge-stack {
+  border-radius: 8px !important;
+}
+
+.toolbarbutton-1:not([disabled]):hover > :is(.toolbarbutton-icon, .toolbarbutton-text, .toolbarbutton-badge-stack) {
+  background-color: #1a2027 !important;
+}
+
+#firefox-view-button,
+#save-to-pocket-button,
+#shopping-sidebar-button {
+  display: none !important;
+}
+
+#unified-extensions-button,
+#downloads-button,
+#PanelUI-menu-button {
+  opacity: .92;
+}
+
+#sidebar-box {
+  border-inline-end: 1px solid var(--browser-product-line) !important;
+  background: var(--browser-product-bg) !important;
+}
+
+#sidebar-header {
+  min-height: 34px !important;
+  background: var(--browser-product-bg) !important;
+  border-bottom: 1px solid var(--browser-product-line) !important;
+}
+
+#sidebar-title {
+  font-size: 12px !important;
+  font-weight: 650 !important;
+}
+
+.browserContainer {
+  background: #090b0e !important;
+}
