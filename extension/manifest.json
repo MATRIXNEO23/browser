@@ -10,7 +10,8 @@
     "theme",
     "declarativeNetRequest",
     "management",
-    "privacy"
+    "privacy",
+    "unlimitedStorage"
   ],
   "background": {
     "scripts": [
@@ -39,5 +40,9 @@
       "id": "resource-controller@matrixneo23.browser",
       "strict_min_version": "128.0"
     }
-  }
+  },
+  "host_permissions": [
+    "https://html.duckduckgo.com/*",
+    "<all_urls>"
+  ]
 }
