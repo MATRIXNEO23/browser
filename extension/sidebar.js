@@ -48,6 +48,7 @@ function renderResources(stats) {
 function render(data) {
   const mode = data?.mode || 'NORMAL';
   adsEnabled = data?.adsEnabled !== false;
+  document.body.dataset.mode = mode;
 
   for (const button of modeButtons) {
     button.classList.toggle('active', button.dataset.mode === mode);
