@@ -72,6 +72,7 @@ async function render() {
   list.textContent = '';
 
   const visible = addons
+    .filter((addon) => addon.id !== self.id)
     .filter((addon) => addon.type === 'extension' || addon.type === 'theme')
     .sort((a, b) => {
       if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
