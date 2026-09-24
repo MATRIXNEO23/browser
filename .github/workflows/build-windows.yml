@@ -276,11 +276,34 @@ jobs:
             "-screenshot", $shot,
             "about:newtab"
           )
-          $p = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "Browser headless launch failed with exit code $($p.ExitCode)." }
-          if (-not (Test-Path $shot)) { throw "Browser did not render the New Tab screenshot." }
-          if ((Get-Item $shot).Length -lt 4096) { throw "New Tab smoke screenshot is unexpectedly small." }
-          Write-Host "Windows launch + New Tab render passed."
+          $p = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -PassThru
+          $deadline = (Get-Date).AddSeconds(60)
+          try {
+            while ((Get-Date) -lt $deadline) {
+              if (Test-Path $shot) {
+                if ((Get-Item $shot).Length -ge 4096) { break }
+              }
+              if ($p.HasExited) {
+                throw "Browser exited before producing a valid New Tab screenshot. ExitCode=$($p.ExitCode)"
+              }
+              Start-Sleep -Seconds 1
+              $p.Refresh()
+            }
+
+            if (-not (Test-Path $shot)) {
+              throw "Browser did not render the New Tab screenshot within 60 seconds."
+            }
+            if ((Get-Item $shot).Length -lt 4096) {
+              throw "New Tab smoke screenshot is unexpectedly small."
+            }
+
+            Write-Host "Windows launch + New Tab render passed."
+          }
+          finally {
+            if (-not $p.HasExited) {
+              & taskkill /PID $p.Id /T /F | Out-Null
+            }
+          }
 
       - name: Upload visual smoke evidence
         uses: actions/upload-artifact@v4
