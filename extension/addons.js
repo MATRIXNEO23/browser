@@ -1,5 +1,12 @@
 const list = document.getElementById('addons');
 
+function button(label, action) {
+  const el = document.createElement('button');
+  el.textContent = label;
+  el.addEventListener('click', action);
+  return el;
+}
+
 function makeAddonRow(addon, selfId) {
   const row = document.createElement('article');
   row.className = 'addon';
@@ -15,9 +22,11 @@ function makeAddonRow(addon, selfId) {
 
   const meta = document.createElement('div');
   meta.className = 'meta';
-  meta.textContent = [addon.type, addon.version ? 'v' + addon.version : '', addon.id]
-    .filter(Boolean)
-    .join(' · ');
+  meta.textContent = [
+    addon.type,
+    addon.version ? 'v' + addon.version : '',
+    addon.id
+  ].filter(Boolean).join(' · ');
 
   info.append(title, meta);
 
@@ -25,24 +34,29 @@ function makeAddonRow(addon, selfId) {
   actions.className = 'actions';
 
   if (addon.homepageUrl) {
-    const home = document.createElement('button');
-    home.textContent = 'Pagina';
-    home.addEventListener('click', () => browser.tabs.create({ url: addon.homepageUrl }));
-    actions.appendChild(home);
+    actions.appendChild(button('Pagina', () => {
+      browser.tabs.create({ url: addon.homepageUrl });
+    }));
   }
 
   if (addon.id !== selfId) {
-    const remove = document.createElement('button');
-    remove.textContent = 'Rimuovi';
-    remove.addEventListener('click', async () => {
+    if (addon.mayDisable !== false) {
+      actions.appendChild(button(addon.enabled ? 'Disattiva' : 'Attiva', async () => {
+        try {
+          await browser.management.setEnabled(addon.id, !addon.enabled);
+          await render();
+        } catch (_) {}
+      }));
+    }
+
+    actions.appendChild(button('Rimuovi', async () => {
       try {
         await browser.management.uninstall(addon.id, { showConfirmDialog: true });
         await render();
       } catch (_) {
         // User cancellation or protected addon.
       }
-    });
-    actions.appendChild(remove);
+    }));
   }
 
   row.append(info, actions);
@@ -56,9 +70,13 @@ async function render() {
   ]);
 
   list.textContent = '';
+
   const visible = addons
     .filter((addon) => addon.type === 'extension' || addon.type === 'theme')
-    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    .sort((a, b) => {
+      if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
 
   if (!visible.length) {
     list.textContent = 'Nessun addon trovato.';
