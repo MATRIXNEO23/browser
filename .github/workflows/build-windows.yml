@@ -88,7 +88,17 @@ jobs:
         run: |
           set -euo pipefail
           ./mach build
-          ./mach package
+
+          # Artifact builds reuse Mozilla's precompiled Gecko executable.
+          # Promote that engine binary to this product's application name
+          # before the packaging manifest is evaluated.
+          test -f obj-browser-win64/dist/bin/firefox.exe
+          cp obj-browser-win64/dist/bin/firefox.exe obj-browser-win64/dist/bin/browser.exe
+
+          # Build the ZIP payload only. The generic "mach package" target also
+          # attempts to build Mozilla's Windows installer subtarget, which is
+          # not present in this cross-artifact environment.
+          gmake -C obj-browser-win64/browser/installer make-package-internal
 
       - name: Assemble Browser package
         shell: bash
