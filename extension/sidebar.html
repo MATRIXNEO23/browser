@@ -3,62 +3,83 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Impostazioni Browser</title>
+  <title>Browser Control</title>
   <link rel="stylesheet" href="sidebar.css">
 </head>
 <body>
-  <main>
-    <header>
-      <strong>Browser</strong>
-      <button id="close" title="Chiudi">×</button>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">B</span>
+        <div>
+          <strong>Browser</strong>
+          <small>Control Center</small>
+        </div>
+      </div>
+      <button id="close" class="icon-button" title="Chiudi" aria-label="Chiudi">×</button>
     </header>
 
-    <section>
-      <h2>Modalità live</h2>
-      <div class="grid">
-        <button data-mode="NORMAL">NORMAL</button>
-        <button data-mode="TURBO">TURBO</button>
-        <button data-mode="PRIVATE">PRIVATE</button>
-        <button data-mode="GHOST">GHOST</button>
+    <section class="hero-card">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">MODALITÀ LIVE</span>
+          <h1>Cambia comportamento senza riavviare</h1>
+        </div>
       </div>
-      <p class="hint">Si cambiano durante la navigazione. GHOST ripulisce i dati creati nella sua fase quando ne esci.</p>
+      <div class="mode-grid">
+        <button data-mode="NORMAL"><b>NORMAL</b><span>Uso quotidiano</span></button>
+        <button data-mode="TURBO"><b>TURBO</b><span>Più leggero</span></button>
+        <button data-mode="PRIVATE"><b>PRIVATE</b><span>Più isolamento</span></button>
+        <button data-mode="GHOST"><b>GHOST</b><span>Sessione effimera</span></button>
+      </div>
+      <p class="hint">GHOST ripulisce i dati creati nella sua fase quando ne esci.</p>
     </section>
 
-    <section>
-      <h2>Prestazioni</h2>
+    <section class="card">
+      <div class="section-head">
+        <h2>Prestazioni</h2>
+        <button id="enforce" class="small-action">LIBERA RAM</button>
+      </div>
       <div id="resource-stats" class="resource">RAM — · CPU — · processi —</div>
-      <button id="enforce">Libera RAM ora</button>
-      <div id="status">Caricamento…</div>
+      <div id="status" class="status">Caricamento…</div>
     </section>
 
-    <section>
-      <h2>Pubblicità</h2>
-      <button id="ads">ADS: ON</button>
-      <p class="hint">Indipendente da NORMAL / TURBO / PRIVATE / GHOST.</p>
+    <section class="card split-card">
+      <div>
+        <span class="eyebrow">BLOCCO RICHIESTE</span>
+        <h2>Pubblicità</h2>
+        <p class="hint">Indipendente dalla modalità attiva.</p>
+      </div>
+      <button id="ads" class="pill-toggle">ADS: ON</button>
     </section>
 
-    <section>
+    <section class="card">
       <h2>Aspetto</h2>
-      <label class="field-label" for="browser-theme">Interfaccia</label>
-      <select id="browser-theme">
-        <option value="dark">DARK</option>
-        <option value="black">BLACK</option>
-        <option value="system">SYSTEM</option>
-      </select>
-
-      <label class="field-label" for="website-appearance">Siti compatibili</label>
-      <select id="website-appearance">
-        <option value="auto">AUTO</option>
-        <option value="dark">PREFERISCI DARK</option>
-        <option value="light">PREFERISCI LIGHT</option>
-      </select>
+      <div class="field-grid">
+        <label>
+          <span>Interfaccia</span>
+          <select id="browser-theme">
+            <option value="dark">DARK</option>
+            <option value="black">BLACK</option>
+            <option value="system">SYSTEM</option>
+          </select>
+        </label>
+        <label>
+          <span>Siti compatibili</span>
+          <select id="website-appearance">
+            <option value="auto">AUTO</option>
+            <option value="dark">PREFERISCI DARK</option>
+            <option value="light">PREFERISCI LIGHT</option>
+          </select>
+        </label>
+      </div>
     </section>
 
-    <section>
-      <h2>Sicurezza</h2>
+    <section class="card">
+      <h2>Sicurezza e privacy</h2>
       <label class="toggle-row">
         <input id="https-only" type="checkbox">
-        <span>HTTPS-only</span>
+        <span><b>HTTPS-only</b><small>Rifiuta HTTP quando possibile</small></span>
       </label>
 
       <label class="field-label" for="secure-dns">DNS sicuro</label>
@@ -70,7 +91,7 @@
 
       <label class="toggle-row">
         <input id="hardware-accel" type="checkbox">
-        <span>Accelerazione hardware</span>
+        <span><b>Accelerazione hardware</b><small>Richiede riavvio quando modificata</small></span>
       </label>
       <p id="hardware-note" class="hint"></p>
 
@@ -80,15 +101,10 @@
         <button data-internal-page="settings">Impostazioni</button>
         <button data-internal-page="profiles">Profili</button>
       </div>
-      <button data-internal-page="processes">Processi / memoria</button>
+      <button data-internal-page="processes" class="wide-secondary">Processi / memoria</button>
     </section>
 
-    <section>
-      <h2>Browser</h2>
-      <button id="library">Cronologia · Preferiti · Download</button>
-    </section>
-
-    <section>
+    <section class="card">
       <h2>Rete</h2>
       <select id="network-mode">
         <option value="direct">DIRECT</option>
@@ -99,18 +115,26 @@
         <input id="socks-host" placeholder="Host SOCKS">
         <input id="socks-port" type="number" min="1" max="65535" placeholder="Porta">
       </div>
-      <button id="apply-network">Applica rete</button>
+      <button id="apply-network" class="wide-secondary">Applica rete</button>
       <p class="hint">SYSTEM/VPN usa il routing e l'eventuale VPN attiva in Windows.</p>
     </section>
 
-    <section>
-      <h2>Ricerca</h2>
-      <button id="smart-search">SMART SEARCH</button>
-      <p class="hint">Raccoglie pochi candidati, li filtra e riordina localmente, poi approfondisce solo i migliori.</p>
+    <section class="card launchers">
+      <button id="smart-search" class="feature-button">
+        <b>SMART SEARCH</b>
+        <span>Filtra e riordina localmente i risultati</span>
+      </button>
+      <button id="library" class="feature-button">
+        <b>LIBRERIA</b>
+        <span>Cronologia · Preferiti · Download</span>
+      </button>
     </section>
 
-    <section>
-      <h2>Addon</h2>
+    <section class="card">
+      <div class="section-head">
+        <h2>Addon</h2>
+        <span class="eyebrow">WEBEXTENSIONS</span>
+      </div>
       <div class="grid">
         <button id="addons-installed">Installati</button>
         <button id="addons-store">Catalogo</button>
