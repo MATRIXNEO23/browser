@@ -59,6 +59,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--firefox-source", required=True)
     parser.add_argument("--project-root", default=None)
+    parser.add_argument("--mozconfig", default="fork/mozconfig.win64")
     args = parser.parse_args()
 
     firefox = Path(args.firefox_source).resolve()
