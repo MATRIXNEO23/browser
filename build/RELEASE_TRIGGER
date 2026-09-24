@@ -1,6 +1,6 @@
 release_request: final
-source_head_before_trigger: e81051fb1b7defe7cd5ca54027c9876dbb813690
+source_head_before_trigger: dd6a12205c5cfaeaf1408cfcb6c90a76090eed86
 product_gate: required
 windows_smoke: required
 stable_release_only: true
-rerun_reason: final_windows_identity_and_filum_icon
+rerun_reason: direct_filum_png_and_final_windows_identity
