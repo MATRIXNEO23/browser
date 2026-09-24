@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y msitools zip unzip mercurial python3 python3-pip python3-pil python3-cairosvg wine64
+          sudo apt-get install -y msitools zip unzip mercurial python3 python3-pip python3-pil wine64
           rustup target add x86_64-pc-windows-msvc
 
       - name: Product completeness gate
@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/apply-fork-overlay.py --firefox-source firefox-src --project-root "$GITHUB_WORKSPACE" --mozconfig fork/mozconfig.win64
-          python3 scripts/generate-brand-assets.py --source fork/branding/browser-icon.svg --output firefox-src/browser/branding/browser
+          python3 scripts/generate-brand-assets.py --source fork/branding/browser-icon.png --output firefox-src/browser/branding/browser
 
           grep -n "browser-core" firefox-src/browser/extensions/moz.build
           grep -n "MATRIXNEO23 Browser fork" firefox-src/browser/themes/shared/toolbarbuttons.css
