@@ -38,6 +38,18 @@
       "browser.newtabpage.activity-stream.showSponsoredTopSites": {
         "Value": false,
         "Status": "default"
+      },
+      "privacy.query_stripping.enabled": {
+        "Value": true,
+        "Status": "default"
+      },
+      "privacy.query_stripping.enabled.pbmode": {
+        "Value": true,
+        "Status": "default"
+      },
+      "privacy.query_stripping.redirect": {
+        "Value": true,
+        "Status": "default"
       }
     },
     "ExtensionSettings": {
@@ -47,12 +59,6 @@
         "default_area": "navbar"
       }
     },
-    "DNSOverHTTPS": {
-      "Enabled": true,
-      "Locked": false,
-      "Fallback": true
-    },
-    "HttpsOnlyMode": "enabled",
     "DisplayBookmarksToolbar": "always"
   }
 }
