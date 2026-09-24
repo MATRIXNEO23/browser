@@ -1,15 +1,24 @@
 {
   "manifest_version": 3,
   "name": "Browser Resource Controller",
-  "version": "0.1.0",
-  "description": "Controls background tab pressure for the lightweight browser profiles.",
-  "permissions": ["tabs", "storage", "downloads"],
+  "version": "0.2.0",
+  "description": "Controls modes, background tab pressure, dark UI and lightweight ad blocking.",
+  "permissions": ["tabs", "storage", "downloads", "theme", "declarativeNetRequest"],
   "background": {
     "scripts": ["background.js"]
   },
   "action": {
     "default_title": "Browser modes",
     "default_popup": "popup.html"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ads_basic",
+        "enabled": true,
+        "path": "rules/ads-basic.json"
+      }
+    ]
   },
   "browser_specific_settings": {
     "gecko": {
