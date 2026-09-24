@@ -1,9 +1,44 @@
 const MODE_LIMITS = { NORMAL: 3, TURBO: 2, PRIVATE: 2, GHOST: 2 };
 const DEFAULT_MODE = 'NORMAL';
+const ADS_RULESET_ID = 'ads_basic';
+
+const DARK_THEME = {
+  colors: {
+    frame: '#111111',
+    toolbar: '#171717',
+    tab_background_text: '#f2f2f2',
+    toolbar_text: '#f2f2f2',
+    toolbar_field: '#202020',
+    toolbar_field_text: '#f2f2f2',
+    popup: '#171717',
+    popup_text: '#f2f2f2'
+  }
+};
 
 async function getMode() {
   const saved = await browser.storage.local.get('mode');
   return MODE_LIMITS[saved.mode] ? saved.mode : DEFAULT_MODE;
+}
+
+async function getAdsEnabled() {
+  const enabled = await browser.declarativeNetRequest.getEnabledRulesets();
+  return enabled.includes(ADS_RULESET_ID);
+}
+
+async function setAdsEnabled(enabled) {
+  await browser.declarativeNetRequest.updateEnabledRulesets({
+    enableRulesetIds: enabled ? [ADS_RULESET_ID] : [],
+    disableRulesetIds: enabled ? [] : [ADS_RULESET_ID]
+  });
+  await browser.storage.local.set({ adsEnabled: enabled });
+}
+
+async function applyDarkTheme() {
+  try {
+    await browser.theme.update(DARK_THEME);
+  } catch (error) {
+    console.warn('Unable to apply dark theme', error);
+  }
 }
 
 function isDiscarded(tab) {
@@ -30,8 +65,6 @@ async function enforceBackgroundLimit() {
     tab.id !== foregroundTabId && !isDiscarded(tab)
   );
 
-  // These remain active by policy or because Firefox does not allow discarding
-  // a selected tab in another window.
   const protectedBackground = backgroundTabs.filter((tab) =>
     tab.active || tab.pinned || tab.audible
   );
@@ -71,6 +104,11 @@ async function enforceBackgroundLimit() {
   });
 }
 
+async function initialize() {
+  await applyDarkTheme();
+  await enforceBackgroundLimit();
+}
+
 async function scheduleEnforcement() {
   try {
     await enforceBackgroundLimit();
@@ -79,8 +117,8 @@ async function scheduleEnforcement() {
   }
 }
 
-browser.runtime.onInstalled.addListener(scheduleEnforcement);
-browser.runtime.onStartup.addListener(scheduleEnforcement);
+browser.runtime.onInstalled.addListener(initialize);
+browser.runtime.onStartup.addListener(initialize);
 browser.tabs.onActivated.addListener(scheduleEnforcement);
 browser.tabs.onCreated.addListener(scheduleEnforcement);
 browser.tabs.onRemoved.addListener(scheduleEnforcement);
@@ -98,9 +136,18 @@ browser.runtime.onMessage.addListener(async (message) => {
     return { ok: true, mode: message.mode };
   }
 
+  if (message?.type === 'set-ads' && typeof message.enabled === 'boolean') {
+    await setAdsEnabled(message.enabled);
+    return { ok: true, adsEnabled: message.enabled };
+  }
+
   if (message?.type === 'get-status') {
     const data = await browser.storage.local.get(['mode', 'status']);
-    return { mode: data.mode || DEFAULT_MODE, status: data.status || null };
+    return {
+      mode: data.mode || DEFAULT_MODE,
+      adsEnabled: await getAdsEnabled(),
+      status: data.status || null
+    };
   }
 
   if (message?.type === 'enforce-now') {
