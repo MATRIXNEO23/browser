@@ -6,13 +6,24 @@ function render(data) {
   for (const button of buttons) {
     button.classList.toggle('active', button.dataset.mode === mode);
   }
+
   const s = data?.status;
   if (!s) {
     statusEl.textContent = 'Nessun dato ancora.';
     return;
   }
+
+  const warning = s.degradedByProtectedTabs
+    ? '\nATTENZIONE: limite superato da tab protette/non scaricabili.'
+    : '';
+
   statusEl.textContent =
-    `Modalità: ${mode}\nLimite background: ${s.limit}\nScaricate ora: ${s.discardedNow}\nFinestre background selezionate: ${s.backgroundSelected}`;
+    `Modalità: ${mode}` +
+    `\nLimite background: ${s.limit}` +
+    `\nAttive background: ${s.activeBackground}` +
+    `\nProtette/non scaricabili: ${s.protectedBackground}` +
+    `\nScaricate ora: ${s.discardedNow}` +
+    warning;
 }
 
 async function refresh() {
