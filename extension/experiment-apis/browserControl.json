@@ -97,6 +97,12 @@
             ]
           }
         ]
+      },
+      {
+        "name": "getSettings",
+        "type": "function",
+        "async": true,
+        "parameters": []
       }
     ]
   }
