@@ -39,6 +39,12 @@
         "Value": false,
         "Status": "default"
       }
+    },
+    "ExtensionSettings": {
+      "resource-controller@matrixneo23.browser": {
+        "installation_mode": "normal_installed",
+        "private_browsing": true
+      }
     }
   }
 }
