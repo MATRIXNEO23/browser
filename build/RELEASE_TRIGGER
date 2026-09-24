@@ -1,6 +1,6 @@
 release_request: final
-source_head_before_trigger: 8fad7eb055fc864789aeb6e6bc7fa2c451789d1a
+source_head_before_trigger: 078d658dbfc0b89f7db28c1a97c684f70e37216e
 product_gate: required
 windows_smoke: required
 stable_release_only: true
-rerun_reason: explicit_browser_app_and_direct_packaging
+rerun_reason: assemble_from_dist_browser
