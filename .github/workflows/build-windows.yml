@@ -12,6 +12,9 @@ on:
       - "scripts/**"
       - ".github/workflows/build-windows.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -67,14 +70,31 @@ jobs:
         run: |
           .\scripts\build-portable.ps1 -FirefoxRuntimePath "$env:RUNNER_TEMP\firefox-esr"
 
-      - name: Archive browser
+      - name: Archive browser and checksum
         shell: pwsh
         run: |
-          Compress-Archive -Path ".\dist\Browser\*" -DestinationPath ".\dist\Browser-Windows-x64.zip" -CompressionLevel Optimal
+          $zip = ".\dist\Browser-Windows-x64.zip"
+          Compress-Archive -Path ".\dist\Browser\*" -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  Browser-Windows-x64.zip" | Set-Content ".\dist\SHA256SUMS.txt" -Encoding ascii
 
-      - name: Upload artifact
+      - name: Upload temporary workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: Browser-Windows-x64
-          path: dist/Browser-Windows-x64.zip
+          path: |
+            dist/Browser-Windows-x64.zip
+            dist/SHA256SUMS.txt
           if-no-files-found: error
+
+      - name: Publish persistent repository release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $short = $env:GITHUB_SHA.Substring(0, 7)
+          $tag = "build-$short"
+          $title = "Browser build $short"
+          $notes = "Persistent Windows x64 build from commit $env:GITHUB_SHA. Includes SHA256SUMS.txt."
+          gh release create $tag ".\dist\Browser-Windows-x64.zip" ".\dist\SHA256SUMS.txt" --repo "$env:GITHUB_REPOSITORY" --target "$env:GITHUB_SHA" --title "$title" --notes "$notes" --prerelease
