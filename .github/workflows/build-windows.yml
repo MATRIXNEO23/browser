@@ -5,10 +5,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "extension/**"
-      - "fork/**"
-      - "distribution/**"
-      - "scripts/apply-fork-overlay.py"
+      - "build/RELEASE_TRIGGER"
       - ".github/workflows/build-windows.yml"
 
 permissions:
