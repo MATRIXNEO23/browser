@@ -43,7 +43,8 @@
     "ExtensionSettings": {
       "resource-controller@matrixneo23.browser": {
         "installation_mode": "allowed",
-        "private_browsing": true
+        "private_browsing": true,
+        "default_area": "navbar"
       }
     },
     "DNSOverHTTPS": {
@@ -51,6 +52,7 @@
       "Locked": false,
       "Fallback": true
     },
-    "HttpsOnlyMode": "enabled"
+    "HttpsOnlyMode": "enabled",
+    "DisplayBookmarksToolbar": "always"
   }
 }
