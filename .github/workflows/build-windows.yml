@@ -121,6 +121,7 @@ jobs:
 
           mkdir -p dist/stage/Browser/distribution
           cp distribution/policies.json dist/stage/Browser/distribution/policies.json
+          cp firefox-src/browser/branding/browser/firefox.ico dist/stage/Browser/Browser.ico
 
           # Preserve MPL and third-party licensing material with the distribution.
           if [ -f firefox-src/LICENSE ]; then
@@ -180,7 +181,7 @@ jobs:
           name: Browser-Windows-x64
           path: artifact
 
-      - name: Verify checksum and package identity
+      - name: Verify incoming checksum and locate Browser
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -189,43 +190,85 @@ jobs:
           $sumLine = (Get-Content ".\artifact\SHA256SUMS.txt" -Raw).Trim()
           $expected = ($sumLine -split "\s+")[0].ToLowerInvariant()
           $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-
           if ($actual -ne $expected) { throw "SHA256 mismatch." }
 
           Expand-Archive -Path $zip -DestinationPath ".\stage"
           $exe = Get-ChildItem ".\stage" -Recurse -Filter "browser.exe" | Select-Object -First 1
           if (-not $exe) { throw "browser.exe missing from final package." }
 
-          $product = $exe.VersionInfo.ProductName
-          Write-Host "ProductName: $product"
-          Write-Host "Executable: $($exe.FullName)"
-          if ($product -and $product -notmatch "Browser") { throw "Unexpected Windows ProductName: $product" }
+          $icon = Join-Path $exe.Directory.FullName "Browser.ico"
+          if (-not (Test-Path $icon)) { throw "Canonical Browser.ico missing." }
 
           "BROWSER_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
           "APP_DIR=$($exe.Directory.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BROWSER_ICON=$icon" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Apply final Windows identity and FILUM icon
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $exe = Get-Item $env:BROWSER_EXE
+          $before = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          $rawVersion = $exe.VersionInfo.ProductVersion
+          $nums = @([regex]::Matches([string]$rawVersion, "\d+") | ForEach-Object { [int]$_.Value })
+          while ($nums.Count -lt 4) { $nums += 0 }
+          $version = "$($nums[0]).$($nums[1]).$($nums[2]).$($nums[3])"
+          $patched = Join-Path $exe.Directory.FullName "browser.patched.exe"
+
+          npx --yes resedit-cli@3.1.0 `
+            --in $exe.FullName `
+            --out $patched `
+            --ignore-signed `
+            --icon "1,$env:BROWSER_ICON" `
+            --company-name "MATRIXNEO23" `
+            --file-description "Browser" `
+            --product-name "Browser" `
+            --original-filename "browser.exe" `
+            --internal-name "Browser" `
+            --file-version $version `
+            --product-version $version
+
+          if ($LASTEXITCODE -ne 0) { throw "resedit-cli failed." }
+          if (-not (Test-Path $patched)) { throw "Patched browser.exe was not produced." }
+
+          Move-Item -Force $patched $exe.FullName
+          $after = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          if ($after -eq $before) { throw "Windows resources were not changed." }
+
+          $vi = (Get-Item $exe.FullName).VersionInfo
+          Write-Host "ProductName: $($vi.ProductName)"
+          Write-Host "FileDescription: $($vi.FileDescription)"
+          Write-Host "CompanyName: $($vi.CompanyName)"
+          if ($vi.ProductName -ne "Browser") { throw "ProductName is not Browser." }
+          if ($vi.FileDescription -ne "Browser") { throw "FileDescription is not Browser." }
+          if ($vi.CompanyName -ne "MATRIXNEO23") { throw "CompanyName is not MATRIXNEO23." }
+
+          Remove-Item -Force $env:BROWSER_ICON
+          Remove-Item -Force ".\artifact\Browser-Windows-x64.zip"
+          Compress-Archive -Path ".\stage\Browser" -DestinationPath ".\artifact\Browser-Windows-x64.zip" -CompressionLevel Optimal
+          $finalHash = (Get-FileHash ".\artifact\Browser-Windows-x64.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$finalHash  Browser-Windows-x64.zip" | Set-Content ".\artifact\SHA256SUMS.txt" -Encoding ascii
+          Write-Host "Final SHA256: $finalHash"
 
       - name: Verify built-in Browser core
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $found = $false
-
           Get-ChildItem $env:APP_DIR -Recurse -Filter "omni.ja" | ForEach-Object {
             $listing = (& 7z l $_.FullName | Out-String)
             if ($listing -match "builtin-addons[\\/]browser-core[\\/]manifest.json") { $found = $true }
           }
-
           if (-not $found) { throw "Browser Control Core is not registered in packaged omni resources." }
 
       - name: Launch Browser and render custom New Tab
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-
           $profile = Join-Path $env:RUNNER_TEMP "browser-smoke-profile"
           $shot = Join-Path $env:GITHUB_WORKSPACE "Browser-NewTab-Smoke.png"
           New-Item -ItemType Directory -Force -Path $profile | Out-Null
-
           $args = @(
             "-headless",
             "-no-remote",
@@ -233,12 +276,10 @@ jobs:
             "-screenshot", $shot,
             "about:newtab"
           )
-
           $p = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Browser headless launch failed with exit code $($p.ExitCode)." }
           if (-not (Test-Path $shot)) { throw "Browser did not render the New Tab screenshot." }
           if ((Get-Item $shot).Length -lt 4096) { throw "New Tab smoke screenshot is unexpectedly small." }
-
           Write-Host "Windows launch + New Tab render passed."
 
       - name: Upload visual smoke evidence
@@ -249,6 +290,15 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Upload validated final Browser
+        uses: actions/upload-artifact@v4
+        with:
+          name: Browser-Windows-x64-final
+          path: |
+            artifact/Browser-Windows-x64.zip
+            artifact/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
   release:
     needs: [build, smoke-windows]
     runs-on: ubuntu-latest
@@ -257,7 +307,7 @@ jobs:
       - name: Download validated build
         uses: actions/download-artifact@v4
         with:
-          name: Browser-Windows-x64
+          name: Browser-Windows-x64-final
           path: artifact
 
       - name: Publish stable repository release
