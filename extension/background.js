@@ -250,4 +250,9 @@ browser.runtime.onMessage.addListener(async (message) => {
     await browser.tabs.create({ url: 'https://addons.mozilla.org/firefox/extensions/' });
     return { ok: true };
   }
+
+  if (message?.type === 'open-smart-search') {
+    await browser.tabs.create({ url: browser.runtime.getURL('smart-search.html') });
+    return { ok: true };
+  }
 });
