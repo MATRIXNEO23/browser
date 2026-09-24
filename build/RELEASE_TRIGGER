@@ -1,5 +1,6 @@
 release_request: final
-source_head_before_trigger: b4a696c892447f90082a192faf9d5332b5415aec
+source_head_before_trigger: 48da4c4111a925fed9b5eae11dba800789195189
 product_gate: required
 windows_smoke: required
 stable_release_only: true
+rerun_reason: fixed_branding_gate
