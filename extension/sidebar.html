@@ -14,21 +14,73 @@
     </header>
 
     <section>
-      <h2>Modalità</h2>
+      <h2>Modalità live</h2>
       <div class="grid">
         <button data-mode="NORMAL">NORMAL</button>
         <button data-mode="TURBO">TURBO</button>
         <button data-mode="PRIVATE">PRIVATE</button>
         <button data-mode="GHOST">GHOST</button>
       </div>
-      <p class="hint">Le modalità si cambiano subito, a browser aperto. GHOST rende effimera l'attività della fase corrente e la ripulisce all'uscita.</p>
+      <p class="hint">Si cambiano durante la navigazione. GHOST ripulisce i dati creati nella sua fase quando ne esci.</p>
     </section>
 
     <section>
-      <h2>Privacy e prestazioni</h2>
-      <button id="ads">ADS: ON</button>
+      <h2>Prestazioni</h2>
+      <div id="resource-stats" class="resource">RAM — · CPU — · processi —</div>
       <button id="enforce">Libera RAM ora</button>
       <div id="status">Caricamento…</div>
+    </section>
+
+    <section>
+      <h2>Pubblicità</h2>
+      <button id="ads">ADS: ON</button>
+      <p class="hint">Indipendente da NORMAL / TURBO / PRIVATE / GHOST.</p>
+    </section>
+
+    <section>
+      <h2>Aspetto</h2>
+      <label class="field-label" for="browser-theme">Interfaccia</label>
+      <select id="browser-theme">
+        <option value="dark">DARK</option>
+        <option value="black">BLACK</option>
+        <option value="system">SYSTEM</option>
+      </select>
+
+      <label class="field-label" for="website-appearance">Siti compatibili</label>
+      <select id="website-appearance">
+        <option value="auto">AUTO</option>
+        <option value="dark">PREFERISCI DARK</option>
+        <option value="light">PREFERISCI LIGHT</option>
+      </select>
+    </section>
+
+    <section>
+      <h2>Sicurezza</h2>
+      <label class="toggle-row">
+        <input id="https-only" type="checkbox">
+        <span>HTTPS-only</span>
+      </label>
+
+      <label class="field-label" for="secure-dns">DNS sicuro</label>
+      <select id="secure-dns">
+        <option value="off">OFF / SISTEMA</option>
+        <option value="balanced">DoH + fallback</option>
+        <option value="strict">DoH STRICT</option>
+      </select>
+
+      <label class="toggle-row">
+        <input id="hardware-accel" type="checkbox">
+        <span>Accelerazione hardware</span>
+      </label>
+      <p id="hardware-note" class="hint"></p>
+
+      <div class="grid">
+        <button data-internal-page="privacy">Privacy / permessi</button>
+        <button data-internal-page="passwords">Password</button>
+        <button data-internal-page="settings">Impostazioni</button>
+        <button data-internal-page="profiles">Profili</button>
+      </div>
+      <button data-internal-page="processes">Processi / memoria</button>
     </section>
 
     <section>
@@ -54,7 +106,7 @@
     <section>
       <h2>Ricerca</h2>
       <button id="smart-search">SMART SEARCH</button>
-      <p class="hint">Riordina localmente i risultati e approfondisce solo i migliori.</p>
+      <p class="hint">Raccoglie pochi candidati, li filtra e riordina localmente, poi approfondisce solo i migliori.</p>
     </section>
 
     <section>
