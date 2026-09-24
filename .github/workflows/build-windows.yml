@@ -105,7 +105,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          RUNTIME="firefox-src/obj-browser-win64/dist/bin"
+          RUNTIME="firefox-src/obj-browser-win64/dist/browser"
           if [ ! -f "$RUNTIME/browser.exe" ]; then
             echo "browser.exe not found after explicit browser/app build."
             find "$RUNTIME" -maxdepth 2 -type f | head -100
