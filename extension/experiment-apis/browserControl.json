@@ -1,0 +1,54 @@
+[
+  {
+    "namespace": "browserControl",
+    "description": "Privileged Browser fork controls.",
+    "functions": [
+      {
+        "name": "applyMode",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "mode",
+            "type": "string",
+            "enum": ["NORMAL", "TURBO", "PRIVATE", "GHOST"]
+          }
+        ]
+      },
+      {
+        "name": "getProcessStats",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "setHardwareAcceleration",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "enabled", "type": "boolean" }
+        ]
+      },
+      {
+        "name": "setHttpsOnly",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "enabled", "type": "boolean" }
+        ]
+      },
+      {
+        "name": "setSecureDns",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "level",
+            "type": "string",
+            "enum": ["off", "balanced", "strict"]
+          }
+        ]
+      }
+    ]
+  }
+]
