@@ -24,11 +24,6 @@
       "background.js"
     ]
   },
-  "action": {
-    "default_title": "Browser Control Center",
-    "default_area": "navbar",
-    "default_icon": "icons/browser.png"
-  },
   "sidebar_action": {
     "default_title": "Impostazioni Browser",
     "default_panel": "sidebar.html",
