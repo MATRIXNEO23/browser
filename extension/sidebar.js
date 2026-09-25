@@ -8,8 +8,11 @@ const httpsOnly = document.getElementById('https-only');
 const secureDns = document.getElementById('secure-dns');
 const hardwareAccel = document.getElementById('hardware-accel');
 const hardwareNote = document.getElementById('hardware-note');
+const torButton = document.getElementById('tor-toggle');
+const torStatus = document.getElementById('tor-status');
 
 let adsEnabled = true;
+let torEnabled = false;
 let previousCpuSample = null;
 
 function formatMb(bytes) {
@@ -48,6 +51,7 @@ function renderResources(stats) {
 function render(data) {
   const mode = data?.mode || 'NORMAL';
   adsEnabled = data?.adsEnabled !== false;
+  torEnabled = !!data?.torEnabled;
   document.body.dataset.mode = mode;
 
   for (const button of modeButtons) {
@@ -56,6 +60,15 @@ function render(data) {
 
   adsButton.textContent = adsEnabled ? 'ADS: ON' : 'ADS: OFF';
   adsButton.classList.toggle('active', adsEnabled);
+
+  torButton.textContent = torEnabled ? 'TOR: ON' : 'TOR: OFF';
+  torButton.classList.toggle('active', torEnabled);
+  torStatus.textContent = torEnabled
+    ? (data?.torProcess?.running
+        ? 'TOR attivo · SOCKS5 + DNS remoto · WebRTC bloccato.'
+        : 'TOR richiesto, processo non disponibile.')
+    : 'TOR disattivato.';
+
   renderResources(data?.processStats);
 
   const s = data?.status;
@@ -109,6 +122,20 @@ for (const button of modeButtons) {
 adsButton.addEventListener('click', async () => {
   await browser.runtime.sendMessage({ type: 'set-ads', enabled: !adsEnabled });
   await refresh();
+});
+
+torButton.addEventListener('click', async () => {
+  torButton.disabled = true;
+  torStatus.textContent = torEnabled ? 'Disattivazione TOR…' : 'Avvio TOR…';
+
+  try {
+    await browser.runtime.sendMessage({ type: 'set-tor', enabled: !torEnabled });
+    await Promise.all([refresh(), loadAdvancedSettings(), loadNetworkSettings()]);
+  } catch (error) {
+    torStatus.textContent = 'TOR: ' + (error?.message || error);
+  } finally {
+    torButton.disabled = false;
+  }
 });
 
 document.getElementById('enforce').addEventListener('click', async () => {
@@ -189,7 +216,11 @@ const socksHost = document.getElementById('socks-host');
 const socksPort = document.getElementById('socks-port');
 
 function updateSocksVisibility() {
-  socksFields.style.display = networkMode.value === 'socks' ? 'grid' : 'none';
+  socksFields.style.display = networkMode.value === 'socks' && !torEnabled ? 'grid' : 'none';
+  networkMode.disabled = torEnabled;
+  socksHost.disabled = torEnabled;
+  socksPort.disabled = torEnabled;
+  document.getElementById('apply-network').disabled = torEnabled;
 }
 
 async function loadNetworkSettings() {
