@@ -754,83 +754,79 @@ async function runControlSelfTest() {
       torOn ? JSON.stringify(proxy?.value || null) : 'blocked by TOR bootstrap'
     );
 
+    if (torOn) {
+      const abort = new AbortController();
+      const deadline = setTimeout(() => abort.abort(), 25000);
+      try {
+        const response = await fetch('https://check.torproject.org/api/ip', {
+          cache: 'no-store',
+          signal: abort.signal
+        });
+        const result = await response.json();
+        record('tor-egress', response.ok && result?.IsTor === true,
+          `HTTP ${response.status}; IsTor=${result?.IsTor}`);
+      } catch (error) {
+        record('tor-egress', false, errorText(error));
+      } finally {
+        clearTimeout(deadline);
+      }
+    } else {
+      record('tor-egress', false, 'blocked by TOR bootstrap');
+    }
+
     if (torOn) torButton.click();
     else await browser.runtime.sendMessage({ type: 'set-tor', enabled: false });
     await waitFor(async () => {
       const state = await getStatus();
       return !state.torEnabled && !state.torProcess?.running;
     }, 20000, 250);
-    record('tor-stop', true);
+    proxy = await browser.proxy.settings.get({});
+    record('tor-stop', proxy?.value?.proxyType === initialProxy?.proxyType &&
+      proxy?.value?.socks === initialProxy?.socks,
+      JSON.stringify(proxy?.value || null));
 
-    const smartBefore = (await browser.tabs.query({})).length;
-    const smartResult = await browser.runtime.sendMessage({
-      type: 'open-smart-search'
-    });
-    await waitFor(
-      async () => (await browser.tabs.query({})).length > smartBefore
-    );
-    record('smart-search', !!smartResult?.ok);
+    const verifyLauncher = async (name, buttonId, expectedUrl) => {
+      const before = new Set((await browser.tabs.query({})).map(tab => tab.id));
+      const button = document.getElementById(buttonId) ||
+        document.querySelector(`[data-internal-page="${buttonId}"]`);
+      if (!button) {
+        record(name, false, 'Missing launcher: ' + buttonId);
+        return;
+      }
+      button.click();
+      try {
+        const tab = await waitFor(async () => {
+          const tabs = await browser.tabs.query({});
+          return tabs.find(item => !before.has(item.id) &&
+            (item.url || item.pendingUrl || '').startsWith(expectedUrl));
+        }, 10000, 250);
+        record(name, true, tab.url || tab.pendingUrl || '');
+      } catch (error) {
+        const tabs = await browser.tabs.query({});
+        const opened = tabs.filter(item => !before.has(item.id))
+          .map(item => item.url || item.pendingUrl || '').join(', ');
+        record(name, false, `expected=${expectedUrl}; opened=${opened}; ${errorText(error)}`);
+      }
+    };
 
-    const addonBefore = (await browser.tabs.query({})).length;
-    const addonResult = await browser.runtime.sendMessage({
-      type: 'open-addons-installed'
-    });
-    await waitFor(
-      async () => (await browser.tabs.query({})).length > addonBefore
-    );
-    record('addons-installed', !!addonResult?.ok);
+    await verifyLauncher('smart-search', 'smart-search',
+      browser.runtime.getURL('smart-search.html'));
+    await verifyLauncher('addons-installed', 'addons-installed',
+      browser.runtime.getURL('addons.html'));
+    await verifyLauncher('addons-catalog', 'addons-store',
+      'https://addons.mozilla.org/firefox/extensions/');
+    await verifyLauncher('library', 'library',
+      browser.runtime.getURL('library.html'));
 
-    const catalogBefore = (await browser.tabs.query({})).length;
-    const catalogResult = await browser.runtime.sendMessage({
-      type: 'open-addons-store'
-    });
-    await waitFor(
-      async () => (await browser.tabs.query({})).length > catalogBefore
-    );
-    record('addons-catalog', !!catalogResult?.ok);
-
-    const libraryBefore = (await browser.tabs.query({})).length;
-    await browser.tabs.create({
-      url: browser.runtime.getURL('library.html')
-    });
-    await waitFor(
-      async () => (await browser.tabs.query({})).length > libraryBefore
-    );
-    record('library', true);
-
-    const settingsBefore = (await browser.tabs.query({})).length;
-    const settingsResult = await browser.runtime.sendMessage({
-      type: 'open-internal-page',
-      page: 'settings'
-    });
-    await waitFor(
-      async () => (await browser.tabs.query({})).length > settingsBefore
-    );
-    record('internal-settings', !!settingsResult?.opened);
-
-    const privacyResult = await browser.runtime.sendMessage({
-      type: 'open-internal-page',
-      page: 'privacy'
-    });
-    record('internal-privacy', !!privacyResult?.opened);
-
-    const passwordResult = await browser.runtime.sendMessage({
-      type: 'open-internal-page',
-      page: 'passwords'
-    });
-    record('internal-passwords', !!passwordResult?.opened);
-
-    const profilesResult = await browser.runtime.sendMessage({
-      type: 'open-internal-page',
-      page: 'profiles'
-    });
-    record('internal-profiles', !!profilesResult?.opened);
-
-    const processesResult = await browser.runtime.sendMessage({
-      type: 'open-internal-page',
-      page: 'processes'
-    });
-    record('internal-processes', !!processesResult?.opened);
+    for (const [name, buttonId, url] of [
+      ['internal-settings', 'settings', 'about:preferences'],
+      ['internal-privacy', 'privacy', 'about:preferences#privacy'],
+      ['internal-passwords', 'passwords', 'about:logins'],
+      ['internal-profiles', 'profiles', 'about:profiles'],
+      ['internal-processes', 'processes', 'about:processes']
+    ]) {
+      await verifyLauncher(name, buttonId, url);
+    }
   } catch (error) {
     record('exception', false, errorText(error));
   } finally {
