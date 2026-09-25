@@ -689,33 +689,69 @@ async function runControlSelfTest() {
 
     await browser.proxy.settings.set({ value: initialProxy });
 
+    const torStartedAt = Date.now();
+    let torOn = null;
+    let lastTorStatus = null;
+    let lastTorLog = '';
+    let observedTorProcess = false;
+    let torStatusError = '';
     torButton.click();
-    const torOn = await waitFor(
-      async () => {
-        const value = await getStatus();
-        return value.torEnabled && value.torProcess?.bootstrapped
-          ? value
-          : null;
-      },
-      90000,
-      500
-    );
 
-    await refresh();
-    record('tor-bootstrap-100', !!torOn?.torProcess?.bootstrapped);
+    while (Date.now() - torStartedAt < 60000) {
+      try {
+        lastTorStatus = await getStatus();
+        observedTorProcess ||= !!lastTorStatus.torProcess?.running;
+        if (lastTorStatus.torProcess?.lastLog?.trim()) {
+          lastTorLog = lastTorStatus.torProcess.lastLog.trim();
+        }
+        if (lastTorStatus.torEnabled && lastTorStatus.torProcess?.bootstrapped) {
+          torOn = lastTorStatus;
+          break;
+        }
+        if (lastTorStatus.torProcess?.error) {
+          torStatusError = lastTorStatus.torProcess.error;
+          break;
+        }
+        if (observedTorProcess && !lastTorStatus.torProcess?.running &&
+            Date.now() - torStartedAt > 3000) {
+          break;
+        }
+      } catch (error) {
+        torStatusError = errorText(error);
+      }
+      await sleep(500);
+    }
 
     proxy = await browser.proxy.settings.get({});
+    const torElapsedMs = Date.now() - torStartedAt;
+    const torDiagnostic = JSON.stringify({
+      elapsedMs: torElapsedMs,
+      processRunning: !!lastTorStatus?.torProcess?.running,
+      processObserved: observedTorProcess,
+      bootstrapped: !!lastTorStatus?.torProcess?.bootstrapped,
+      lastLog: lastTorLog || lastTorStatus?.torProcess?.lastLog || '',
+      proxy: proxy?.value || null,
+      processFailure: observedTorProcess && !lastTorStatus?.torProcess?.running,
+      exitCode: lastTorStatus?.torProcess?.exitCode ?? null,
+      error: torStatusError || (torOn ? '' : torStatus.textContent)
+    });
+    record('tor-bootstrap-100', !!torOn?.torProcess?.bootstrapped, torDiagnostic);
     record(
       'tor-proxy',
-      proxy?.value?.proxyType === 'manual' &&
+      !!torOn && proxy?.value?.proxyType === 'manual' &&
         proxy?.value?.socks === '127.0.0.1:19050' &&
         proxy?.value?.socksVersion === 5 &&
-        proxy?.value?.proxyDNS === true
+        proxy?.value?.proxyDNS === true,
+      torOn ? JSON.stringify(proxy?.value || null) : 'blocked by TOR bootstrap'
     );
 
-    torButton.click();
-    await waitFor(async () => !(await getStatus()).torEnabled, 20000, 250);
-    record('tor-stop', !(await getStatus()).torEnabled);
+    if (torOn) torButton.click();
+    else await browser.runtime.sendMessage({ type: 'set-tor', enabled: false });
+    await waitFor(async () => {
+      const state = await getStatus();
+      return !state.torEnabled && !state.torProcess?.running;
+    }, 20000, 250);
+    record('tor-stop', true);
 
     const smartBefore = (await browser.tabs.query({})).length;
     const smartResult = await browser.runtime.sendMessage({
