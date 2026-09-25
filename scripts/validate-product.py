@@ -39,8 +39,8 @@ if manifest_path.is_file():
         errors.append("manifest missing permissions: " + ", ".join(sorted(missing)))
     if "experiment_apis" not in manifest or "browserControl" not in manifest["experiment_apis"]:
         errors.append("manifest missing privileged browserControl experiment API")
-    if manifest.get("version") != "0.4.0":
-        errors.append("FILUM core version must be 0.4.0")
+    if manifest.get("version") != "0.4.1":
+        errors.append("FILUM core version must be 0.4.1")
     if "action" in manifest:
         errors.append("manifest must not expose a duplicate WebExtension toolbar action")
     if "sidebar_action" in manifest:
@@ -52,7 +52,8 @@ sidebar_html = require_text(
     "extension/sidebar.html",
     'data-mode="NORMAL"', 'data-mode="TURBO"', 'data-mode="PRIVATE"', 'data-mode="GHOST"',
     'id="ads"', 'id="enforce"', 'id="smart-search"', 'id="addons-installed"',
-    'id="https-only"', 'id="secure-dns"', 'id="hardware-accel"', 'id="network-mode"',
+    'id="https-only"', 'id="secure-dns"', 'id="dns-endpoint"', 'id="apply-dns"',
+    'id="dns-status"', 'id="hardware-accel"', 'id="network-mode"',
     'id="resource-stats"', 'id="library"', 'id="tor-toggle"', 'id="tor-status"'
 )
 
@@ -61,7 +62,10 @@ sidebar_js = require_text(
     "set-mode", "set-ads", "enforce-now", "open-smart-search", "open-addons-installed",
     "set-https-only", "set-secure-dns", "set-hardware-acceleration",
     "set-browser-theme", "set-website-appearance", "get-advanced-settings",
-    "browser.proxy.settings.set", "set-tor", "set-filum-panel-open"
+    "browser.proxy.settings.set", "set-tor", "set-filum-panel-open",
+    "runControlSelfTest", "tor-bootstrap-100", "dns-custom-endpoint",
+    "network-direct", "network-system-vpn", "network-socks5",
+    "reportControlSelfTest"
 )
 
 background_js = require_text(
@@ -80,6 +84,7 @@ api_js = require_text(
     "ChromeUtils.requestProcInfo", "setHardwareAcceleration", "setHttpsOnly",
     "setSecureDns", "setWebsiteAppearance", "openInternalPage", "applyMode",
     "startTor", "stopTor", "getTorStatus", "Subprocess.call",
+    "Bootstrapped 100%", "network.trr.uri", "reportControlSelfTest",
     "setFilumPanelOpen", "win.FilumPanel"
 )
 
@@ -127,7 +132,6 @@ require_text(
     'id="filum-sidebar-button"',
     "patch_filum_panel_markup",
     'id="filum-panel-box"',
-    'id="filum-panel-browser"',
     "patch_filum_panel_controller",
     "MATRIXNEO23 FILUM native panel controller",
     'buttonId: "filum-sidebar-button"',
@@ -135,6 +139,11 @@ require_text(
     'button.dispatchEvent(command)',
     'extensionId: "resource-controller@matrixneo23.browser"',
     "ExtensionParent.WebExtensionPolicy.getByID",
+    'browser.setAttribute("messagemanagergroup", "webext-browsers")',
+    'browser.setAttribute("webextension-view-type", "sidebar")',
+    '"extension-browser-inserted"',
+    '"chrome://extensions/content/ext-browser-content.js"',
+    '"Extension:InitBrowser"',
     "policy.getURL(this.panelPath)",
     "FilumPanel.runSelfTest",
     "navigator-toolbox.inc.xhtml",
