@@ -450,19 +450,6 @@ async function scheduleEnforcement() {
 browser.runtime.onInstalled.addListener(initialize);
 browser.runtime.onStartup.addListener(initialize);
 
-browser.action.onClicked.addListener(async () => {
-  try {
-    const open = await browser.sidebarAction.isOpen({});
-    if (open) {
-      await browser.sidebarAction.close();
-    } else {
-      await browser.sidebarAction.open();
-    }
-  } catch (error) {
-    console.error('Unable to toggle sidebar', error);
-  }
-});
-
 browser.tabs.onActivated.addListener(scheduleEnforcement);
 browser.tabs.onCreated.addListener(scheduleEnforcement);
 browser.tabs.onRemoved.addListener(scheduleEnforcement);
