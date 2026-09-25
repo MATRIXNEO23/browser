@@ -647,13 +647,13 @@ async function runControlSelfTest() {
         page: startup.startupPage, homepage: startup.startupHomepage,
         headlessInitialTabs: initialTabs.map(tab => tab.url || tab.pendingUrl || '')
       }));
-    const newTab = await browser.tabs.create({ url: 'about:newtab', active: false });
+    const newTab = await browser.tabs.create({ url: expectedNewTab, active: false });
     try {
       const resolved = await waitFor(async () => {
         const tab = await browser.tabs.get(newTab.id);
         return (tab.url || tab.pendingUrl || '').startsWith(expectedNewTab);
       }, 10000).catch(() => false);
-      record('newtab-override', !!resolved, (await browser.tabs.get(newTab.id)).url || '');
+      record('filum-newtab-page-load', !!resolved, (await browser.tabs.get(newTab.id)).url || '');
     } finally {
       await browser.tabs.remove(newTab.id);
     }
