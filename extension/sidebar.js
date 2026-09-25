@@ -70,6 +70,7 @@ function render(data) {
     : 'TOR disattivato.';
 
   renderResources(data?.processStats);
+  updateSocksVisibility();
 
   const s = data?.status;
   if (!s) {
