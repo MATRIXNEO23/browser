@@ -104,12 +104,14 @@ jobs:
           Write-Host $version
           if ($version -notmatch "Tor version") { throw "tor.exe version check failed" }
 
-      - name: Launch Browser runtime smoke test
+      - name: Launch FILUM functional sidebar smoke test
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $profile = Join-Path $env:RUNNER_TEMP "browser-smoke-profile"
           New-Item -ItemType Directory -Force -Path $profile | Out-Null
+          'user_pref("filum.selftest.enabled", true);' | Set-Content (Join-Path $profile "user.js") -Encoding ascii
+
           $args = @(
             "-headless",
             "-no-remote",
@@ -117,9 +119,11 @@ jobs:
             "-profile", $profile,
             "about:blank"
           )
+
           $launcher = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -PassThru
           $deadline = (Get-Date).AddSeconds(20)
           $alive = $false
+
           try {
             while ((Get-Date) -lt $deadline) {
               Start-Sleep -Seconds 1
@@ -127,15 +131,83 @@ jobs:
                 $_.Name -ieq "browser.exe" -and $_.ExecutablePath -and
                 ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($env:BROWSER_EXE))
               }
-              if ($processes -or (-not $launcher.HasExited)) { $alive = $true; break }
+              if ($processes -or (-not $launcher.HasExited)) {
+                $alive = $true
+                break
+              }
               $launcher.Refresh()
             }
-            if (-not $alive) { throw "Browser runtime did not remain active after launch" }
-            Start-Sleep -Seconds 5
-            $profileFiles = Get-ChildItem $profile -Force -ErrorAction SilentlyContinue
-            if (-not $profileFiles) { throw "Browser did not initialize profile" }
-            Write-Host "Windows Browser runtime launch passed."
-            Write-Host "Profile initialized with $($profileFiles.Count) entries."
+
+            if (-not $alive) {
+              throw "Browser runtime did not remain active after launch"
+            }
+
+            $extensionsDeadline = (Get-Date).AddSeconds(30)
+            $core = $null
+            while ((Get-Date) -lt $extensionsDeadline -and -not $core) {
+              Start-Sleep -Seconds 1
+              $extensionsJson = Join-Path $profile "extensions.json"
+              if (Test-Path $extensionsJson) {
+                try {
+                  $extensions = Get-Content $extensionsJson -Raw | ConvertFrom-Json
+                  $core = $extensions.addons | Where-Object {
+                    $_.id -eq "resource-controller@matrixneo23.browser"
+                  } | Select-Object -First 1
+                } catch {}
+              }
+            }
+
+            if (-not $core) {
+              throw "FILUM core was not registered in runtime profile"
+            }
+            if (-not $core.active -or $core.appDisabled -or $core.userDisabled) {
+              throw "FILUM core is not active"
+            }
+            if ($core.version -ne "0.4.1") {
+              throw "Unexpected FILUM core version: $($core.version)"
+            }
+
+            $prefsPath = Join-Path $profile "prefs.js"
+            $controlDeadline = (Get-Date).AddSeconds(160)
+            $controlsRaw = $null
+
+            while ((Get-Date) -lt $controlDeadline) {
+              Start-Sleep -Seconds 2
+              if (-not (Test-Path $prefsPath)) { continue }
+
+              $prefsText = Get-Content $prefsPath -Raw
+              $controlMatch = [regex]::Match(
+                $prefsText,
+                'user_pref\("filum\.selftest\.controls",\s*"((?:\\.|[^"])*)"\);'
+              )
+
+              if ($controlMatch.Success) {
+                $encoded = '"' + $controlMatch.Groups[1].Value + '"'
+                $controlsRaw = $encoded | ConvertFrom-Json
+                break
+              }
+            }
+
+            if (-not $controlsRaw) {
+              throw "FILUM functional control self-test did not report a result"
+            }
+
+            $controls = $controlsRaw | ConvertFrom-Json
+            Write-Host "FILUM controls self-test: $controlsRaw"
+
+            foreach ($check in $controls.checks) {
+              Write-Host ("{0}: {1} {2}" -f $check.name, $check.ok, $check.detail)
+            }
+
+            if (-not $controls.passed) {
+              $failed = @($controls.checks | Where-Object { -not $_.ok })
+              $detail = ($failed | ForEach-Object {
+                "$($_.name): $($_.detail)"
+              }) -join "; "
+              throw "FILUM functional controls failed: $detail"
+            }
+
+            Write-Host "FILUM functional sidebar smoke passed."
           }
           finally {
             Get-CimInstance Win32_Process | Where-Object {
@@ -167,6 +239,7 @@ jobs:
           retention-days: 30
 
   release:
+    if: ${{ false }}
     needs: smoke-and-promote
     runs-on: ubuntu-latest
     steps:
