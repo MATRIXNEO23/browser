@@ -193,7 +193,8 @@ jobs:
               CYBER_BACKGROUND_FOUND=1
             fi
 
-            if grep -aq 'id: "filum-sidebar-button"' <<< "$BROWSER_JS"; then
+            if grep -aq 'buttonId: "filum-sidebar-button"' <<< "$BROWSER_JS" && \
+               grep -aq 'CustomizableUI.createWidget' <<< "$BROWSER_JS"; then
               NATIVE_BUTTON_FOUND=1
             fi
 
