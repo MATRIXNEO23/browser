@@ -459,6 +459,15 @@ jobs:
             }
 
             if (-not $controlsRaw) {
+              if (Test-Path $prefsPath) {
+                $panelMatch = [regex]::Match(
+                  (Get-Content $prefsPath -Raw),
+                  'user_pref\("filum\.selftest\.panel",\s*"((?:\\.|[^"])*)"\);'
+                )
+                if ($panelMatch.Success) {
+                  Write-Host "FILUM panel self-test state: $($panelMatch.Groups[1].Value)"
+                }
+              }
               throw "FILUM control self-test did not report a result."
             }
 

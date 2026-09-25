@@ -12,6 +12,7 @@ let button;
 const context = vm.createContext({
   document: {getElementById(id) { return id === 'filum-sidebar-button' ? button : null; }},
   window: {addEventListener() {}},
+  Services: {prefs: {getBoolPref() { return false; }}},
   CustomizableUI: {
     AREA_NAVBAR: 'nav-bar',
     getWidget(id) { return widget?.id === id ? widget : null; },
@@ -30,7 +31,7 @@ context.FilumPanel.toggle = () => { firstWindowToggles++; };
 button.ownerGlobal = context.window;
 button.click();
 assert.equal(firstWindowToggles, 1, 'widget activation must toggle the initial window');
-const secondWindow = {FilumPanel: {toggle() { secondWindow.toggles++; }}, toggles: 0};
+const secondWindow = {FilumPanel: {traceSelfTest() {}, toggle() { secondWindow.toggles++; }}, toggles: 0};
 widget.onCommand({target: {ownerGlobal: secondWindow}});
 assert.equal(secondWindow.toggles, 1, 'widget activation must use the clicked window');
 assert.equal(firstWindowToggles, 1, 'another window must not toggle the initial one');

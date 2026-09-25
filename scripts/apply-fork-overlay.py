@@ -126,6 +126,12 @@ var FilumPanel = {
     return document.getElementById(this.buttonId);
   },
 
+  traceSelfTest(stage) {
+    if (!Services.prefs.getBoolPref("filum.selftest.enabled", false)) return;
+    Services.prefs.setStringPref("filum.selftest.panel", stage);
+    Services.prefs.savePrefFile(null);
+  },
+
   bindButton() {
     if (this._bound) {
       return true;
@@ -140,6 +146,7 @@ var FilumPanel = {
         label: "FILUM",
         tooltiptext: "Apri/chiudi pannello FILUM",
         onCommand(event) {
+          event.target.ownerGlobal.FilumPanel.traceSelfTest("COMMAND");
           event.target.ownerGlobal.FilumPanel.toggle();
         },
       });
@@ -322,9 +329,12 @@ var FilumPanel = {
 
   async runSelfTest() {
     try {
+      this.traceSelfTest("START");
       if (!this.bindButton()) {
         throw new Error("FILUM toolbar button could not be bound");
       }
+
+      this.traceSelfTest("BOUND:" + !!this.button);
 
       this.hide();
 
@@ -337,22 +347,18 @@ var FilumPanel = {
       }
       button.click();
 
+      this.traceSelfTest("CLICKED");
+
       const current = await this.waitForPanelLoad(expectedBase);
       const passed =
         !this.box.hidden &&
         current.startsWith(expectedBase);
 
-      Services.prefs.setStringPref(
-        "filum.selftest.panel",
-        passed ? "PASS" : "FAIL:" + current
-      );
+      this.traceSelfTest(passed ? "PASS" : "FAIL:" + current);
 
       return { passed, current };
     } catch (error) {
-      Services.prefs.setStringPref(
-        "filum.selftest.panel",
-        "FAIL:" + String(error)
-      );
+      this.traceSelfTest("FAIL:" + String(error));
       this.hide();
       return { passed: false, error: String(error) };
     }
@@ -364,7 +370,12 @@ window.FilumPanel = FilumPanel;
 window.addEventListener(
   "load",
   () => {
-    FilumPanel.bindButton();
+    try {
+      FilumPanel.bindButton();
+    } catch (error) {
+      FilumPanel.traceSelfTest("FAIL:bind:" + String(error));
+      console.error("FILUM toolbar widget registration failed", error);
+    }
 
     if (Services.prefs.getBoolPref("filum.selftest.enabled", false)) {
       setTimeout(() => FilumPanel.runSelfTest(), 1500);
