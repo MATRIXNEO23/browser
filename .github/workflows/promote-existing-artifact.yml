@@ -1,0 +1,198 @@
+name: promote-existing-browser-artifact
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "build/PROMOTE_TRIGGER"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  smoke-and-promote:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Read source run
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $cfg = Get-Content ".\build\PROMOTE_TRIGGER" | ConvertFrom-StringData
+          if (-not $cfg.source_run) { throw "source_run missing" }
+          if (-not $cfg.source_sha) { throw "source_sha missing" }
+          "SOURCE_RUN=$($cfg.source_run)" | Out-File $env:GITHUB_ENV -Append
+          "SOURCE_SHA=$($cfg.source_sha)" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Download existing validated build artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path ".\artifact" | Out-Null
+          gh run download $env:SOURCE_RUN --repo $env:GITHUB_REPOSITORY -n Browser-Windows-x64 -D ".\artifact"
+          if (-not (Test-Path ".\artifact\Browser-Windows-x64.zip")) { throw "Browser artifact missing" }
+          if (-not (Test-Path ".\artifact\SHA256SUMS.txt")) { throw "Checksum file missing" }
+
+      - name: Verify checksum and unpack
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $zip = Resolve-Path ".\artifact\Browser-Windows-x64.zip"
+          $sumLine = (Get-Content ".\artifact\SHA256SUMS.txt" -Raw).Trim()
+          $expected = ($sumLine -split "\s+")[0].ToLowerInvariant()
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "SHA256 mismatch" }
+          Expand-Archive -Path $zip -DestinationPath ".\stage"
+          $exe = Get-ChildItem ".\stage" -Recurse -Filter "browser.exe" | Select-Object -First 1
+          if (-not $exe) { throw "browser.exe missing" }
+          $icon = Join-Path $exe.Directory.FullName "Browser.ico"
+          if (-not (Test-Path $icon)) { throw "Browser.ico missing" }
+          "BROWSER_EXE=$($exe.FullName)" | Out-File $env:GITHUB_ENV -Append
+          "APP_DIR=$($exe.Directory.FullName)" | Out-File $env:GITHUB_ENV -Append
+          "BROWSER_ICON=$icon" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Apply final Windows identity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = Get-Item $env:BROWSER_EXE
+          $rawVersion = $exe.VersionInfo.ProductVersion
+          $nums = @([regex]::Matches([string]$rawVersion, "\d+") | ForEach-Object { [int]$_.Value })
+          while ($nums.Count -lt 4) { $nums += 0 }
+          $version = "$($nums[0]).$($nums[1]).$($nums[2]).$($nums[3])"
+          $patched = Join-Path $exe.Directory.FullName "browser.patched.exe"
+          npx --yes resedit-cli@3.1.0 `
+            --in $exe.FullName `
+            --out $patched `
+            --ignore-signed `
+            --icon "1,$env:BROWSER_ICON" `
+            --company-name "MATRIXNEO23" `
+            --file-description "Browser" `
+            --product-name "Browser" `
+            --original-filename "browser.exe" `
+            --internal-name "Browser" `
+            --file-version $version `
+            --product-version $version
+          if ($LASTEXITCODE -ne 0) { throw "resedit-cli failed" }
+          Move-Item -Force $patched $exe.FullName
+          $vi = (Get-Item $exe.FullName).VersionInfo
+          if ($vi.ProductName -ne "Browser") { throw "ProductName is not Browser" }
+          if ($vi.FileDescription -ne "Browser") { throw "FileDescription is not Browser" }
+          if ($vi.CompanyName -ne "MATRIXNEO23") { throw "CompanyName is not MATRIXNEO23" }
+          Remove-Item -Force $env:BROWSER_ICON
+
+      - name: Verify built-in core and TOR
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $found = $false
+          Get-ChildItem $env:APP_DIR -Recurse -Filter "omni.ja" | ForEach-Object {
+            $listing = (& 7z l $_.FullName | Out-String)
+            if ($listing -match "builtin-addons[\\/]browser-core[\\/]manifest.json") { $found = $true }
+          }
+          if (-not $found) { throw "Browser Control Core missing" }
+          $tor = Get-ChildItem $env:APP_DIR -Recurse -Filter "tor.exe" | Select-Object -First 1
+          if (-not $tor) { throw "Bundled tor.exe missing" }
+          $version = (& $tor.FullName --version | Out-String)
+          Write-Host $version
+          if ($version -notmatch "Tor version") { throw "tor.exe version check failed" }
+
+      - name: Launch Browser runtime smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $profile = Join-Path $env:RUNNER_TEMP "browser-smoke-profile"
+          New-Item -ItemType Directory -Force -Path $profile | Out-Null
+          $args = @(
+            "-headless",
+            "-no-remote",
+            "-new-instance",
+            "-profile", $profile,
+            "about:blank"
+          )
+          $launcher = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -PassThru
+          $deadline = (Get-Date).AddSeconds(20)
+          $alive = $false
+          try {
+            while ((Get-Date) -lt $deadline) {
+              Start-Sleep -Seconds 1
+              $processes = Get-CimInstance Win32_Process | Where-Object {
+                $_.Name -ieq "browser.exe" -and $_.ExecutablePath -and
+                ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($env:BROWSER_EXE))
+              }
+              if ($processes -or (-not $launcher.HasExited)) { $alive = $true; break }
+              $launcher.Refresh()
+            }
+            if (-not $alive) { throw "Browser runtime did not remain active after launch" }
+            Start-Sleep -Seconds 5
+            $profileFiles = Get-ChildItem $profile -Force -ErrorAction SilentlyContinue
+            if (-not $profileFiles) { throw "Browser did not initialize profile" }
+            Write-Host "Windows Browser runtime launch passed."
+            Write-Host "Profile initialized with $($profileFiles.Count) entries."
+          }
+          finally {
+            Get-CimInstance Win32_Process | Where-Object {
+              $_.Name -ieq "browser.exe" -and $_.ExecutablePath -and
+              ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($env:BROWSER_EXE))
+            } | ForEach-Object {
+              Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+      - name: Repack validated Browser
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Remove-Item -Force ".\artifact\Browser-Windows-x64.zip"
+          Compress-Archive -Path ".\stage\Browser" -DestinationPath ".\artifact\Browser-Windows-x64.zip" -CompressionLevel Optimal
+          $hash = (Get-FileHash ".\artifact\Browser-Windows-x64.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Browser-Windows-x64.zip" | Set-Content ".\artifact\SHA256SUMS.txt" -Encoding ascii
+          Write-Host "Final SHA256: $hash"
+
+      - name: Upload validated final Browser
+        uses: actions/upload-artifact@v4
+        with:
+          name: Browser-Windows-x64-final
+          path: |
+            artifact/Browser-Windows-x64.zip
+            artifact/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    needs: smoke-and-promote
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+      - name: Read source metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          source build/PROMOTE_TRIGGER
+          echo "SOURCE_SHA=$source_sha" >> "$GITHUB_ENV"
+      - name: Download validated final Browser
+        uses: actions/download-artifact@v4
+        with:
+          name: Browser-Windows-x64-final
+          path: artifact
+      - name: Publish stable release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHORT="${SOURCE_SHA:0:7}"
+          TAG="browser-$SHORT"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifact/Browser-Windows-x64.zip artifact/SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" artifact/Browser-Windows-x64.zip artifact/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title "Browser Windows x64 $SHORT" --notes "Stable Browser Windows x64 build promoted from validated build artifact. Passed checksum, Windows identity, built-in core, bundled Tor and runtime/profile smoke tests."
+          fi
