@@ -362,8 +362,36 @@ jobs:
               throw "Browser launched but did not initialize its profile."
             }
 
+            $extensionsJson = Join-Path $profile "extensions.json"
+            if (-not (Test-Path $extensionsJson)) {
+              throw "Browser profile missing extensions.json; builtin core activation cannot be verified."
+            }
+
+            $extensions = Get-Content $extensionsJson -Raw | ConvertFrom-Json
+            $core = $extensions.addons | Where-Object { $_.id -eq "resource-controller@matrixneo23.browser" } | Select-Object -First 1
+
+            if (-not $core) {
+              throw "Browser Control Core is packaged but not registered in the runtime profile."
+            }
+
+            Write-Host "Core active: $($core.active)"
+            Write-Host "Core appDisabled: $($core.appDisabled)"
+            Write-Host "Core userDisabled: $($core.userDisabled)"
+            Write-Host "Core location: $($core.location)"
+
+            if (-not $core.active) {
+              throw "Browser Control Core is registered but inactive."
+            }
+            if ($core.appDisabled) {
+              throw "Browser Control Core is app-disabled."
+            }
+            if ($core.userDisabled) {
+              throw "Browser Control Core is user-disabled."
+            }
+
             Write-Host "Windows Browser runtime launch passed."
             Write-Host "Profile initialized with $($profileFiles.Count) entries."
+            Write-Host "Browser Control Core runtime activation passed."
           }
           finally {
             Get-CimInstance Win32_Process | Where-Object {
