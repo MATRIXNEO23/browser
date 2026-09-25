@@ -1,7 +1,8 @@
 release_request: final
-source_head_before_trigger: 48cfeaa730ec9d6cf4a0d8337e10c8affab96dbd
+source_head_before_trigger: c41ae7a573cb6f5dcedd2ec30bbec882a4fb25c4
 product_gate: required
+native_filum_sidebar_button: required
 windows_runtime_smoke: required
 tor_bundle: required
-stable_release_only: true
-rerun_reason: runtime_process_smoke
+stable_release_only: false
+rerun_reason: native_filum_sidebar_button
