@@ -78,8 +78,7 @@ def patch_native_filum_button(path: Path):
                      tooltiptext="Apri/chiudi pannello FILUM"
                      removable="false"
                      overflows="false"
-                     cui-areatype="toolbar"
-                     oncommand="FilumPanel.toggle();"/>
+                     cui-areatype="toolbar"/>
 
 """
     text = text.replace(needle, button + needle, 1)
@@ -129,6 +128,8 @@ def patch_filum_panel_controller(path: Path):
 var FilumPanel = {
   extensionId: "resource-controller@matrixneo23.browser",
   panelPath: "sidebar.html",
+  buttonId: "filum-sidebar-button",
+  _bound: false,
 
   get box() {
     return document.getElementById("filum-panel-box");
@@ -140,6 +141,29 @@ var FilumPanel = {
 
   get browser() {
     return document.getElementById("filum-panel-browser");
+  },
+
+  get button() {
+    return document.getElementById(this.buttonId);
+  },
+
+  bindButton() {
+    if (this._bound) {
+      return true;
+    }
+
+    const button = this.button;
+    if (!button) {
+      console.error("FILUM native toolbar button is unavailable");
+      return false;
+    }
+
+    button.addEventListener("command", () => {
+      this.toggle();
+    });
+
+    this._bound = true;
+    return true;
   },
 
   async resolvePanelURL() {
@@ -206,30 +230,44 @@ var FilumPanel = {
     }
   },
 
+  async waitForPanelLoad(expected) {
+    const browser = this.browser;
+
+    await new Promise(resolve => {
+      if (browser.currentURI?.spec === expected) {
+        resolve();
+        return;
+      }
+
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+
+      browser.addEventListener("load", finish, { once: true, capture: true });
+      setTimeout(finish, 5000);
+    });
+
+    return browser.currentURI?.spec || browser.getAttribute("src") || "";
+  },
+
   async runSelfTest() {
     try {
-      const result = await this.show();
-      const browser = this.browser;
-      const expected = result.url;
+      if (!this.bindButton()) {
+        throw new Error("FILUM toolbar button could not be bound");
+      }
 
-      await new Promise(resolve => {
-        if (browser.currentURI?.spec === expected) {
-          resolve();
-          return;
-        }
+      this.hide();
 
-        let settled = false;
-        const finish = () => {
-          if (settled) return;
-          settled = true;
-          resolve();
-        };
+      const expected = await this.resolvePanelURL();
+      const button = this.button;
+      const command = document.createEvent("Events");
+      command.initEvent("command", true, true);
+      button.dispatchEvent(command);
 
-        browser.addEventListener("load", finish, { once: true, capture: true });
-        setTimeout(finish, 5000);
-      });
-
-      const current = browser.currentURI?.spec || browser.getAttribute("src") || "";
+      const current = await this.waitForPanelLoad(expected);
       const passed =
         !this.box.hidden &&
         current.startsWith("moz-extension://") &&
@@ -256,6 +294,8 @@ var FilumPanel = {
 window.addEventListener(
   "load",
   () => {
+    FilumPanel.bindButton();
+
     if (Services.prefs.getBoolPref("filum.selftest.enabled", false)) {
       setTimeout(() => FilumPanel.runSelfTest(), 1500);
     }
