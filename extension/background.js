@@ -502,19 +502,42 @@ browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type === 'get-status') {
     const data = await browser.storage.local.get(['mode', 'status', 'torEnabled']);
     let processStats = null;
+    let torProcess = {
+      running: false,
+      bootstrapped: false,
+      error: null
+    };
+
     try {
       processStats = browser.browserControl?.getProcessStats
         ? await browser.browserControl.getProcessStats()
         : null;
     } catch (_) {}
 
+    try {
+      torProcess = browser.browserControl?.getTorStatus
+        ? await browser.browserControl.getTorStatus()
+        : torProcess;
+    } catch (error) {
+      torProcess = {
+        running: false,
+        bootstrapped: false,
+        error: error?.message || String(error)
+      };
+    }
+
+    let adsEnabled = true;
+    try {
+      adsEnabled = await getAdsEnabled();
+    } catch (_) {}
+
     return {
       mode: data.mode || DEFAULT_MODE,
-      adsEnabled: await getAdsEnabled(),
+      adsEnabled,
       status: data.status || null,
       processStats,
-      torEnabled: !!data.torEnabled,
-      torProcess: await browser.browserControl.getTorStatus()
+      torEnabled: !!data.torEnabled && !!torProcess.bootstrapped,
+      torProcess
     };
   }
 
@@ -547,7 +570,7 @@ browser.runtime.onMessage.addListener(async (message) => {
   }
 
   if (message?.type === 'set-secure-dns' && ['off', 'balanced', 'strict'].includes(message.level)) {
-    return browser.browserControl.setSecureDns(message.level);
+    return browser.browserControl.setSecureDns(message.level, message.uri || '');
   }
 
   if (message?.type === 'set-website-appearance' && ['auto', 'dark', 'light'].includes(message.mode)) {
