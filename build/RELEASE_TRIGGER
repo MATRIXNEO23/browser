@@ -1,5 +1,5 @@
 release_request: final
-source_head_before_trigger: 010305b5b258afd546753ebc2a3cb5436d4bba5d
+source_head_before_trigger: dfe9c946ab376800b0807cba1463a43dd6c91961
 product_gate: required
 single_native_filum_button: required
 runtime_sidebar_registry_lookup: required
@@ -7,4 +7,4 @@ filum_background: required
 windows_runtime_smoke: required
 tor_bundle: required
 stable_release_only: false
-rerun_reason: fix_duplicate_nonfunctional_filum_buttons
+rerun_reason: remove_stale_sidebar_gate
