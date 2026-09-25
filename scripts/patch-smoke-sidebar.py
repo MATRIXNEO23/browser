@@ -27,30 +27,37 @@ def main():
         ),
     }
 
+    changed = {}
+    with zipfile.ZipFile(args.omni) as source:
+        for entry, (replacement, baseline_sha) in replacements.items():
+            matches = [name for name in source.namelist() if name == entry]
+            if len(matches) != 1:
+                raise SystemExit(f"Expected exactly one {entry}; found {len(matches)}")
+            original = source.read(entry)
+            if original == replacement:
+                continue
+            if hashlib.sha256(original).hexdigest() != baseline_sha:
+                raise SystemExit(f"Artifact hash differs from source run: {entry}")
+            changed[entry] = replacement
+
+    if not changed:
+        print("Artifact already contains the current FILUM self-test and TOR code:", args.omni)
+        return
+
     handle, temp_name = tempfile.mkstemp(suffix=".ja", dir=args.omni.parent)
     os.close(handle)
     try:
         with zipfile.ZipFile(args.omni) as source:
-            for entry, (replacement, baseline_sha) in replacements.items():
-                matches = [name for name in source.namelist() if name == entry]
-                if len(matches) != 1:
-                    raise SystemExit(f"Expected exactly one {entry}; found {len(matches)}")
-                original = source.read(entry)
-                if hashlib.sha256(original).hexdigest() != baseline_sha:
-                    raise SystemExit(f"Artifact hash differs from source run: {entry}")
-                if original == replacement:
-                    raise SystemExit(f"No newer diagnostic for {entry}")
-
             with zipfile.ZipFile(temp_name, "w") as target:
                 for info in source.infolist():
                     target.writestr(
                         info,
-                        replacements[info.filename][0]
-                        if info.filename in replacements else source.read(info),
+                        changed[info.filename]
+                        if info.filename in changed else source.read(info),
                     )
 
         with zipfile.ZipFile(temp_name) as verify:
-            if (any(verify.read(name) != content for name, (content, _) in replacements.items())
+            if (any(verify.read(name) != content for name, content in changed.items())
                     or verify.testzip() is not None):
                 raise RuntimeError("Patched archive verification failed")
         args.omni.chmod(args.omni.stat().st_mode | stat.S_IWRITE)
@@ -60,8 +67,8 @@ def main():
             os.unlink(temp_name)
 
     print("Patched smoke-only sidebar and TOR diagnostics:", args.omni)
-    for name, (content, baseline_sha) in replacements.items():
-        print(name, "original SHA256:", baseline_sha,
+    for name, content in changed.items():
+        print(name, "original SHA256:", replacements[name][1],
               "diagnostic SHA256:", hashlib.sha256(content).hexdigest())
 
 
