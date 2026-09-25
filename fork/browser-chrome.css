@@ -135,3 +135,19 @@
 .browserContainer {
   background: #090b0e !important;
 }
+
+
+#filum-sidebar-button {
+  list-style-image: url("chrome://branding/content/icon32.png") !important;
+  margin-inline: 2px !important;
+}
+
+#filum-sidebar-button > .toolbarbutton-icon {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 6px !important;
+}
+
+#filum-sidebar-button:hover > .toolbarbutton-icon {
+  background-color: rgba(140, 184, 255, 0.12) !important;
+}
