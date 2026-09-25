@@ -145,9 +145,10 @@
 }
 
 #filum-sidebar-button > .toolbarbutton-icon {
-  width: 18px !important;
-  height: 18px !important;
+  width: 20px !important;
+  height: 20px !important;
   border-radius: 6px !important;
+  object-fit: contain !important;
 }
 
 #filum-sidebar-button:hover > .toolbarbutton-icon {
@@ -162,9 +163,9 @@
 }
 
 #filum-panel-box {
-  width: 336px !important;
-  min-width: 300px !important;
-  max-width: 430px !important;
+  width: 304px !important;
+  min-width: 286px !important;
+  max-width: 360px !important;
   background: #070b0f !important;
   border-inline-start: 1px solid #16465a !important;
   box-shadow: -10px 0 28px rgb(0 0 0 / 34%) !important;
