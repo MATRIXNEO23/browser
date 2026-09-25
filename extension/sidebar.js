@@ -795,10 +795,16 @@ async function runControlSelfTest() {
       }
       button.click();
       try {
+        const matchesTarget = url => {
+          if (name === 'addons-catalog') {
+            return /^https:\/\/addons\.mozilla\.org\/(?:[a-zA-Z-]+\/)?firefox\/extensions\/?(?:[?#].*)?$/.test(url);
+          }
+          return url.startsWith(expectedUrl);
+        };
         const tab = await waitFor(async () => {
           const tabs = await browser.tabs.query({});
           return tabs.find(item => !before.has(item.id) &&
-            (item.url || item.pendingUrl || '').startsWith(expectedUrl));
+            matchesTarget(item.url || item.pendingUrl || ''));
         }, 10000, 250);
         record(name, true, tab.url || tab.pendingUrl || '');
       } catch (error) {
