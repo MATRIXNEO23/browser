@@ -81,6 +81,8 @@ jobs:
           grep -n -- "--enable-artifact-builds" firefox-src/mozconfig
 
           test -f firefox-src/browser/extensions/browser-core/extension/manifest.json
+          test -f firefox-src/browser/extensions/browser-core/extension/assets/filum-background.jpg
+          echo "2b2c7f659eaade035375be20f8735ab3daada878645cfb0cda5f7381721c1bc6  firefox-src/browser/extensions/browser-core/extension/assets/filum-background.jpg" | sha256sum -c -
           test -f firefox-src/browser/branding/browser/firefox.ico
           test -f firefox-src/browser/branding/browser/default256.png
 
