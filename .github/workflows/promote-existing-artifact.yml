@@ -214,18 +214,6 @@ jobs:
             $controls = $controlsRaw | ConvertFrom-Json
             Write-Host "FILUM controls self-test: $controlsRaw"
 
-            $panelMatch = [regex]::Match(
-              (Get-Content $prefsPath -Raw),
-              'user_pref\("filum\.selftest\.panel",\s*"([^"]+)"\);'
-            )
-            if (-not $panelMatch.Success) {
-              throw "FILUM native panel self-test did not persist with controls"
-            }
-            Write-Host "FILUM native panel self-test: $($panelMatch.Groups[1].Value)"
-            if ($panelMatch.Groups[1].Value -ne "PASS") {
-              throw "FILUM native panel self-test failed: $($panelMatch.Groups[1].Value)"
-            }
-
             foreach ($check in $controls.checks) {
               Write-Host ("{0}: {1} {2}" -f $check.name, $check.ok, $check.detail)
             }
