@@ -354,9 +354,7 @@ jobs:
           $profile = Join-Path $env:RUNNER_TEMP "browser-smoke-profile"
           New-Item -ItemType Directory -Force -Path $profile | Out-Null
 
-          @'
-user_pref("filum.selftest.enabled", true);
-'@ | Set-Content (Join-Path $profile "user.js") -Encoding ascii
+          'user_pref("filum.selftest.enabled", true);' | Set-Content (Join-Path $profile "user.js") -Encoding ascii
 
           $args = @(
             "-headless",
