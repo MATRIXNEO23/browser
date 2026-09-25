@@ -15,21 +15,24 @@ def main():
     parser.add_argument("omni", type=Path)
     parser.add_argument("--baseline-sha256", required=True)
     parser.add_argument("--tor-baseline-sha256", required=True)
+    parser.add_argument("--source-sha256", default="")
+    parser.add_argument("--tor-source-sha256", default="")
     args = parser.parse_args()
 
     replacements = {
         "chrome/browser/builtin-addons/browser-core/sidebar.js": (
-            Path("extension/sidebar.js").read_bytes(), args.baseline_sha256.lower()
+            Path("extension/sidebar.js").read_bytes(),
+            {args.baseline_sha256.lower(), args.source_sha256.lower()}
         ),
         "chrome/browser/builtin-addons/browser-core/experiment-apis/browserControl.js": (
             Path("extension/experiment-apis/browserControl.js").read_bytes(),
-            args.tor_baseline_sha256.lower(),
+            {args.tor_baseline_sha256.lower(), args.tor_source_sha256.lower()},
         ),
     }
 
     changed = {}
     with zipfile.ZipFile(args.omni) as source:
-        for entry, (replacement, baseline_sha) in replacements.items():
+        for entry, (replacement, accepted_hashes) in replacements.items():
             matches = [name for name in source.namelist() if name == entry]
             if len(matches) != 1:
                 raise SystemExit(f"Expected exactly one {entry}; found {len(matches)}")
@@ -37,10 +40,10 @@ def main():
             if original == replacement:
                 continue
             actual_sha = hashlib.sha256(original).hexdigest()
-            if actual_sha != baseline_sha:
+            if actual_sha not in accepted_hashes:
                 raise SystemExit(
                     f"Artifact hash differs from source run: {entry}; "
-                    f"actual={actual_sha}; old={baseline_sha}; "
+                    f"actual={actual_sha}; expected={sorted(accepted_hashes)}; "
                     f"current={hashlib.sha256(replacement).hexdigest()}"
                 )
             changed[entry] = replacement
@@ -73,7 +76,7 @@ def main():
 
     print("Patched smoke-only sidebar and TOR diagnostics:", args.omni)
     for name, content in changed.items():
-        print(name, "original SHA256:", replacements[name][1],
+        print(name, "accepted source SHA256:", sorted(replacements[name][1]),
               "diagnostic SHA256:", hashlib.sha256(content).hexdigest())
 
 
