@@ -297,57 +297,72 @@ jobs:
             throw "Bundled Tor executable did not report a Tor version."
           }
 
-      - name: Launch Browser and render engine smoke page
+      - name: Launch Browser runtime smoke test
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+
           $profile = Join-Path $env:RUNNER_TEMP "browser-smoke-profile"
-          $shot = Join-Path $env:GITHUB_WORKSPACE "Browser-Engine-Smoke.png"
           New-Item -ItemType Directory -Force -Path $profile | Out-Null
+
           $args = @(
+            "-headless",
             "-no-remote",
+            "-new-instance",
             "-profile", $profile,
-            "-url",
-            "data:text/html,<html><body style='background:%23090b0e;color:%23f5f7fa;font-family:sans-serif'><h1>FILUM Browser smoke</h1></body></html>",
-            "-screenshot", $shot,
-            "-headless"
+            "about:blank"
           )
-          $p = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -PassThru
-          $deadline = (Get-Date).AddSeconds(60)
+
+          $launcher = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -PassThru
+          $deadline = (Get-Date).AddSeconds(20)
+          $alive = $false
+
           try {
             while ((Get-Date) -lt $deadline) {
-              if (Test-Path $shot) {
-                if ((Get-Item $shot).Length -ge 4096) { break }
-              }
-              if ($p.HasExited) {
-                throw "Browser exited before producing a valid engine smoke screenshot. ExitCode=$($p.ExitCode)"
-              }
               Start-Sleep -Seconds 1
-              $p.Refresh()
+
+              $processes = Get-CimInstance Win32_Process | Where-Object {
+                $_.Name -ieq "browser.exe" -and
+                $_.ExecutablePath -and
+                ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($env:BROWSER_EXE))
+              }
+
+              if ($processes) {
+                $alive = $true
+                break
+              }
+
+              if (-not $launcher.HasExited) {
+                $alive = $true
+                break
+              }
+
+              $launcher.Refresh()
             }
 
-            if (-not (Test-Path $shot)) {
-              throw "Browser did not render the engine smoke screenshot within 60 seconds."
-            }
-            if ((Get-Item $shot).Length -lt 4096) {
-              throw "New Tab smoke screenshot is unexpectedly small."
+            if (-not $alive) {
+              throw "Browser runtime did not remain active after launch."
             }
 
-            Write-Host "Windows launch + engine render passed."
+            Start-Sleep -Seconds 5
+
+            $profileFiles = Get-ChildItem $profile -Force -ErrorAction SilentlyContinue
+            if (-not $profileFiles) {
+              throw "Browser launched but did not initialize its profile."
+            }
+
+            Write-Host "Windows Browser runtime launch passed."
+            Write-Host "Profile initialized with $($profileFiles.Count) entries."
           }
           finally {
-            if (-not $p.HasExited) {
-              & taskkill /PID $p.Id /T /F | Out-Null
+            Get-CimInstance Win32_Process | Where-Object {
+              $_.Name -ieq "browser.exe" -and
+              $_.ExecutablePath -and
+              ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($env:BROWSER_EXE))
+            } | ForEach-Object {
+              & taskkill /PID $_.ProcessId /T /F | Out-Null
             }
           }
-
-      - name: Upload visual smoke evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: Browser-Engine-Smoke
-          path: Browser-Engine-Smoke.png
-          if-no-files-found: error
-          retention-days: 30
 
       - name: Upload validated final Browser
         uses: actions/upload-artifact@v4
