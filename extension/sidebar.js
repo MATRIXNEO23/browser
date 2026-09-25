@@ -536,7 +536,7 @@ async function runControlSelfTest() {
   let passed = true;
 
   const record = (name, ok, detail = '') => {
-    checks.push({ name, ok, detail });
+    checks.push({ name, ok: !!ok, detail });
     if (!ok) passed = false;
   };
 
@@ -547,21 +547,29 @@ async function runControlSelfTest() {
   const initialProxy = (await browser.proxy.settings.get({})).value;
 
   try {
-    const turbo = modeButtons.find(button => button.dataset.mode === 'TURBO');
-    turbo.click();
-    await waitFor(async () => (await getStatus()).mode === 'TURBO');
-    record(
-      'mode-button',
-      turbo.classList.contains('active'),
-      'TURBO selected'
-    );
+    for (const mode of ['NORMAL', 'TURBO', 'PRIVATE', 'GHOST']) {
+      const button = modeButtons.find(item => item.dataset.mode === mode);
+      button.click();
+
+      await waitFor(async () => (await getStatus()).mode === mode);
+
+      record(
+        'mode-' + mode.toLowerCase(),
+        button.classList.contains('active') &&
+          button.getAttribute('aria-pressed') === 'true',
+        'selected=' + mode
+      );
+    }
 
     await selectMode(initialStatus.mode || 'NORMAL');
 
     const adsBefore = (await getStatus()).adsEnabled;
     adsButton.click();
     await waitFor(async () => (await getStatus()).adsEnabled !== adsBefore);
-    record('ads-button', true);
+    record(
+      'ads-toggle',
+      adsButton.classList.contains('active') === !adsBefore
+    );
     adsButton.click();
     await waitFor(async () => (await getStatus()).adsEnabled === adsBefore);
 
@@ -575,13 +583,9 @@ async function runControlSelfTest() {
     });
     record('https-only', true);
 
-    httpsOnly.checked = initialAdvanced.httpsOnly;
-    httpsOnly.dispatchEvent(new Event('change'));
-    await waitFor(async () => {
-      const value = await browser.runtime.sendMessage({
-        type: 'get-advanced-settings'
-      });
-      return value.httpsOnly === initialAdvanced.httpsOnly;
+    await browser.runtime.sendMessage({
+      type: 'set-https-only',
+      enabled: !!initialAdvanced.httpsOnly
     });
 
     secureDns.value = 'balanced';
@@ -596,7 +600,7 @@ async function runControlSelfTest() {
         value.secureDnsUri === 'https://example.com/dns-query'
       );
     });
-    record('custom-dns', true);
+    record('dns-custom-endpoint', true);
 
     await browser.runtime.sendMessage({
       type: 'set-secure-dns',
@@ -636,14 +640,51 @@ async function runControlSelfTest() {
       mode: initialTheme
     });
 
+    const requestedHardware = !initialAdvanced.hardwareAcceleration;
+    hardwareAccel.checked = requestedHardware;
+    hardwareAccel.dispatchEvent(new Event('change'));
+    await waitFor(async () => {
+      const value = await browser.runtime.sendMessage({
+        type: 'get-advanced-settings'
+      });
+      return value.hardwareAcceleration === requestedHardware;
+    });
+    record('hardware-acceleration', true);
+
+    await browser.runtime.sendMessage({
+      type: 'set-hardware-acceleration',
+      enabled: !!initialAdvanced.hardwareAcceleration
+    });
+
     const ramResult = await browser.runtime.sendMessage({
       type: 'enforce-now'
     });
     record('free-ram', !!ramResult?.ok);
 
     await browser.proxy.settings.set({ value: { proxyType: 'none' } });
-    const direct = await browser.proxy.settings.get({});
-    record('network-direct', direct?.value?.proxyType === 'none');
+    let proxy = await browser.proxy.settings.get({});
+    record('network-direct', proxy?.value?.proxyType === 'none');
+
+    await browser.proxy.settings.set({ value: { proxyType: 'system' } });
+    proxy = await browser.proxy.settings.get({});
+    record('network-system-vpn', proxy?.value?.proxyType === 'system');
+
+    await browser.proxy.settings.set({
+      value: {
+        proxyType: 'manual',
+        socks: '127.0.0.1:65534',
+        socksVersion: 5,
+        proxyDNS: true,
+        passthrough: 'localhost, 127.0.0.1'
+      }
+    });
+    proxy = await browser.proxy.settings.get({});
+    record(
+      'network-socks5',
+      proxy?.value?.proxyType === 'manual' &&
+        proxy?.value?.socks === '127.0.0.1:65534' &&
+        proxy?.value?.socksVersion === 5
+    );
 
     await browser.proxy.settings.set({ value: initialProxy });
 
@@ -655,29 +696,94 @@ async function runControlSelfTest() {
           ? value
           : null;
       },
-      60000,
+      90000,
       500
     );
-    record('tor-bootstrap', !!torOn?.torProcess?.bootstrapped);
+
+    record('tor-bootstrap-100', !!torOn?.torProcess?.bootstrapped);
+
+    proxy = await browser.proxy.settings.get({});
+    record(
+      'tor-proxy',
+      proxy?.value?.proxyType === 'manual' &&
+        proxy?.value?.socks === '127.0.0.1:19050' &&
+        proxy?.value?.socksVersion === 5 &&
+        proxy?.value?.proxyDNS === true
+    );
 
     torButton.click();
-    await waitFor(async () => !(await getStatus()).torEnabled, 15000, 250);
+    await waitFor(async () => !(await getStatus()).torEnabled, 20000, 250);
+    record('tor-stop', !(await getStatus()).torEnabled);
 
+    const smartBefore = (await browser.tabs.query({})).length;
     const smartResult = await browser.runtime.sendMessage({
       type: 'open-smart-search'
     });
+    await waitFor(
+      async () => (await browser.tabs.query({})).length > smartBefore
+    );
     record('smart-search', !!smartResult?.ok);
 
+    const addonBefore = (await browser.tabs.query({})).length;
     const addonResult = await browser.runtime.sendMessage({
       type: 'open-addons-installed'
     });
+    await waitFor(
+      async () => (await browser.tabs.query({})).length > addonBefore
+    );
     record('addons-installed', !!addonResult?.ok);
 
+    const catalogBefore = (await browser.tabs.query({})).length;
+    const catalogResult = await browser.runtime.sendMessage({
+      type: 'open-addons-store'
+    });
+    await waitFor(
+      async () => (await browser.tabs.query({})).length > catalogBefore
+    );
+    record('addons-catalog', !!catalogResult?.ok);
+
+    const libraryBefore = (await browser.tabs.query({})).length;
+    await browser.tabs.create({
+      url: browser.runtime.getURL('library.html')
+    });
+    await waitFor(
+      async () => (await browser.tabs.query({})).length > libraryBefore
+    );
+    record('library', true);
+
+    const settingsBefore = (await browser.tabs.query({})).length;
     const settingsResult = await browser.runtime.sendMessage({
       type: 'open-internal-page',
       page: 'settings'
     });
+    await waitFor(
+      async () => (await browser.tabs.query({})).length > settingsBefore
+    );
     record('internal-settings', !!settingsResult?.opened);
+
+    const privacyResult = await browser.runtime.sendMessage({
+      type: 'open-internal-page',
+      page: 'privacy'
+    });
+    record('internal-privacy', !!privacyResult?.opened);
+
+    const passwordResult = await browser.runtime.sendMessage({
+      type: 'open-internal-page',
+      page: 'passwords'
+    });
+    record('internal-passwords', !!passwordResult?.opened);
+
+    const profilesResult = await browser.runtime.sendMessage({
+      type: 'open-internal-page',
+      page: 'profiles'
+    });
+    record('internal-profiles', !!profilesResult?.opened);
+
+    const processesResult = await browser.runtime.sendMessage({
+      type: 'open-internal-page',
+      page: 'processes'
+    });
+    record('internal-processes', !!processesResult?.opened);
   } catch (error) {
     record('exception', false, errorText(error));
   } finally {
@@ -700,7 +806,7 @@ async function runControlSelfTest() {
 
     try {
       const now = await getStatus();
-      if (now.torEnabled) {
+      if (now.torEnabled || now.torProcess?.running) {
         await browser.runtime.sendMessage({
           type: 'set-tor',
           enabled: false
@@ -729,6 +835,10 @@ async function runControlSelfTest() {
       await browser.runtime.sendMessage({
         type: 'set-https-only',
         enabled: !!initialAdvanced.httpsOnly
+      });
+      await browser.runtime.sendMessage({
+        type: 'set-hardware-acceleration',
+        enabled: !!initialAdvanced.hardwareAcceleration
       });
     } catch (_) {}
   }
