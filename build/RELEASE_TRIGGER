@@ -1,7 +1,7 @@
 release_request: final
-source_head_before_trigger: c43d570891b16d75599240eea45762d3a374152a
+source_head_before_trigger: 4c8aaa83235866e9fabf6c614888061fcd92cf82
 product_gate: required
 windows_smoke: required
 tor_bundle: required
 stable_release_only: true
-rerun_reason: tor_gate_variable_fix
+rerun_reason: upstream_headless_argument_order
