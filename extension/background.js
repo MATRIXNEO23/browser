@@ -570,4 +570,8 @@ browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type === 'open-internal-page' && ['settings', 'privacy', 'passwords', 'profiles', 'processes'].includes(message.page)) {
     return browser.browserControl.openInternalPage(message.page);
   }
+
+  if (message?.type === 'set-filum-panel-open' && typeof message.open === 'boolean') {
+    return browser.browserControl.setFilumPanelOpen(message.open);
+  }
 });
