@@ -566,6 +566,7 @@ async function runControlSelfTest() {
     const adsBefore = (await getStatus()).adsEnabled;
     adsButton.click();
     await waitFor(async () => (await getStatus()).adsEnabled !== adsBefore);
+    await refresh();
     record(
       'ads-toggle',
       adsButton.classList.contains('active') === !adsBefore
@@ -700,6 +701,7 @@ async function runControlSelfTest() {
       500
     );
 
+    await refresh();
     record('tor-bootstrap-100', !!torOn?.torProcess?.bootstrapped);
 
     proxy = await browser.proxy.settings.get({});
