@@ -385,6 +385,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   release:
+    if: ${{ false }}
     needs: [build, smoke-windows]
     runs-on: ubuntu-latest
 
