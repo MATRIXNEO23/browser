@@ -101,15 +101,7 @@ def patch_filum_panel_markup(path: Path):
             hidden="true"/>
   <vbox id="filum-panel-box"
         hidden="true"
-        class="chromeclass-extrachrome chrome-block">
-    <browser id="filum-panel-browser"
-             flex="1"
-             type="content"
-             autoscroll="false"
-             disablehistory="true"
-             disablefullscreen="true"
-             maychangeremoteness="true"/>
-  </vbox>
+        class="chromeclass-extrachrome chrome-block"/>
 
 """
 
@@ -129,7 +121,9 @@ var FilumPanel = {
   extensionId: "resource-controller@matrixneo23.browser",
   panelPath: "sidebar.html",
   buttonId: "filum-sidebar-button",
+  browserId: "filum-panel-browser",
   _bound: false,
+  _initializedBrowser: null,
 
   get box() {
     return document.getElementById("filum-panel-box");
@@ -140,7 +134,7 @@ var FilumPanel = {
   },
 
   get browser() {
-    return document.getElementById("filum-panel-browser");
+    return document.getElementById(this.browserId);
   },
 
   get button() {
@@ -166,7 +160,7 @@ var FilumPanel = {
     return true;
   },
 
-  async resolvePanelURL() {
+  async getPolicy() {
     const { ExtensionParent } = ChromeUtils.importESModule(
       "resource://gre/modules/ExtensionParent.sys.mjs"
     );
@@ -179,7 +173,7 @@ var FilumPanel = {
             await policy.readyPromise;
           } catch (_) {}
         }
-        return policy.getURL(this.panelPath);
+        return { ExtensionParent, policy };
       }
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -187,18 +181,102 @@ var FilumPanel = {
     throw new Error("FILUM core policy is not ready");
   },
 
-  async show() {
+  async ensureExtensionBrowser() {
     const box = this.box;
-    const splitter = this.splitter;
-    const browser = this.browser;
-
-    if (!box || !splitter || !browser) {
+    if (!box) {
       throw new Error("FILUM native panel markup is unavailable");
     }
 
-    const url = await this.resolvePanelURL();
-    if (browser.getAttribute("src") !== url) {
-      browser.setAttribute("src", url);
+    const { ExtensionParent, policy } = await this.getPolicy();
+    const extension = policy.extension;
+    const panelURL = policy.getURL(this.panelPath);
+
+    let browser = this.browser;
+    if (browser && this._initializedBrowser === browser) {
+      return { browser, panelURL, policy, ExtensionParent };
+    }
+
+    if (browser) {
+      browser.remove();
+    }
+
+    browser = document.createXULElement("browser");
+    browser.id = this.browserId;
+    browser.setAttribute("flex", "1");
+    browser.setAttribute("type", "content");
+    browser.setAttribute("disableglobalhistory", "true");
+    browser.setAttribute("messagemanagergroup", "webext-browsers");
+    browser.setAttribute("webextension-view-type", "sidebar");
+    browser.setAttribute("context", "contentAreaContextMenu");
+    browser.setAttribute("tooltip", "aHTMLTooltip");
+    browser.setAttribute("autocompletepopup", "PopupAutoComplete");
+    browser.setAttribute(
+      "initialBrowsingContextGroupId",
+      policy.browsingContextGroupId
+    );
+
+    let readyPromise = Promise.resolve();
+    if (extension.remote) {
+      browser.setAttribute("remote", "true");
+      browser.setAttribute(
+        "remoteType",
+        ChromeUtils.predictRemoteTypeForURI(panelURL, { window })
+      );
+      browser.setAttribute("maychangeremoteness", "true");
+      readyPromise = new Promise(resolve => {
+        browser.addEventListener("XULFrameLoaderCreated", resolve, {
+          once: true,
+        });
+      });
+    }
+
+    box.appendChild(browser);
+    await readyPromise;
+
+    const initBrowser = () => {
+      ExtensionParent.apiManager.emit(
+        "extension-browser-inserted",
+        browser,
+        {}
+      );
+
+      browser.messageManager.loadFrameScript(
+        "chrome://extensions/content/ext-browser-content.js",
+        false,
+        true
+      );
+
+      browser.messageManager.sendAsyncMessage("Extension:InitBrowser", {});
+    };
+
+    initBrowser();
+    browser.addEventListener("DidChangeBrowserRemoteness", initBrowser);
+
+    this._initializedBrowser = browser;
+    return { browser, panelURL, policy, ExtensionParent };
+  },
+
+  async show() {
+    const box = this.box;
+    const splitter = this.splitter;
+    const { browser, panelURL, policy } = await this.ensureExtensionBrowser();
+
+    if (!box || !splitter || !browser) {
+      throw new Error("FILUM native panel is unavailable");
+    }
+
+    const selftest = Services.prefs.getBoolPref(
+      "filum.selftest.enabled",
+      false
+    );
+    const url = selftest ? panelURL + "?selftest=1" : panelURL;
+
+    const base = Services.io.newURI(policy.getURL());
+    const triggeringPrincipal =
+      Services.scriptSecurityManager.createContentPrincipal(base, {});
+
+    if (browser.currentURI?.spec !== url) {
+      browser.fixupAndLoadURIString(url, { triggeringPrincipal });
     }
 
     box.hidden = false;
@@ -230,11 +308,11 @@ var FilumPanel = {
     }
   },
 
-  async waitForPanelLoad(expected) {
+  async waitForPanelLoad(expectedBase) {
     const browser = this.browser;
 
     await new Promise(resolve => {
-      if (browser.currentURI?.spec === expected) {
+      if (browser.currentURI?.spec?.startsWith(expectedBase)) {
         resolve();
         return;
       }
@@ -247,10 +325,10 @@ var FilumPanel = {
       };
 
       browser.addEventListener("load", finish, { once: true, capture: true });
-      setTimeout(finish, 5000);
+      setTimeout(finish, 7000);
     });
 
-    return browser.currentURI?.spec || browser.getAttribute("src") || "";
+    return browser.currentURI?.spec || "";
   },
 
   async runSelfTest() {
@@ -261,24 +339,24 @@ var FilumPanel = {
 
       this.hide();
 
-      const expected = await this.resolvePanelURL();
+      const { policy } = await this.getPolicy();
+      const expectedBase = policy.getURL(this.panelPath);
+
       const button = this.button;
       const command = document.createEvent("Events");
       command.initEvent("command", true, true);
       button.dispatchEvent(command);
 
-      const current = await this.waitForPanelLoad(expected);
+      const current = await this.waitForPanelLoad(expectedBase);
       const passed =
         !this.box.hidden &&
-        current.startsWith("moz-extension://") &&
-        current.endsWith("/sidebar.html");
+        current.startsWith(expectedBase);
 
       Services.prefs.setStringPref(
         "filum.selftest.panel",
         passed ? "PASS" : "FAIL:" + current
       );
 
-      this.hide();
       return { passed, current };
     } catch (error) {
       Services.prefs.setStringPref(
