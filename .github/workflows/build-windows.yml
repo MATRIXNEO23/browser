@@ -77,7 +77,8 @@ jobs:
           grep -n "MATRIXNEO23 Browser fork" firefox-src/browser/themes/shared/toolbarbuttons.css
           grep -n "#navigator-toolbox" firefox-src/browser/themes/shared/toolbarbuttons.css
           grep -n "filum-sidebar-button" firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
-          grep -n "FilumPanel.toggle()" firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
+          grep -n 'button.addEventListener("command"' firefox-src/browser/base/content/browser.js
+          grep -n 'button.dispatchEvent(command)' firefox-src/browser/base/content/browser.js
           grep -n 'id="filum-panel-box"' firefox-src/browser/base/content/browser-box.inc.xhtml
           grep -n 'id="filum-panel-browser"' firefox-src/browser/base/content/browser-box.inc.xhtml
           grep -n "MATRIXNEO23 FILUM native panel controller" firefox-src/browser/base/content/browser.js
