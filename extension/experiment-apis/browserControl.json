@@ -61,6 +61,11 @@
               "balanced",
               "strict"
             ]
+          },
+          {
+            "name": "uri",
+            "type": "string",
+            "optional": true
           }
         ]
       },
@@ -130,6 +135,17 @@
           {
             "name": "open",
             "type": "boolean"
+          }
+        ]
+      },
+      {
+        "name": "reportControlSelfTest",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "result",
+            "type": "string"
           }
         ]
       }
