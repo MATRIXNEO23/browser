@@ -314,16 +314,18 @@ this.browserControl = class extends ExtensionAPI {
           const mode = level === "strict" ? 3 : level === "balanced" ? 2 : 5;
           const trimmed = String(uri || "").trim();
 
-          if (level !== "off") {
-            if (trimmed) {
-              const parsed = Services.io.newURI(trimmed);
-              if (parsed.scheme !== "https") {
-                throw new Error("Custom DNS endpoint must use HTTPS.");
-              }
-              Services.prefs.setStringPref("network.trr.uri", trimmed);
-            } else if (Services.prefs.prefHasUserValue("network.trr.uri")) {
+          if (level === "off") {
+            if (Services.prefs.prefHasUserValue("network.trr.uri")) {
               Services.prefs.clearUserPref("network.trr.uri");
             }
+          } else if (trimmed) {
+            const parsed = Services.io.newURI(trimmed);
+            if (parsed.scheme !== "https") {
+              throw new Error("Custom DNS endpoint must use HTTPS.");
+            }
+            Services.prefs.setStringPref("network.trr.uri", trimmed);
+          } else if (Services.prefs.prefHasUserValue("network.trr.uri")) {
+            Services.prefs.clearUserPref("network.trr.uri");
           }
 
           setInt("network.trr.mode", mode);
