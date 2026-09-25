@@ -82,12 +82,18 @@
         <span><b>HTTPS-only</b><small>Rifiuta HTTP quando possibile</small></span>
       </label>
 
-      <label class="field-label" for="secure-dns">DNS sicuro</label>
+      <label class="field-label" for="secure-dns">DNS</label>
       <select id="secure-dns">
-        <option value="off">OFF / SISTEMA</option>
+        <option value="off">SISTEMA / DNS DI WINDOWS</option>
         <option value="balanced">DoH + fallback</option>
         <option value="strict">DoH STRICT</option>
       </select>
+      <label class="field-label" for="dns-endpoint">Endpoint DoH personalizzato</label>
+      <input id="dns-endpoint" type="url"
+             placeholder="https://dns.example/dns-query"
+             autocomplete="off" spellcheck="false">
+      <button id="apply-dns" class="wide-secondary">Applica DNS</button>
+      <p id="dns-status" class="hint">Lascia vuoto per usare il provider DoH predefinito.</p>
 
       <label class="toggle-row">
         <input id="hardware-accel" type="checkbox">
