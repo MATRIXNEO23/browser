@@ -39,8 +39,12 @@ if manifest_path.is_file():
         errors.append("manifest missing permissions: " + ", ".join(sorted(missing)))
     if "experiment_apis" not in manifest or "browserControl" not in manifest["experiment_apis"]:
         errors.append("manifest missing privileged browserControl experiment API")
+    if manifest.get("version") != "0.4.0":
+        errors.append("FILUM core version must be 0.4.0")
     if "action" in manifest:
         errors.append("manifest must not expose a duplicate WebExtension toolbar action")
+    if "sidebar_action" in manifest:
+        errors.append("manifest must not expose Firefox sidebar_action; FILUM uses its native panel")
     if manifest.get("chrome_url_overrides", {}).get("newtab") != "newtab.html":
         errors.append("custom new tab not configured")
 
@@ -57,7 +61,7 @@ sidebar_js = require_text(
     "set-mode", "set-ads", "enforce-now", "open-smart-search", "open-addons-installed",
     "set-https-only", "set-secure-dns", "set-hardware-acceleration",
     "set-browser-theme", "set-website-appearance", "get-advanced-settings",
-    "browser.proxy.settings.set", "set-tor"
+    "browser.proxy.settings.set", "set-tor", "set-filum-panel-open"
 )
 
 background_js = require_text(
@@ -67,18 +71,26 @@ background_js = require_text(
     "set-hardware-acceleration", "set-https-only", "set-secure-dns",
     "set-website-appearance", "get-advanced-settings", "open-internal-page",
     "browser.tabs.discard", "declarativeNetRequest.updateEnabledRulesets",
-    "setTorEnabled", "proxyDNS: true", "peerConnectionEnabled.set"
+    "setTorEnabled", "proxyDNS: true", "peerConnectionEnabled.set",
+    "set-filum-panel-open", "setFilumPanelOpen"
 )
 
 api_js = require_text(
     "extension/experiment-apis/browserControl.js",
     "ChromeUtils.requestProcInfo", "setHardwareAcceleration", "setHttpsOnly",
     "setSecureDns", "setWebsiteAppearance", "openInternalPage", "applyMode",
-    "startTor", "stopTor", "getTorStatus", "Subprocess.call"
+    "startTor", "stopTor", "getTorStatus", "Subprocess.call",
+    "setFilumPanelOpen", "win.FilumPanel"
 )
 
 require_text("extension/newtab.html", 'id="normal-search"', 'id="smart"', 'id="library"', 'id="addons"', "<strong>FILUM</strong>")
-require_text("extension/newtab.css", 'url("assets/filum-background.jpg")', ".brand-mark img")
+require_text(
+    "extension/newtab.css",
+    'url("assets/filum-background.jpg")',
+    ".hero-logo",
+    ".wordmark",
+    ".quick-actions"
+)
 require_text("extension/newtab.js", "browser.search.search", "smart-search.html", "library.html", "addons.html")
 require_text("extension/smart-search.js", "searchCandidates", "scoreCandidate", "inspectPage")
 require_text("extension/library.js", "browser.history", "browser.bookmarks", "browser.downloads")
@@ -101,6 +113,9 @@ require_text(
     "#PersonalToolbar",
     "#firefox-view-button",
     "#filum-sidebar-button",
+    "#filum-panel-box",
+    "#filum-panel-browser",
+    "#resource-controller_matrixneo23_browser-browser-action",
     "chrome://branding/content/icon32.png"
 )
 require_text("scripts/generate-brand-assets.py", "Image.open", "firefox.ico", "default{size}.png")
@@ -110,12 +125,18 @@ require_text(
     "MATRIXNEO23 Browser fork",
     "patch_native_filum_button",
     'id="filum-sidebar-button"',
-    'oncommand="FilumSidebar.toggle();"',
-    "patch_filum_sidebar_controller",
+    'oncommand="FilumPanel.toggle();"',
+    "patch_filum_panel_markup",
+    'id="filum-panel-box"',
+    'id="filum-panel-browser"',
+    "patch_filum_panel_controller",
+    "MATRIXNEO23 FILUM native panel controller",
     'extensionId: "resource-controller@matrixneo23.browser"',
-    "SidebarController.sidebars",
-    "SidebarController.show(commandID)",
+    "ExtensionParent.WebExtensionPolicy.getByID",
+    "policy.getURL(this.panelPath)",
+    "FilumPanel.runSelfTest",
     "navigator-toolbox.inc.xhtml",
+    "browser-box.inc.xhtml",
     "browser.js",
     "restore_filum_background",
     "2b2c7f659eaade035375be20f8735ab3daada878645cfb0cda5f7381721c1bc6"
