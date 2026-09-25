@@ -80,7 +80,8 @@ jobs:
           grep -n "MATRIXNEO23 Browser fork" firefox-src/browser/themes/shared/toolbarbuttons.css
           grep -n "#navigator-toolbox" firefox-src/browser/themes/shared/toolbarbuttons.css
           grep -n "filum-sidebar-button" firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
-          grep -n 'document.addEventListener("click"' firefox-src/browser/base/content/browser.js
+          grep -n 'window.FilumPanel = FilumPanel' firefox-src/browser/base/content/browser.js
+          grep -n 'onclick="if (event.button === 0) window.FilumPanel.activate' firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
           grep -n 'button.click()' firefox-src/browser/base/content/browser.js
           grep -n 'id="filum-panel-box"' firefox-src/browser/base/content/browser-box.inc.xhtml
           grep -n 'browserId: "filum-panel-browser"' firefox-src/browser/base/content/browser.js

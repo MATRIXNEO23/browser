@@ -76,6 +76,8 @@ def patch_native_filum_button(path: Path):
                      class="toolbarbutton-1 chromeclass-toolbar-additional"
                      label="FILUM"
                      tooltiptext="Apri/chiudi pannello FILUM"
+                     onclick="if (event.button === 0) window.FilumPanel.activate(event, 'click');"
+                     oncommand="window.FilumPanel.activate(event, 'command');"
                      removable="false"
                      overflows="false"
                      cui-areatype="toolbar"/>
@@ -143,29 +145,19 @@ var FilumPanel = {
   },
 
   bindButton() {
-    if (this._bound) {
-      return true;
-    }
-
-    // CustomizableUI may replace/reparent the toolbarbutton after startup.
-    // Delegate from the document so the current visible button always works.
-    const isFilumButton = event =>
-      event.target?.id === this.buttonId ||
-      event.target?.closest?.("#" + this.buttonId);
-    document.addEventListener("click", event => {
-      if (event.button !== 0 || !isFilumButton(event)) return;
-      this._lastClickAt = Date.now();
-      this.toggle();
-    }, true);
-    document.addEventListener("command", event => {
-      if (!isFilumButton(event)) return;
-      // A mouse click also emits command. Process it only once.
-      if (Date.now() - this._lastClickAt < 500) return;
-      this.toggle();
-    }, true);
-
-    this._bound = true;
+    // The button's own handlers survive toolbar customization and late insertion.
+    this._bound = !!this.button;
     return true;
+  },
+
+  activate(event, kind) {
+    if (kind === "click") {
+      if (event.button !== 0) return;
+      this._lastClickAt = Date.now();
+    } else if (Date.now() - this._lastClickAt < 500) {
+      return;
+    }
+    this.toggle();
   },
 
   async getPolicy() {
@@ -378,6 +370,8 @@ var FilumPanel = {
     }
   },
 };
+
+window.FilumPanel = FilumPanel;
 
 window.addEventListener(
   "load",
