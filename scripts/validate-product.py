@@ -94,9 +94,29 @@ require_text(
 )
 require_file("fork/branding/browser-icon.png")
 require_file("extension/icons/browser.png")
-require_text("fork/browser-chrome.css", "#navigator-toolbox", "#urlbar-background", "#PersonalToolbar", "#firefox-view-button")
+require_text(
+    "fork/browser-chrome.css",
+    "#navigator-toolbox",
+    "#urlbar-background",
+    "#PersonalToolbar",
+    "#firefox-view-button",
+    "#filum-sidebar-button",
+    "chrome://branding/content/icon32.png"
+)
 require_text("scripts/generate-brand-assets.py", "Image.open", "firefox.ico", "default{size}.png")
-require_text("scripts/apply-fork-overlay.py", "browser-core", "MATRIXNEO23 Browser fork")
+require_text(
+    "scripts/apply-fork-overlay.py",
+    "browser-core",
+    "MATRIXNEO23 Browser fork",
+    "patch_native_filum_button",
+    'id="filum-sidebar-button"',
+    "resource-controller_matrixneo23_browser-sidebar-action",
+    "navigator-toolbox.inc.xhtml"
+)
+require_text(
+    "fork/branding/pref/firefox-branding.js",
+    'pref("sidebar.position_start", false);'
+)
 require_text(
     "docs/CANONICAL_PRODUCT_REQUIREMENTS.md",
     "NORMAL / TURBO / PRIVATE / GHOST",
