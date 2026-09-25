@@ -80,9 +80,13 @@ jobs:
           grep -n 'button.addEventListener("command"' firefox-src/browser/base/content/browser.js
           grep -n 'button.dispatchEvent(command)' firefox-src/browser/base/content/browser.js
           grep -n 'id="filum-panel-box"' firefox-src/browser/base/content/browser-box.inc.xhtml
-          grep -n 'id="filum-panel-browser"' firefox-src/browser/base/content/browser-box.inc.xhtml
+          grep -n 'browserId: "filum-panel-browser"' firefox-src/browser/base/content/browser.js
           grep -n "MATRIXNEO23 FILUM native panel controller" firefox-src/browser/base/content/browser.js
           grep -n 'extensionId: "resource-controller@matrixneo23.browser"' firefox-src/browser/base/content/browser.js
+          grep -n 'messagemanagergroup", "webext-browsers"' firefox-src/browser/base/content/browser.js
+          grep -n 'webextension-view-type", "sidebar"' firefox-src/browser/base/content/browser.js
+          grep -n 'extension-browser-inserted' firefox-src/browser/base/content/browser.js
+          grep -n 'ext-browser-content.js' firefox-src/browser/base/content/browser.js
           grep -n -- "--enable-artifact-builds" firefox-src/mozconfig
 
           test -f firefox-src/browser/extensions/browser-core/extension/manifest.json
@@ -432,7 +436,7 @@ jobs:
               throw "Browser Control Core is user-disabled."
             }
 
-            if ($core.version -ne "0.4.0") {
+            if ($core.version -ne "0.4.1") {
               throw "Unexpected FILUM core version: $($core.version)"
             }
 
@@ -456,10 +460,41 @@ jobs:
               throw "FILUM native panel self-test failed: $panelResult"
             }
 
+            $controlDeadline = (Get-Date).AddSeconds(150)
+            $controlsRaw = $null
+            while ((Get-Date) -lt $controlDeadline) {
+              Start-Sleep -Seconds 2
+              $prefsText = Get-Content $prefsPath -Raw
+              $controlMatch = [regex]::Match(
+                $prefsText,
+                'user_pref\("filum\.selftest\.controls",\s*"((?:\\.|[^"])*)"\);'
+              )
+              if ($controlMatch.Success) {
+                $encoded = '"' + $controlMatch.Groups[1].Value + '"'
+                $controlsRaw = $encoded | ConvertFrom-Json
+                break
+              }
+            }
+
+            if (-not $controlsRaw) {
+              throw "FILUM control self-test did not report a result."
+            }
+
+            $controls = $controlsRaw | ConvertFrom-Json
+            Write-Host "FILUM controls self-test: $($controlsRaw)"
+            if (-not $controls.passed) {
+              $failed = @($controls.checks | Where-Object { -not $_.ok })
+              $detail = ($failed | ForEach-Object {
+                "$($_.name): $($_.detail)"
+              }) -join "; "
+              throw "FILUM control self-test failed: $detail"
+            }
+
             Write-Host "Windows Browser runtime launch passed."
             Write-Host "Profile initialized with $($profileFiles.Count) entries."
             Write-Host "FILUM core runtime activation passed."
             Write-Host "FILUM native panel open/load test passed."
+            Write-Host "FILUM sidebar controls functional test passed."
           }
           finally {
             Get-CimInstance Win32_Process | Where-Object {
