@@ -112,7 +112,7 @@ jobs:
             (& 7z l $_.FullName | Out-String) -match "builtin-addons[\\/]browser-core[\\/]sidebar.js"
           })
           if ($omnis.Count -ne 1) { throw "Expected exactly one packaged FILUM sidebar.js" }
-          python scripts/patch-smoke-sidebar.py $omnis[0].FullName --baseline-sha256 83b337916eb503ee9de0b7f3395f0774a9c30f077884a960002a4d82614f1b85 --tor-baseline-sha256 e9716378b8d9d0ce8a114ceb9f4600ee00928da32185519f3e872896d2fa4c67
+          python scripts/patch-smoke-sidebar.py $omnis[0].FullName --baseline-sha256 83b337916eb503ee9de0b7f3395f0774a9c30f077884a960002a4d82614f1b85 --tor-baseline-sha256 e9716378b8d9d0ce8a114ceb9f4600ee00928da32185519f3e872896d2fa4c67 --source-sha256 495e1062ef9bc62effaf0c22c2b869e9ee23dff629fba065358f7a9450c71d8d --tor-source-sha256 15588ccd2e46eae8d755c886c40a25528e23c2c8c9835b4fef5f5bb675ad77b4
           if ($LASTEXITCODE -ne 0) { throw "Smoke-only sidebar patch failed" }
 
       - name: Probe bundled TOR against runner network
