@@ -368,7 +368,6 @@ jobs:
           'user_pref("filum.selftest.enabled", true);' | Set-Content (Join-Path $profile "user.js") -Encoding ascii
 
           $args = @(
-            "-headless",
             "-no-remote",
             "-new-instance",
             "-profile", $profile
