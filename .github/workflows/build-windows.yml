@@ -399,4 +399,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Browser Windows x64 $SHORT" \
-            --notes "Stable Browser Windows x64 build. Passed source completeness gate, native package validation, built-in core verification, SHA256 verification and Windows headless New Tab smoke test. Source commit: $GITHUB_SHA"
+            --notes "Stable Browser Windows x64 build. Passed source completeness gate, native package validation, built-in core verification, bundled Tor verification, SHA256 verification and Windows runtime/profile smoke test. Source commit: $GITHUB_SHA"
