@@ -1,10 +1,9 @@
 release_request: final
-source_head_before_trigger: dfe9c946ab376800b0807cba1463a43dd6c91961
+source_head_before_trigger: 1d8c46f243f8c04b9f5ccd4a64e5cc609b546b7e
 product_gate: required
 single_native_filum_button: required
-runtime_sidebar_registry_lookup: required
-filum_background: required
+native_filum_panel_runtime_selftest: required
+approved_cyber_background: required
 windows_runtime_smoke: required
-tor_bundle: required
 stable_release_only: false
-rerun_reason: remove_stale_sidebar_gate
+rerun_reason: native_panel_and_approved_cyber_newtab
