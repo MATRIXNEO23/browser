@@ -79,65 +79,189 @@ def patch_native_filum_button(path: Path):
                      removable="false"
                      overflows="false"
                      cui-areatype="toolbar"
-                     oncommand="FilumSidebar.toggle();"/>
+                     oncommand="FilumPanel.toggle();"/>
 
 """
     text = text.replace(needle, button + needle, 1)
     path.write_text(text, encoding="utf-8")
 
 
-def patch_filum_sidebar_controller(path: Path):
+def patch_filum_panel_markup(path: Path):
     text = path.read_text(encoding="utf-8")
-    marker = "/* MATRIXNEO23 FILUM sidebar controller */"
+    if 'id="filum-panel-box"' in text:
+        return
+
+    needle = '  <splitter id="ai-window-splitter"'
+    if needle not in text:
+        raise RuntimeError("AI window splitter anchor not found in browser-box.inc.xhtml")
+
+    markup = """  <splitter id="filum-panel-splitter"
+            class="chromeclass-extrachrome sidebar-splitter"
+            resizebefore="none"
+            resizeafter="sibling"
+            hidden="true"/>
+  <vbox id="filum-panel-box"
+        hidden="true"
+        class="chromeclass-extrachrome chrome-block">
+    <browser id="filum-panel-browser"
+             flex="1"
+             type="content"
+             autoscroll="false"
+             disablehistory="true"
+             disablefullscreen="true"
+             maychangeremoteness="true"/>
+  </vbox>
+
+"""
+
+    text = text.replace(needle, markup + needle, 1)
+    path.write_text(text, encoding="utf-8")
+
+
+def patch_filum_panel_controller(path: Path):
+    text = path.read_text(encoding="utf-8")
+    marker = "/* MATRIXNEO23 FILUM native panel controller */"
     if marker in text:
         return
 
     helper = r"""
-/* MATRIXNEO23 FILUM sidebar controller */
-var FilumSidebar = {
+/* MATRIXNEO23 FILUM native panel controller */
+var FilumPanel = {
   extensionId: "resource-controller@matrixneo23.browser",
+  panelPath: "sidebar.html",
 
-  findCommandId() {
-    for (const [commandID, sidebar] of SidebarController.sidebars) {
-      if (
-        sidebar?.extensionId === this.extensionId ||
-        sidebar?.name === this.extensionId
-      ) {
-        return commandID;
+  get box() {
+    return document.getElementById("filum-panel-box");
+  },
+
+  get splitter() {
+    return document.getElementById("filum-panel-splitter");
+  },
+
+  get browser() {
+    return document.getElementById("filum-panel-browser");
+  },
+
+  async resolvePanelURL() {
+    const { ExtensionParent } = ChromeUtils.importESModule(
+      "resource://gre/modules/ExtensionParent.sys.mjs"
+    );
+
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const policy = ExtensionParent.WebExtensionPolicy.getByID(this.extensionId);
+      if (policy) {
+        if (policy.readyPromise) {
+          try {
+            await policy.readyPromise;
+          } catch (_) {}
+        }
+        return policy.getURL(this.panelPath);
       }
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
-    return null;
+
+    throw new Error("FILUM core policy is not ready");
+  },
+
+  async show() {
+    const box = this.box;
+    const splitter = this.splitter;
+    const browser = this.browser;
+
+    if (!box || !splitter || !browser) {
+      throw new Error("FILUM native panel markup is unavailable");
+    }
+
+    const url = await this.resolvePanelURL();
+    if (browser.getAttribute("src") !== url) {
+      browser.setAttribute("src", url);
+    }
+
+    box.hidden = false;
+    splitter.hidden = false;
+    document.documentElement.setAttribute("filum-panel-open", "true");
+    return { open: true, url };
+  },
+
+  hide() {
+    if (this.box) {
+      this.box.hidden = true;
+    }
+    if (this.splitter) {
+      this.splitter.hidden = true;
+    }
+    document.documentElement.removeAttribute("filum-panel-open");
+    return { open: false };
   },
 
   async toggle() {
     try {
-      if (SidebarController.promiseInitialized) {
-        await SidebarController.promiseInitialized;
+      if (!this.box || this.box.hidden) {
+        return await this.show();
       }
-
-      let commandID = null;
-      for (let attempt = 0; attempt < 20 && !commandID; attempt++) {
-        commandID = this.findCommandId();
-        if (!commandID) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-
-      if (!commandID) {
-        console.error("FILUM sidebar is not registered.");
-        return;
-      }
-
-      if (SidebarController.isOpen && SidebarController.currentID === commandID) {
-        await SidebarController.hide();
-      } else {
-        await SidebarController.show(commandID);
-      }
+      return this.hide();
     } catch (error) {
-      console.error("FILUM sidebar toggle failed", error);
+      console.error("FILUM native panel toggle failed", error);
+      return { open: false, error: String(error) };
+    }
+  },
+
+  async runSelfTest() {
+    try {
+      const result = await this.show();
+      const browser = this.browser;
+      const expected = result.url;
+
+      await new Promise(resolve => {
+        if (browser.currentURI?.spec === expected) {
+          resolve();
+          return;
+        }
+
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+
+        browser.addEventListener("load", finish, { once: true, capture: true });
+        setTimeout(finish, 5000);
+      });
+
+      const current = browser.currentURI?.spec || browser.getAttribute("src") || "";
+      const passed =
+        !this.box.hidden &&
+        current.startsWith("moz-extension://") &&
+        current.endsWith("/sidebar.html");
+
+      Services.prefs.setStringPref(
+        "filum.selftest.panel",
+        passed ? "PASS" : "FAIL:" + current
+      );
+
+      this.hide();
+      return { passed, current };
+    } catch (error) {
+      Services.prefs.setStringPref(
+        "filum.selftest.panel",
+        "FAIL:" + String(error)
+      );
+      this.hide();
+      return { passed: false, error: String(error) };
     }
   },
 };
+
+window.addEventListener(
+  "load",
+  () => {
+    if (Services.prefs.getBoolPref("filum.selftest.enabled", false)) {
+      setTimeout(() => FilumPanel.runSelfTest(), 1500);
+    }
+  },
+  { once: true }
+);
 """
 
     path.write_text(text + "\n" + helper + "\n", encoding="utf-8")
@@ -202,7 +326,10 @@ def main():
     patch_native_filum_button(
         firefox / "browser" / "base" / "content" / "navigator-toolbox.inc.xhtml"
     )
-    patch_filum_sidebar_controller(
+    patch_filum_panel_markup(
+        firefox / "browser" / "base" / "content" / "browser-box.inc.xhtml"
+    )
+    patch_filum_panel_controller(
         firefox / "browser" / "base" / "content" / "browser.js"
     )
     patch_windows_identity(firefox)
