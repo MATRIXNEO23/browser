@@ -9,6 +9,7 @@ const controller = source.split('helper = r"""')[1]?.split('"""')[0];
 assert.ok(controller, 'native controller must be present');
 let widget;
 let button;
+let placement;
 const context = vm.createContext({
   document: {getElementById(id) { return id === 'filum-sidebar-button' ? button : null; }},
   window: {addEventListener() {}},
@@ -16,7 +17,12 @@ const context = vm.createContext({
   CustomizableUI: {
     AREA_NAVBAR: 'nav-bar',
     getWidget(id) { return widget?.id === id ? widget : null; },
-    createWidget(spec) { widget = spec; button = {id: spec.id, click() { spec.onCommand({target: this}); }}; }
+    createWidget(spec) { widget = spec; },
+    getPlacementOfWidget() { return placement; },
+    addWidgetToArea(id, area) {
+      placement = {area};
+      button = {id, click() { widget.onCommand({target: this}); }};
+    }
   },
   console
 });
@@ -25,6 +31,7 @@ assert.equal(context.FilumPanel.bindButton(), true);
 assert.equal(widget.id, 'filum-sidebar-button');
 assert.equal(widget.defaultArea, 'nav-bar');
 assert.equal(widget.removable, false);
+assert.equal(placement.area, 'nav-bar', 'widget must be explicitly placed in the toolbar');
 assert.equal(context.window.FilumPanel, context.FilumPanel);
 let firstWindowToggles = 0;
 context.FilumPanel.toggle = () => { firstWindowToggles++; };

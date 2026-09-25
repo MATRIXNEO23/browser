@@ -447,6 +447,13 @@ jobs:
               Start-Sleep -Seconds 2
               if (-not (Test-Path $prefsPath)) { continue }
               $prefsText = Get-Content $prefsPath -Raw
+              $panelFailure = [regex]::Match(
+                $prefsText,
+                'user_pref\("filum\.selftest\.panel",\s*"FAIL:((?:\\.|[^"])*)"\);'
+              )
+              if ($panelFailure.Success) {
+                throw "FILUM panel self-test failed: $($panelFailure.Groups[1].Value)"
+              }
               $controlMatch = [regex]::Match(
                 $prefsText,
                 'user_pref\("filum\.selftest\.controls",\s*"((?:\\.|[^"])*)"\);'

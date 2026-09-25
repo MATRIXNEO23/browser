@@ -151,6 +151,9 @@ var FilumPanel = {
         },
       });
     }
+    if (!CustomizableUI.getPlacementOfWidget(this.buttonId) || !this.button) {
+      CustomizableUI.addWidgetToArea(this.buttonId, CustomizableUI.AREA_NAVBAR);
+    }
     this._bound = true;
     return true;
   },
@@ -334,7 +337,10 @@ var FilumPanel = {
         throw new Error("FILUM toolbar button could not be bound");
       }
 
-      this.traceSelfTest("BOUND:" + !!this.button);
+      this.traceSelfTest(
+        "BOUND:" + !!this.button + ":placement:" +
+        JSON.stringify(CustomizableUI.getPlacementOfWidget(this.buttonId))
+      );
 
       this.hide();
 
