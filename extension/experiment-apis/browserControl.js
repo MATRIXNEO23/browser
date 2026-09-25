@@ -179,6 +179,15 @@ this.browserControl = class extends ExtensionAPI {
           };
         },
 
+        async setFilumPanelOpen(open) {
+          const win = Services.wm.getMostRecentWindow("navigator:browser");
+          if (!win?.FilumPanel) {
+            throw new Error("FILUM native panel controller is unavailable");
+          }
+
+          return open ? win.FilumPanel.show() : win.FilumPanel.hide();
+        },
+
         async getProcessStats() {
           const info = await ChromeUtils.requestProcInfo();
           let memoryBytes = Number(info.memory || 0);
