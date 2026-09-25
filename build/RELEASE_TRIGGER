@@ -1,7 +1,7 @@
 release_request: final
-source_head_before_trigger: 54a61ad6ef9e3a74fb27693e61e030f6e70cc7ec
+source_head_before_trigger: 38abf8e61b1668d18de686c09b41cf704a1f0fed
 product_gate: required
 windows_smoke: required
 tor_bundle: required
 stable_release_only: true
-rerun_reason: integrated_tor
+rerun_reason: tor_workflow_syntax_fixed
