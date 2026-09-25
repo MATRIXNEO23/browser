@@ -120,40 +120,8 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $tor = Get-ChildItem $env:APP_DIR -Recurse -Filter "tor.exe" | Select-Object -First 1
-          $dataDir = Join-Path $env:RUNNER_TEMP "tor-network-probe"
-          $log = Join-Path $env:RUNNER_TEMP "tor-network-probe.log"
-          New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-          $args = @(
-            "--SocksPort", "127.0.0.1:19051",
-            "--DataDirectory", $dataDir,
-            "--ClientOnly", "1",
-            "--SafeSocks", "1",
-            "--TestSocks", "1",
-            "--AvoidDiskWrites", "1",
-            "--Log", "notice file $log"
-          )
-          $start = Get-Date
-          $probe = Start-Process -FilePath $tor.FullName -ArgumentList $args -PassThru
-          $ready = $false
-          try {
-            while (((Get-Date) - $start).TotalSeconds -lt 55) {
-              Start-Sleep -Seconds 1
-              $probe.Refresh()
-              if (Test-Path $log) {
-                $ready = [bool](Select-String -Path $log -Pattern "Bootstrapped 100%" -Quiet)
-                if ($ready) { break }
-              }
-              if ($probe.HasExited) { break }
-            }
-            $probe.Refresh()
-            $exitCode = if ($probe.HasExited) { $probe.ExitCode } else { "still running" }
-            Write-Host "TOR runner probe: elapsed=$([math]::Round(((Get-Date) - $start).TotalSeconds, 1))s running=$(-not $probe.HasExited) bootstrapped=$ready exitCode=$exitCode"
-            if (Test-Path $log) { Get-Content $log -Tail 16 | ForEach-Object { Write-Host $_ } }
-          }
-          finally {
-            $probe.Refresh()
-            if (-not $probe.HasExited) { Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue }
-          }
+          python scripts/probe-tor-runner.py $tor.FullName --seconds 55
+          if ($LASTEXITCODE -ne 0) { throw "TOR runner probe script failed" }
 
       - name: Launch FILUM functional sidebar smoke test
         shell: pwsh
