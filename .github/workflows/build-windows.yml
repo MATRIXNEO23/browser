@@ -149,11 +149,9 @@ jobs:
             exit 1
           fi
 
-          cat > dist/stage/Browser/tor-expert/FILUM_TOR_SOURCE.txt <<EOF
-Tor Expert Bundle $TOR_VERSION
-Source: $TOR_URL
-SHA256: $TOR_SHA256
-EOF
+          printf 'Tor Expert Bundle %s\nSource: %s\nSHA256: %s\n' \
+            "$TOR_VERSION" "$TOR_URL" "$TOR_SHA256" \
+            > dist/stage/Browser/tor-expert/FILUM_TOR_SOURCE.txt
 
           OMNI_MATCHES=$(find dist/stage/Browser -type f -name 'omni.ja' -print)
           if [ -z "$OMNI_MATCHES" ]; then
