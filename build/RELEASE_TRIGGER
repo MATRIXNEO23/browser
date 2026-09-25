@@ -1,9 +1,9 @@
 release_request: final
-source_head_before_trigger: ecdce7ad5395eb15d02881c6a0fbd0c7db8eedd7
+source_head_before_trigger: 4ac6c97f6e1fe8fcecb5501442ae4102e1563adb
 product_gate: required
 single_native_filum_button: required
 native_filum_panel_runtime_selftest: required
 approved_cyber_background: required
 windows_runtime_smoke: required
 stable_release_only: false
-rerun_reason: selftest_workflow_syntax_fix
+rerun_reason: pipefail_safe_package_inspection
