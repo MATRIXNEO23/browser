@@ -150,6 +150,7 @@ var FilumPanel = {
     // CustomizableUI may replace/reparent the toolbarbutton after startup.
     // Delegate from the document so the current visible button always works.
     const isFilumButton = event =>
+      event.composedPath?.().some(node => node?.id === this.buttonId) ||
       event.target?.id === this.buttonId ||
       event.target?.closest?.("#" + this.buttonId);
     document.addEventListener("click", event => {
