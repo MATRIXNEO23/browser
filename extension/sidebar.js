@@ -555,6 +555,8 @@ async function runControlSelfTest() {
       button.click();
 
       await waitFor(async () => (await getStatus()).mode === mode);
+      await waitFor(() => button.classList.contains('active') &&
+        button.getAttribute('aria-pressed') === 'true');
 
       record(
         'mode-' + mode.toLowerCase(),
