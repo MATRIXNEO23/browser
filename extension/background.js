@@ -429,7 +429,8 @@ async function setTorEnabled(enabled) {
       await browser.storage.local.set({ torEnabled: false });
       await browser.storage.local.remove([
         'torPreviousProxy',
-        'torPreviousSecureDns'
+        'torPreviousSecureDns',
+        'torPreviousSecureDnsUri'
       ]);
 
       throw error;
