@@ -5,7 +5,6 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
-import subprocess
 import tempfile
 import zipfile
 
@@ -13,24 +12,21 @@ import zipfile
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("omni", type=Path)
-    parser.add_argument("--source-sha", required=True)
+    parser.add_argument("--baseline-sha256", required=True)
     args = parser.parse_args()
 
     entry = "chrome/browser/builtin-addons/browser-core/sidebar.js"
-    baseline = subprocess.check_output(
-        ["git", "show", f"{args.source_sha}:extension/sidebar.js"]
-    )
     replacement = Path("extension/sidebar.js").read_bytes()
-    if baseline == replacement:
-        raise SystemExit("No newer smoke test to patch")
 
     with zipfile.ZipFile(args.omni) as source:
         matches = [name for name in source.namelist() if name == entry]
         if len(matches) != 1:
             raise SystemExit(f"Expected exactly one {entry}; found {len(matches)}")
         original = source.read(entry)
-        if original != baseline:
-            raise SystemExit("Artifact sidebar.js differs from source run; refusing patch")
+        if hashlib.sha256(original).hexdigest() != args.baseline_sha256.lower():
+            raise SystemExit("Artifact sidebar.js hash differs from source run; refusing patch")
+        if original == replacement:
+            raise SystemExit("No newer smoke test to patch")
 
         handle, temp_name = tempfile.mkstemp(suffix=".ja", dir=args.omni.parent)
         os.close(handle)
