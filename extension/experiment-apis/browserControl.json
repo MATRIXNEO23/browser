@@ -103,6 +103,24 @@
         "type": "function",
         "async": true,
         "parameters": []
+      },
+      {
+        "name": "startTor",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "stopTor",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "getTorStatus",
+        "type": "function",
+        "async": true,
+        "parameters": []
       }
     ]
   }
