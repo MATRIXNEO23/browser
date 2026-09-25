@@ -52,7 +52,7 @@ sidebar_html = require_text(
     'data-mode="NORMAL"', 'data-mode="TURBO"', 'data-mode="PRIVATE"', 'data-mode="GHOST"',
     'id="ads"', 'id="enforce"', 'id="smart-search"', 'id="addons-installed"',
     'id="https-only"', 'id="secure-dns"', 'id="hardware-accel"', 'id="network-mode"',
-    'id="resource-stats"', 'id="library"'
+    'id="resource-stats"', 'id="library"', 'id="tor-toggle"', 'id="tor-status"'
 )
 
 sidebar_js = require_text(
@@ -60,7 +60,7 @@ sidebar_js = require_text(
     "set-mode", "set-ads", "enforce-now", "open-smart-search", "open-addons-installed",
     "set-https-only", "set-secure-dns", "set-hardware-acceleration",
     "set-browser-theme", "set-website-appearance", "get-advanced-settings",
-    "browser.proxy.settings.set"
+    "browser.proxy.settings.set", "set-tor"
 )
 
 background_js = require_text(
@@ -69,13 +69,15 @@ background_js = require_text(
     "applyRuntimePrivacy", "beginGhostSession", "endGhostSession",
     "set-hardware-acceleration", "set-https-only", "set-secure-dns",
     "set-website-appearance", "get-advanced-settings", "open-internal-page",
-    "browser.tabs.discard", "declarativeNetRequest.updateEnabledRulesets"
+    "browser.tabs.discard", "declarativeNetRequest.updateEnabledRulesets",
+    "setTorEnabled", "proxyDNS: true", "peerConnectionEnabled.set"
 )
 
 api_js = require_text(
     "extension/experiment-apis/browserControl.js",
     "ChromeUtils.requestProcInfo", "setHardwareAcceleration", "setHttpsOnly",
-    "setSecureDns", "setWebsiteAppearance", "openInternalPage", "applyMode"
+    "setSecureDns", "setWebsiteAppearance", "openInternalPage", "applyMode",
+    "startTor", "stopTor", "getTorStatus", "Subprocess.call"
 )
 
 require_text("extension/newtab.html", 'id="normal-search"', 'id="smart"', 'id="library"', 'id="addons"')
@@ -95,7 +97,14 @@ require_file("extension/icons/browser.png")
 require_text("fork/browser-chrome.css", "#navigator-toolbox", "#urlbar-background", "#PersonalToolbar", "#firefox-view-button")
 require_text("scripts/generate-brand-assets.py", "Image.open", "firefox.ico", "default{size}.png")
 require_text("scripts/apply-fork-overlay.py", "browser-core", "MATRIXNEO23 Browser fork")
-require_text("docs/CANONICAL_PRODUCT_REQUIREMENTS.md", "NORMAL / TURBO / PRIVATE / GHOST", "SMART SEARCH", "maximum of 3 active background")
+require_text(
+    "docs/CANONICAL_PRODUCT_REQUIREMENTS.md",
+    "NORMAL / TURBO / PRIVATE / GHOST",
+    "SMART SEARCH",
+    "maximum of 3 active background",
+    "TOR ON starts the bundled Tor daemon",
+    ".onion navigation is supported"
+)
 
 # Basic UI wiring: every sidebar id expected to be interactive must appear in sidebar.js.
 for control_id in re.findall(r'id="([^"]+)"', sidebar_html):
@@ -105,7 +114,15 @@ for control_id in re.findall(r'id="([^"]+)"', sidebar_html):
         errors.append(f"sidebar control #{control_id} is not referenced by sidebar.js")
 
 require_text("scripts/apply-fork-overlay.py", "patch_windows_identity", 'name=\"Browser\"', "WIN32_MODULE_COMPANYNAME=MATRIXNEO23")
-require_text(".github/workflows/build-windows.yml", "resedit-cli@3.1.0", "Browser-Windows-x64-final", "Apply final Windows identity and FILUM icon")
+require_text(
+    ".github/workflows/build-windows.yml",
+    "resedit-cli@3.1.0",
+    "Browser-Windows-x64-final",
+    "Apply final Windows identity and FILUM icon",
+    "tor-expert-bundle-windows-x86_64-15.0.23.tar.gz",
+    "231dad6b9cb401a54c260db7046965ef04e4f72ff071b140d423fb5da281ab1e",
+    "Verify bundled TOR executable"
+)
 
 if errors:
     print("PRODUCT GATE FAILED")
