@@ -77,8 +77,10 @@ jobs:
           grep -n "MATRIXNEO23 Browser fork" firefox-src/browser/themes/shared/toolbarbuttons.css
           grep -n "#navigator-toolbox" firefox-src/browser/themes/shared/toolbarbuttons.css
           grep -n "filum-sidebar-button" firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
-          grep -n "FilumSidebar.toggle()" firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
-          grep -n "MATRIXNEO23 FILUM sidebar controller" firefox-src/browser/base/content/browser.js
+          grep -n "FilumPanel.toggle()" firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
+          grep -n 'id="filum-panel-box"' firefox-src/browser/base/content/browser-box.inc.xhtml
+          grep -n 'id="filum-panel-browser"' firefox-src/browser/base/content/browser-box.inc.xhtml
+          grep -n "MATRIXNEO23 FILUM native panel controller" firefox-src/browser/base/content/browser.js
           grep -n 'extensionId: "resource-controller@matrixneo23.browser"' firefox-src/browser/base/content/browser.js
           grep -n -- "--enable-artifact-builds" firefox-src/mozconfig
 
@@ -167,33 +169,55 @@ jobs:
 
           BUILTIN_FOUND=0
           NATIVE_BUTTON_FOUND=0
+          NATIVE_PANEL_FOUND=0
           NATIVE_CONTROLLER_FOUND=0
+          CYBER_BACKGROUND_FOUND=0
           while IFS= read -r omni; do
-            if unzip -l "$omni" 2>/dev/null | grep -q 'builtin-addons/browser-core/manifest.json'; then
+            LISTING=$(unzip -l "$omni" 2>/dev/null || true)
+
+            if echo "$LISTING" | grep -q 'builtin-addons/browser-core/manifest.json'; then
               BUILTIN_FOUND=1
             fi
 
-            if unzip -p "$omni" 2>/dev/null | grep -q 'filum-sidebar-button'; then
+            if echo "$LISTING" | grep -q 'builtin-addons/browser-core/assets/filum-background.jpg'; then
+              CYBER_BACKGROUND_FOUND=1
+            fi
+
+            if unzip -p "$omni" 2>/dev/null | grep -aq 'id="filum-sidebar-button"'; then
               NATIVE_BUTTON_FOUND=1
             fi
 
-            if unzip -p "$omni" 2>/dev/null | grep -q 'MATRIXNEO23 FILUM sidebar controller'; then
+            if unzip -p "$omni" 2>/dev/null | grep -aq 'id="filum-panel-box"'; then
+              NATIVE_PANEL_FOUND=1
+            fi
+
+            if unzip -p "$omni" 2>/dev/null | grep -aq 'MATRIXNEO23 FILUM native panel controller'; then
               NATIVE_CONTROLLER_FOUND=1
             fi
           done <<< "$OMNI_MATCHES"
 
           if [ "$BUILTIN_FOUND" -ne 1 ]; then
-            echo "Browser Control Core not found in built-in addon resources."
+            echo "FILUM core not found in built-in addon resources."
             exit 1
           fi
 
           if [ "$NATIVE_BUTTON_FOUND" -ne 1 ]; then
-            echo "Native FILUM sidebar button not found in packaged chrome."
+            echo "Native FILUM toolbar button not found in packaged chrome."
+            exit 1
+          fi
+
+          if [ "$NATIVE_PANEL_FOUND" -ne 1 ]; then
+            echo "Native FILUM panel markup not found in packaged chrome."
             exit 1
           fi
 
           if [ "$NATIVE_CONTROLLER_FOUND" -ne 1 ]; then
-            echo "Native FILUM sidebar controller not found in packaged chrome."
+            echo "Native FILUM panel controller not found in packaged chrome."
+            exit 1
+          fi
+
+          if [ "$CYBER_BACKGROUND_FOUND" -ne 1 ]; then
+            echo "Approved FILUM cyber background not found in packaged core."
             exit 1
           fi
 
@@ -330,6 +354,10 @@ jobs:
           $profile = Join-Path $env:RUNNER_TEMP "browser-smoke-profile"
           New-Item -ItemType Directory -Force -Path $profile | Out-Null
 
+          @'
+user_pref("filum.selftest.enabled", true);
+'@ | Set-Content (Join-Path $profile "user.js") -Encoding ascii
+
           $args = @(
             "-headless",
             "-no-remote",
@@ -369,7 +397,7 @@ jobs:
               throw "Browser runtime did not remain active after launch."
             }
 
-            Start-Sleep -Seconds 5
+            Start-Sleep -Seconds 9
 
             $profileFiles = Get-ChildItem $profile -Force -ErrorAction SilentlyContinue
             if (-not $profileFiles) {
@@ -403,9 +431,34 @@ jobs:
               throw "Browser Control Core is user-disabled."
             }
 
+            if ($core.version -ne "0.4.0") {
+              throw "Unexpected FILUM core version: $($core.version)"
+            }
+
+            $prefsPath = Join-Path $profile "prefs.js"
+            if (-not (Test-Path $prefsPath)) {
+              throw "prefs.js missing; FILUM native panel self-test result unavailable."
+            }
+
+            $prefsText = Get-Content $prefsPath -Raw
+            $match = [regex]::Match(
+              $prefsText,
+              'user_pref\("filum\.selftest\.panel",\s*"([^"]+)"\);'
+            )
+            if (-not $match.Success) {
+              throw "FILUM native panel self-test did not report a result."
+            }
+
+            $panelResult = $match.Groups[1].Value
+            Write-Host "FILUM panel self-test: $panelResult"
+            if ($panelResult -ne "PASS") {
+              throw "FILUM native panel self-test failed: $panelResult"
+            }
+
             Write-Host "Windows Browser runtime launch passed."
             Write-Host "Profile initialized with $($profileFiles.Count) entries."
-            Write-Host "Browser Control Core runtime activation passed."
+            Write-Host "FILUM core runtime activation passed."
+            Write-Host "FILUM native panel open/load test passed."
           }
           finally {
             Get-CimInstance Win32_Process | Where-Object {
