@@ -117,7 +117,12 @@ This file is the binding product specification for the browser.
 - Secure DNS / DoH option.
 - Proxy support.
 - Network modes planned: DIRECT / SYSTEM PROXY / SOCKS / VPN integration.
-- Tor must remain a separate explicit path/environment rather than pretending a generic browser is Tor Browser.
+- TOR is an independent live network control, combinable with NORMAL / TURBO / PRIVATE / GHOST.
+- The Windows distribution includes a checksum-verified Tor Expert Bundle.
+- TOR ON starts the bundled Tor daemon, routes browser traffic through SOCKS5 with remote DNS, disables WebRTC, and must not silently fall back to DIRECT.
+- TOR OFF restores the network and DNS settings that were active before TOR was enabled.
+- .onion navigation is supported while TOR is active.
+- FILUM must clearly state that routing through Tor does not make it equivalent to Tor Browser's anonymity protections.
 - Site permission controls for camera, microphone, location, notifications, clipboard and popups.
 - Advanced WebRTC / DNS / proxy controls.
 - Compatibility-for-this-site path to relax protections per site without disabling them globally.
