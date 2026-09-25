@@ -119,7 +119,8 @@ require_text(
     "resedit-cli@3.1.0",
     "Browser-Windows-x64-final",
     "Apply final Windows identity and FILUM icon",
-    "tor-expert-bundle-windows-x86_64-15.0.23.tar.gz",
+    'TOR_VERSION="15.0.23"',
+    'TOR_FILE="tor-expert-bundle-windows-x86_64-$TOR_VERSION.tar.gz"',
     "231dad6b9cb401a54c260db7046965ef04e4f72ff071b140d423fb5da281ab1e",
     "Verify bundled TOR executable"
 )
