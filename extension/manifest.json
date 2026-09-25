@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Browser Control Core",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Integrated control core for modes, privacy, resources, dark UI and ad blocking.",
   "permissions": [
     "tabs",
@@ -23,12 +23,6 @@
     "scripts": [
       "background.js"
     ]
-  },
-  "sidebar_action": {
-    "default_title": "Impostazioni Browser",
-    "default_panel": "sidebar.html",
-    "open_at_install": false,
-    "default_icon": "icons/browser.png"
   },
   "declarative_net_request": {
     "rule_resources": [
