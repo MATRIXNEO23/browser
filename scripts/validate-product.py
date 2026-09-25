@@ -39,11 +39,8 @@ if manifest_path.is_file():
         errors.append("manifest missing permissions: " + ", ".join(sorted(missing)))
     if "experiment_apis" not in manifest or "browserControl" not in manifest["experiment_apis"]:
         errors.append("manifest missing privileged browserControl experiment API")
-    action = manifest.get("action", {})
-    if action.get("default_area") != "navbar":
-        errors.append("Browser Control action is not pinned to navbar by default")
-    if action.get("default_icon") != "icons/browser.png":
-        errors.append("Browser Control action does not use canonical Browser icon")
+    if "action" in manifest:
+        errors.append("manifest must not expose a duplicate WebExtension toolbar action")
     if manifest.get("chrome_url_overrides", {}).get("newtab") != "newtab.html":
         errors.append("custom new tab not configured")
 
