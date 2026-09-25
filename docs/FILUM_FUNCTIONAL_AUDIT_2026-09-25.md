@@ -1,5 +1,9 @@
 # FILUM functional audit — 2026-09-25
 
+## Final Windows verification — run #116
+
+The validated build from complete source commit `0ceb64348c178a2073f326678de0bbcc557a82c7` passed the product gate, native build, and Windows runtime smoke. The smoke checked three repeated GHOST → NORMAL exits, the other modes, controls, Tor 100%, SOCKS5 proxy DNS, WebRTC after a mode switch, real Tor egress (`IsTor=true`), and stop/restore. The final inner ZIP SHA-256, Actions artifact digest, job IDs, detailed scope and remaining user-machine checks are recorded in `releases/FILUM_WINDOWS_X64_RUN_116.md`. Earlier sections below are historical findings and must not be read as the final status of run #116.
+
 ## User-machine toolbar failure after run #103
 
 Alberto reports that clicking the visible FILUM button does not open the sidebar. Run #103's self-test dispatched a synthetic `command` event on the button soon after startup; that did not prove a later real click still reaches the same node. The controller bound only the initial toolbarbutton, which CustomizableUI can replace or reparent. The proposed correction delegates `click` and keyboard `command` handling at the document level, deduplicates click-generated commands, and shows a visible error if panel initialization fails. The native self-test now calls `button.click()` rather than constructing a command event. This requires a new native Windows run and a user-machine GUI retest; do not treat the previous passing smoke as proof of this interaction.
