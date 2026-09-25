@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Browser Control Core",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Integrated control core for modes, privacy, resources, dark UI and ad blocking.",
   "permissions": [
     "tabs",
