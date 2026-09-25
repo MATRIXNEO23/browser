@@ -36,8 +36,13 @@ def main():
             original = source.read(entry)
             if original == replacement:
                 continue
-            if hashlib.sha256(original).hexdigest() != baseline_sha:
-                raise SystemExit(f"Artifact hash differs from source run: {entry}")
+            actual_sha = hashlib.sha256(original).hexdigest()
+            if actual_sha != baseline_sha:
+                raise SystemExit(
+                    f"Artifact hash differs from source run: {entry}; "
+                    f"actual={actual_sha}; old={baseline_sha}; "
+                    f"current={hashlib.sha256(replacement).hexdigest()}"
+                )
             changed[entry] = replacement
 
     if not changed:
