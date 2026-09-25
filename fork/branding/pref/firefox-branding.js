@@ -10,3 +10,4 @@ pref("browser.tabs.unloadOnLowMemory", true);
 pref("browser.newtabpage.activity-stream.showSponsored", false);
 pref("browser.newtabpage.activity-stream.showSponsoredTopSites", false);
 pref("browser.newtabpage.activity-stream.feeds.section.topstories", false);
+pref("sidebar.position_start", false);
