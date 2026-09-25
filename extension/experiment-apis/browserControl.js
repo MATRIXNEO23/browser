@@ -5,6 +5,9 @@
 const { Subprocess } = ChromeUtils.importESModule(
   "resource://gre/modules/Subprocess.sys.mjs"
 );
+const { setTimeout, clearTimeout } = ChromeUtils.importESModule(
+  "resource://gre/modules/Timer.sys.mjs"
+);
 
 const Ci = Components.interfaces;
 let torProcess = null;
@@ -175,8 +178,9 @@ async function startBundledTor() {
     }
   });
 
+  let timeoutId;
   const timeout = new Promise((_, reject) => {
-    setTimeout(
+    timeoutId = setTimeout(
       () => reject(new Error("Tor bootstrap timeout after 45 seconds.")),
       45000
     );
@@ -199,6 +203,8 @@ async function startBundledTor() {
     throw new Error(
       detail ? error.message + " Tor: " + detail : error.message
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   torStage = "ready";
