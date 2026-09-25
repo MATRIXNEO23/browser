@@ -1,8 +1,10 @@
 release_request: final
-source_head_before_trigger: c41ae7a573cb6f5dcedd2ec30bbec882a4fb25c4
+source_head_before_trigger: 83bb98e2a2f2960784857b687a2649250c68ab1c
 product_gate: required
 native_filum_sidebar_button: required
+filum_background_sha256: 2b2c7f659eaade035375be20f8735ab3daada878645cfb0cda5f7381721c1bc6
+browser_core_runtime_active: required
 windows_runtime_smoke: required
 tor_bundle: required
 stable_release_only: false
-rerun_reason: native_filum_sidebar_button
+rerun_reason: native_sidebar_background_and_core_activation
