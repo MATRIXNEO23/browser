@@ -291,7 +291,8 @@ async function restoreStaleTorState() {
   const saved = await browser.storage.local.get([
     'torEnabled',
     'torPreviousProxy',
-    'torPreviousSecureDns'
+    'torPreviousSecureDns',
+    'torPreviousSecureDnsUri'
   ]);
 
   if (!saved.torEnabled) return;
@@ -308,7 +309,10 @@ async function restoreStaleTorState() {
 
   try {
     if (saved.torPreviousSecureDns) {
-      await browser.browserControl.setSecureDns(saved.torPreviousSecureDns);
+      await browser.browserControl.setSecureDns(
+        saved.torPreviousSecureDns,
+        saved.torPreviousSecureDnsUri || ''
+      );
     }
   } catch (_) {}
 
@@ -319,7 +323,8 @@ async function restoreStaleTorState() {
   await browser.storage.local.set({ torEnabled: false });
   await browser.storage.local.remove([
     'torPreviousProxy',
-    'torPreviousSecureDns'
+    'torPreviousSecureDns',
+    'torPreviousSecureDnsUri'
   ]);
 }
 
@@ -327,12 +332,49 @@ async function setTorEnabled(enabled) {
   const saved = await browser.storage.local.get([
     'torEnabled',
     'torPreviousProxy',
-    'torPreviousSecureDns'
+    'torPreviousSecureDns',
+    'torPreviousSecureDnsUri'
   ]);
 
-  if (!!saved.torEnabled === enabled) {
+  if (enabled && saved.torEnabled) {
     const process = await browser.browserControl.getTorStatus();
-    return { enabled, process };
+
+    if (process?.bootstrapped) {
+      return { enabled: true, process };
+    }
+
+    try {
+      await browser.browserControl.stopTor();
+    } catch (_) {}
+
+    try {
+      if (saved.torPreviousProxy) {
+        await browser.proxy.settings.set({ value: saved.torPreviousProxy });
+      }
+    } catch (_) {}
+
+    try {
+      await browser.browserControl.setSecureDns(
+        saved.torPreviousSecureDns || 'off',
+        saved.torPreviousSecureDnsUri || ''
+      );
+    } catch (_) {}
+
+    await browser.storage.local.set({ torEnabled: false });
+    await browser.storage.local.remove([
+      'torPreviousProxy',
+      'torPreviousSecureDns',
+      'torPreviousSecureDnsUri'
+    ]);
+
+    return setTorEnabled(true);
+  }
+
+  if (!enabled && !saved.torEnabled) {
+    try {
+      await browser.browserControl.stopTor();
+    } catch (_) {}
+    return { enabled: false, process: { running: false, bootstrapped: false } };
   }
 
   if (enabled) {
@@ -341,7 +383,8 @@ async function setTorEnabled(enabled) {
 
     await browser.storage.local.set({
       torPreviousProxy: previousProxy?.value || { proxyType: 'system' },
-      torPreviousSecureDns: settings.secureDns || 'off'
+      torPreviousSecureDns: settings.secureDns || 'off',
+      torPreviousSecureDnsUri: settings.secureDnsUri || ''
     });
 
     try {
@@ -377,7 +420,10 @@ async function setTorEnabled(enabled) {
       } catch (_) {}
 
       try {
-        await browser.browserControl.setSecureDns(settings.secureDns || 'off');
+        await browser.browserControl.setSecureDns(
+          settings.secureDns || 'off',
+          settings.secureDnsUri || ''
+        );
       } catch (_) {}
 
       await browser.storage.local.set({ torEnabled: false });
@@ -404,14 +450,18 @@ async function setTorEnabled(enabled) {
 
   if (saved.torPreviousSecureDns) {
     try {
-      await browser.browserControl.setSecureDns(saved.torPreviousSecureDns);
+      await browser.browserControl.setSecureDns(
+        saved.torPreviousSecureDns,
+        saved.torPreviousSecureDnsUri || ''
+      );
     } catch (_) {}
   }
 
   await browser.storage.local.set({ torEnabled: false });
   await browser.storage.local.remove([
     'torPreviousProxy',
-    'torPreviousSecureDns'
+    'torPreviousSecureDns',
+    'torPreviousSecureDnsUri'
   ]);
 
   await applyRuntimePrivacy(await getMode());
