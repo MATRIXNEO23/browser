@@ -222,3 +222,14 @@ At capture time:
 ## Recovery instruction for next instance
 
 Read this file first, then verify current `main` HEAD and latest Actions run before doing any work. Continue from the TOR bootstrap blocker. Do not restart architecture work, do not change the approved background, and do not rerun the expensive full build unless TOR code/package contents actually change.
+
+## 2026-09-25 TOR diagnostic checkpoint (work in progress)
+
+- Verified remote `main` at `492df357371a70e96850f22a700c6a706b7d21e6` before edits. Read this file completely.
+- Rechecked Actions run `36116396358`: build succeeded, `Browser-Windows-x64` artifact `10854569035` remains available; its Windows smoke failed. Rechecked run `36117318277`: functional smoke succeeded through SOCKS5, then failed with generic `Timeout self-test.`; no final artifact.
+- Root of generic report: sidebar self-test waits 90 seconds for `torEnabled && bootstrapped`, but packaged TOR code rejects at 45 seconds. The self-test did not record the available TOR status/log before throwing.
+- Prepared a smoke-only update to `extension/sidebar.js`: sample `getStatus()` during TOR bootstrap, record process observed/running, bootstrap flag, recent `lastLog`, proxy, elapsed time, process failure, exit code if available, and error; continue launcher tests after failed TOR bootstrap. This changes only the self-test section, not the normal sidebar behavior or TOR engine.
+- Prepared `scripts/patch-smoke-sidebar.py` to replace only `chrome/browser/builtin-addons/browser-core/sidebar.js` in the run #99 staged `omni.ja`, verifying the original bytes against source SHA before replacement. A synthetic archive round trip passed. Gecko will not be rebuilt for this diagnostic.
+- Prepared smoke-only workflow changes to patch that test, probe bundled `tor.exe` against the runner network using a separate data directory and port, report its log/running/bootstrap/exit code, and allow 220 seconds for the complete test.
+- Next: commit/publish these changes plus a new `build/PROMOTE_TRIGGER` value to run the smoke-only workflow; inspect the TOR diagnostic and all later controls. Do not deliver any build from a failed smoke. If TOR engine/package code really needs a fix, do that alone and build once.
+- The approved New Tab/background, skin and sidebar design have not been edited.
