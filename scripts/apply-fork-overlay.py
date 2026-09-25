@@ -79,11 +79,68 @@ def patch_native_filum_button(path: Path):
                      removable="false"
                      overflows="false"
                      cui-areatype="toolbar"
-                     oncommand="SidebarController.toggle('resource-controller_matrixneo23_browser-sidebar-action');"/>
+                     oncommand="FilumSidebar.toggle();"/>
 
 """
     text = text.replace(needle, button + needle, 1)
     path.write_text(text, encoding="utf-8")
+
+
+def patch_filum_sidebar_controller(path: Path):
+    text = path.read_text(encoding="utf-8")
+    marker = "/* MATRIXNEO23 FILUM sidebar controller */"
+    if marker in text:
+        return
+
+    helper = r"""
+/* MATRIXNEO23 FILUM sidebar controller */
+var FilumSidebar = {
+  extensionId: "resource-controller@matrixneo23.browser",
+
+  findCommandId() {
+    for (const [commandID, sidebar] of SidebarController.sidebars) {
+      if (
+        sidebar?.extensionId === this.extensionId ||
+        sidebar?.name === this.extensionId
+      ) {
+        return commandID;
+      }
+    }
+    return null;
+  },
+
+  async toggle() {
+    try {
+      if (SidebarController.promiseInitialized) {
+        await SidebarController.promiseInitialized;
+      }
+
+      let commandID = null;
+      for (let attempt = 0; attempt < 20 && !commandID; attempt++) {
+        commandID = this.findCommandId();
+        if (!commandID) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      if (!commandID) {
+        console.error("FILUM sidebar is not registered.");
+        return;
+      }
+
+      if (SidebarController.isOpen && SidebarController.currentID === commandID) {
+        await SidebarController.hide();
+      } else {
+        await SidebarController.show(commandID);
+      }
+    } catch (error) {
+      console.error("FILUM sidebar toggle failed", error);
+    }
+  },
+};
+"""
+
+    path.write_text(text + "\n" + helper + "\n", encoding="utf-8")
 
 def patch_windows_identity(firefox: Path):
     manifest = firefox / "browser" / "app" / "firefox.exe.manifest"
@@ -144,6 +201,9 @@ def main():
     )
     patch_native_filum_button(
         firefox / "browser" / "base" / "content" / "navigator-toolbox.inc.xhtml"
+    )
+    patch_filum_sidebar_controller(
+        firefox / "browser" / "base" / "content" / "browser.js"
     )
     patch_windows_identity(firefox)
 
