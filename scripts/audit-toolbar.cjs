@@ -12,6 +12,7 @@ assert.match(source, /button \+ anchor/);
 
 function makeWindow() {
   const listeners = [];
+  let panelBrowser = null;
   const button = {
     addEventListener(type, callback) {
       assert.equal(type, 'command');
@@ -21,16 +22,21 @@ function makeWindow() {
   };
   const window = {addEventListener() {}};
   const context = vm.createContext({
-    document: {getElementById(id) { return id === 'filum-sidebar-button' ? button : null; }},
+    document: {getElementById(id) {
+      if (id === 'filum-sidebar-button') return button;
+      if (id === 'filum-panel-browser') return panelBrowser;
+      return null;
+    }},
     window,
     Services: {prefs: {getBoolPref() { return false; }}},
+    setTimeout,
     console
   });
   vm.runInContext(controller, context);
   assert.equal(context.FilumPanel.bindButton(), true);
   assert.equal(listeners.length, 1);
   assert.equal(window.FilumPanel, context.FilumPanel);
-  return {button, panel: context.FilumPanel};
+  return {button, panel: context.FilumPanel, setBrowser(value) { panelBrowser = value; }};
 }
 
 const first = makeWindow();
@@ -44,4 +50,11 @@ second.button.click();
 assert.equal(firstToggles, 1);
 assert.equal(secondToggles, 1);
 assert.equal(first.panel.bindButton(), true);
-console.log('Native toolbar command gate: PASS');
+setTimeout(() => first.setBrowser({
+  currentURI: {spec: 'moz-extension://test/sidebar.html?selftest=1'},
+  addEventListener() {}
+}), 20);
+first.panel.waitForPanelLoad('moz-extension://test/sidebar.html').then(uri => {
+  assert.match(uri, /sidebar\.html/);
+  console.log('Native toolbar command and asynchronous panel gate: PASS');
+}).catch(error => { console.error(error); process.exitCode = 1; });

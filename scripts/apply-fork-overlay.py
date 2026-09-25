@@ -306,7 +306,16 @@ var FilumPanel = {
   },
 
   async waitForPanelLoad(expectedBase) {
-    const browser = this.browser;
+    // The command handler opens the panel asynchronously; the browser node
+    // does not exist yet at the instant button.click() returns.
+    let browser = this.browser;
+    for (let attempt = 0; !browser && attempt < 100; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      browser = this.browser;
+    }
+    if (!browser) {
+      throw new Error("FILUM panel browser was not created after button click");
+    }
 
     await new Promise(resolve => {
       if (browser.currentURI?.spec?.startsWith(expectedBase)) {
