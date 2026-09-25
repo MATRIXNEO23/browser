@@ -77,7 +77,9 @@ jobs:
           grep -n "MATRIXNEO23 Browser fork" firefox-src/browser/themes/shared/toolbarbuttons.css
           grep -n "#navigator-toolbox" firefox-src/browser/themes/shared/toolbarbuttons.css
           grep -n "filum-sidebar-button" firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
-          grep -n "resource-controller_matrixneo23_browser-sidebar-action" firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
+          grep -n "FilumSidebar.toggle()" firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
+          grep -n "MATRIXNEO23 FILUM sidebar controller" firefox-src/browser/base/content/browser.js
+          grep -n 'extensionId: "resource-controller@matrixneo23.browser"' firefox-src/browser/base/content/browser.js
           grep -n -- "--enable-artifact-builds" firefox-src/mozconfig
 
           test -f firefox-src/browser/extensions/browser-core/extension/manifest.json
@@ -165,6 +167,7 @@ jobs:
 
           BUILTIN_FOUND=0
           NATIVE_BUTTON_FOUND=0
+          NATIVE_CONTROLLER_FOUND=0
           while IFS= read -r omni; do
             if unzip -l "$omni" 2>/dev/null | grep -q 'builtin-addons/browser-core/manifest.json'; then
               BUILTIN_FOUND=1
@@ -172,6 +175,10 @@ jobs:
 
             if unzip -p "$omni" 2>/dev/null | grep -q 'filum-sidebar-button'; then
               NATIVE_BUTTON_FOUND=1
+            fi
+
+            if unzip -p "$omni" 2>/dev/null | grep -q 'MATRIXNEO23 FILUM sidebar controller'; then
+              NATIVE_CONTROLLER_FOUND=1
             fi
           done <<< "$OMNI_MATCHES"
 
@@ -182,6 +189,11 @@ jobs:
 
           if [ "$NATIVE_BUTTON_FOUND" -ne 1 ]; then
             echo "Native FILUM sidebar button not found in packaged chrome."
+            exit 1
+          fi
+
+          if [ "$NATIVE_CONTROLLER_FOUND" -ne 1 ]; then
+            echo "Native FILUM sidebar controller not found in packaged chrome."
             exit 1
           fi
 
