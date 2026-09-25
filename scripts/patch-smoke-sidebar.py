@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
+import stat
 import tempfile
 import zipfile
 
@@ -18,32 +19,34 @@ def main():
     entry = "chrome/browser/builtin-addons/browser-core/sidebar.js"
     replacement = Path("extension/sidebar.js").read_bytes()
 
-    with zipfile.ZipFile(args.omni) as source:
-        matches = [name for name in source.namelist() if name == entry]
-        if len(matches) != 1:
-            raise SystemExit(f"Expected exactly one {entry}; found {len(matches)}")
-        original = source.read(entry)
-        if hashlib.sha256(original).hexdigest() != args.baseline_sha256.lower():
-            raise SystemExit("Artifact sidebar.js hash differs from source run; refusing patch")
-        if original == replacement:
-            raise SystemExit("No newer smoke test to patch")
+    handle, temp_name = tempfile.mkstemp(suffix=".ja", dir=args.omni.parent)
+    os.close(handle)
+    try:
+        with zipfile.ZipFile(args.omni) as source:
+            matches = [name for name in source.namelist() if name == entry]
+            if len(matches) != 1:
+                raise SystemExit(f"Expected exactly one {entry}; found {len(matches)}")
+            original = source.read(entry)
+            if hashlib.sha256(original).hexdigest() != args.baseline_sha256.lower():
+                raise SystemExit("Artifact sidebar.js hash differs from source run; refusing patch")
+            if original == replacement:
+                raise SystemExit("No newer smoke test to patch")
 
-        handle, temp_name = tempfile.mkstemp(suffix=".ja", dir=args.omni.parent)
-        os.close(handle)
-        try:
             with zipfile.ZipFile(temp_name, "w") as target:
                 for info in source.infolist():
                     target.writestr(
                         info,
                         replacement if info.filename == entry else source.read(info),
                     )
-            with zipfile.ZipFile(temp_name) as verify:
-                if verify.read(entry) != replacement or verify.testzip() is not None:
-                    raise RuntimeError("Patched archive verification failed")
-            os.replace(temp_name, args.omni)
-        finally:
-            if os.path.exists(temp_name):
-                os.unlink(temp_name)
+
+        with zipfile.ZipFile(temp_name) as verify:
+            if verify.read(entry) != replacement or verify.testzip() is not None:
+                raise RuntimeError("Patched archive verification failed")
+        args.omni.chmod(args.omni.stat().st_mode | stat.S_IWRITE)
+        os.replace(temp_name, args.omni)
+    finally:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)
 
     print("Patched smoke-only sidebar.js:", args.omni)
     print("Original SHA256:", hashlib.sha256(original).hexdigest())
