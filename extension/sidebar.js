@@ -341,26 +341,28 @@ document.getElementById('enforce').addEventListener('click', async () => {
 });
 
 browserTheme.addEventListener('change', async () => {
+  const requested = browserTheme.value;
   try {
     await browser.runtime.sendMessage({
       type: 'set-browser-theme',
-      mode: browserTheme.value
+      mode: requested
     });
-    setPanelStatus('Interfaccia: ' + browserTheme.value.toUpperCase());
+    setPanelStatus('Interfaccia: ' + requested.toUpperCase());
   } catch (error) {
     setPanelStatus('Interfaccia: ' + errorText(error), true);
   }
 });
 
 websiteAppearance.addEventListener('change', async () => {
+  const requested = websiteAppearance.value;
   try {
     await browser.runtime.sendMessage({
       type: 'set-website-appearance',
-      mode: websiteAppearance.value
+      mode: requested
     });
     await loadAdvancedSettings();
     setPanelStatus(
-      'Aspetto siti: ' + websiteAppearance.value.toUpperCase()
+      'Aspetto siti: ' + requested.toUpperCase()
     );
   } catch (error) {
     setPanelStatus('Aspetto siti: ' + errorText(error), true);
@@ -748,14 +750,15 @@ async function runControlSelfTest() {
       uri: initialAdvanced.secureDnsUri || ''
     });
 
-    websiteAppearance.value =
+    const requestedAppearance =
       initialAdvanced.websiteAppearance === 'dark' ? 'light' : 'dark';
+    websiteAppearance.value = requestedAppearance;
     websiteAppearance.dispatchEvent(new Event('change'));
     await waitFor(async () => {
       const value = await browser.runtime.sendMessage({
         type: 'get-advanced-settings'
       });
-      return value.websiteAppearance === websiteAppearance.value;
+      return value.websiteAppearance === requestedAppearance;
     });
     record('website-appearance', true);
 
@@ -765,13 +768,14 @@ async function runControlSelfTest() {
     });
 
     const initialTheme = initialAdvanced.browserTheme || 'dark';
-    browserTheme.value = initialTheme === 'black' ? 'dark' : 'black';
+    const requestedTheme = initialTheme === 'black' ? 'dark' : 'black';
+    browserTheme.value = requestedTheme;
     browserTheme.dispatchEvent(new Event('change'));
     await waitFor(async () => {
       const value = await browser.runtime.sendMessage({
         type: 'get-advanced-settings'
       });
-      return value.browserTheme === browserTheme.value;
+      return value.browserTheme === requestedTheme;
     });
     record('browser-theme', true);
 
