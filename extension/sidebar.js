@@ -17,6 +17,7 @@ const applyNetworkButton = document.getElementById('apply-network');
 
 let adsEnabled = true;
 let torEnabled = false;
+let torActionError = '';
 let previousCpuSample = null;
 
 function formatMb(bytes) {
@@ -234,6 +235,7 @@ adsButton.addEventListener('click', async () => {
 
 torButton.addEventListener('click', async () => {
   torButton.disabled = true;
+  torActionError = '';
   torStatus.textContent = torEnabled
     ? 'Disattivazione TOR…'
     : 'Avvio TOR e bootstrap della rete…';
@@ -254,6 +256,7 @@ torButton.addEventListener('click', async () => {
       loadNetworkSettings()
     ]);
   } catch (error) {
+    torActionError = errorText(error);
     torStatus.textContent = 'TOR: ' + errorText(error);
     setPanelStatus('TOR: ' + errorText(error), true);
     await refresh().catch(() => {});
@@ -712,6 +715,10 @@ async function runControlSelfTest() {
           torStatusError = lastTorStatus.torProcess.error;
           break;
         }
+        if (torActionError) {
+          torStatusError = torActionError;
+          break;
+        }
         if (observedTorProcess && !lastTorStatus.torProcess?.running &&
             Date.now() - torStartedAt > 3000) {
           break;
@@ -733,7 +740,7 @@ async function runControlSelfTest() {
       proxy: proxy?.value || null,
       processFailure: observedTorProcess && !lastTorStatus?.torProcess?.running,
       exitCode: lastTorStatus?.torProcess?.exitCode ?? null,
-      error: torStatusError || (torOn ? '' : torStatus.textContent)
+      error: torStatusError || torActionError || (torOn ? '' : torStatus.textContent)
     });
     record('tor-bootstrap-100', !!torOn?.torProcess?.bootstrapped, torDiagnostic);
     record(
