@@ -38,6 +38,29 @@ def patch_browser_chrome(path: Path, project: Path):
     text += "\n" + MARKER + "\n" + chrome_css + "\n"
     path.write_text(text, encoding="utf-8")
 
+
+def patch_native_filum_button(path: Path):
+    text = path.read_text(encoding="utf-8")
+    if 'id="filum-sidebar-button"' in text:
+        return
+
+    needle = '      <toolbarbutton id="downloads-button"'
+    if needle not in text:
+        raise RuntimeError("downloads toolbar button anchor not found")
+
+    button = """      <toolbarbutton id="filum-sidebar-button"
+                     class="toolbarbutton-1 chromeclass-toolbar-additional"
+                     label="FILUM"
+                     tooltiptext="Apri/chiudi pannello FILUM"
+                     removable="false"
+                     overflows="false"
+                     cui-areatype="toolbar"
+                     oncommand="SidebarController.toggle('resource-controller_matrixneo23_browser-sidebar-action');"/>
+
+"""
+    text = text.replace(needle, button + needle, 1)
+    path.write_text(text, encoding="utf-8")
+
 def patch_windows_identity(firefox: Path):
     manifest = firefox / "browser" / "app" / "firefox.exe.manifest"
     text = manifest.read_text(encoding="utf-8")
@@ -93,6 +116,9 @@ def main():
     patch_browser_chrome(
         firefox / "browser" / "themes" / "shared" / "toolbarbuttons.css",
         project,
+    )
+    patch_native_filum_button(
+        firefox / "browser" / "base" / "content" / "navigator-toolbox.inc.xhtml"
     )
     patch_windows_identity(firefox)
 
