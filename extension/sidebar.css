@@ -35,6 +35,22 @@ button, select, input { font: inherit; }
   padding: 8px;
 }
 
+.mode-warning {
+  position: sticky;
+  top: 42px;
+  z-index: 5;
+  margin: 0 0 7px;
+  padding: 8px;
+  border: 1px solid #a85d39;
+  border-radius: 8px;
+  background: #3a211c;
+  color: #ffe1c8;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.mode-warning[hidden] { display: none; }
+
 .topbar {
   position: sticky;
   top: 0;

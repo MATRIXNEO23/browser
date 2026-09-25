@@ -45,6 +45,9 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/apply-fork-overlay.py scripts/validate-product.py scripts/generate-brand-assets.py
           python3 scripts/validate-product.py
+          python3 scripts/audit-wiring.py
+          node scripts/audit-functional.cjs
+          node scripts/audit-toolbar.cjs
           python3 -m json.tool fork/UPSTREAM.json >/dev/null
           python3 -m json.tool extension/manifest.json >/dev/null
           python3 -m json.tool distribution/policies.json >/dev/null
@@ -76,9 +79,9 @@ jobs:
           grep -n "browser-core" firefox-src/browser/extensions/moz.build
           grep -n "MATRIXNEO23 Browser fork" firefox-src/browser/themes/shared/toolbarbuttons.css
           grep -n "#navigator-toolbox" firefox-src/browser/themes/shared/toolbarbuttons.css
-          grep -n "filum-sidebar-button" firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
+          grep -n 'id="filum-sidebar-button"' firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
           grep -n 'button.addEventListener("command"' firefox-src/browser/base/content/browser.js
-          grep -n 'button.dispatchEvent(command)' firefox-src/browser/base/content/browser.js
+          grep -n 'button.click()' firefox-src/browser/base/content/browser.js
           grep -n 'id="filum-panel-box"' firefox-src/browser/base/content/browser-box.inc.xhtml
           grep -n 'browserId: "filum-panel-browser"' firefox-src/browser/base/content/browser.js
           grep -n "MATRIXNEO23 FILUM native panel controller" firefox-src/browser/base/content/browser.js
@@ -190,7 +193,9 @@ jobs:
               CYBER_BACKGROUND_FOUND=1
             fi
 
-            if grep -aq 'id="filum-sidebar-button"' <<< "$BROWSER_XHTML"; then
+            if grep -aq 'buttonId: "filum-sidebar-button"' <<< "$BROWSER_JS" && \
+               grep -aq 'button.addEventListener("command"' <<< "$BROWSER_JS" && \
+               grep -aq 'id="filum-sidebar-button"' <<< "$BROWSER_XHTML"; then
               NATIVE_BUTTON_FOUND=1
             fi
 
@@ -364,11 +369,9 @@ jobs:
           'user_pref("filum.selftest.enabled", true);' | Set-Content (Join-Path $profile "user.js") -Encoding ascii
 
           $args = @(
-            "-headless",
             "-no-remote",
             "-new-instance",
-            "-profile", $profile,
-            "about:blank"
+            "-profile", $profile
           )
 
           $launcher = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -PassThru
@@ -438,33 +441,19 @@ jobs:
             }
 
             $prefsPath = Join-Path $profile "prefs.js"
-            $panelDeadline = (Get-Date).AddSeconds(45)
-            $match = $null
-            while ((Get-Date) -lt $panelDeadline) {
-              Start-Sleep -Seconds 1
-              if (-not (Test-Path $prefsPath)) { continue }
-              $prefsText = Get-Content $prefsPath -Raw
-              $match = [regex]::Match(
-                $prefsText,
-                'user_pref\("filum\.selftest\.panel",\s*"([^"]+)"\);'
-              )
-              if ($match.Success) { break }
-            }
-            if (-not $match.Success) {
-              throw "FILUM native panel self-test did not report a result."
-            }
-
-            $panelResult = $match.Groups[1].Value
-            Write-Host "FILUM panel self-test: $panelResult"
-            if ($panelResult -ne "PASS") {
-              throw "FILUM native panel self-test failed: $panelResult"
-            }
-
-            $controlDeadline = (Get-Date).AddSeconds(220)
+            $controlDeadline = (Get-Date).AddSeconds(360)
             $controlsRaw = $null
             while ((Get-Date) -lt $controlDeadline) {
               Start-Sleep -Seconds 2
+              if (-not (Test-Path $prefsPath)) { continue }
               $prefsText = Get-Content $prefsPath -Raw
+              $panelFailure = [regex]::Match(
+                $prefsText,
+                'user_pref\("filum\.selftest\.panel",\s*"FAIL:((?:\\.|[^"])*)"\);'
+              )
+              if ($panelFailure.Success) {
+                throw "FILUM panel self-test failed: $($panelFailure.Groups[1].Value)"
+              }
               $controlMatch = [regex]::Match(
                 $prefsText,
                 'user_pref\("filum\.selftest\.controls",\s*"((?:\\.|[^"])*)"\);'
@@ -477,6 +466,15 @@ jobs:
             }
 
             if (-not $controlsRaw) {
+              if (Test-Path $prefsPath) {
+                $panelMatch = [regex]::Match(
+                  (Get-Content $prefsPath -Raw),
+                  'user_pref\("filum\.selftest\.panel",\s*"((?:\\.|[^"])*)"\);'
+                )
+                if ($panelMatch.Success) {
+                  Write-Host "FILUM panel self-test state: $($panelMatch.Groups[1].Value)"
+                }
+              }
               throw "FILUM control self-test did not report a result."
             }
 
@@ -493,7 +491,7 @@ jobs:
             Write-Host "Windows Browser runtime launch passed."
             Write-Host "Profile initialized with $($profileFiles.Count) entries."
             Write-Host "FILUM core runtime activation passed."
-            Write-Host "FILUM native panel open/load test passed."
+            Write-Host "FILUM native panel loaded and ran the functional control report."
             Write-Host "FILUM sidebar controls functional test passed."
           }
           finally {

@@ -1,4 +1,9 @@
 const list = document.getElementById('addons');
+const status = document.getElementById('addons-status');
+
+function showError(error) {
+  status.textContent = 'Addon: ' + (error?.message || error);
+}
 
 function button(label, action) {
   const el = document.createElement('button');
@@ -35,7 +40,7 @@ function makeAddonRow(addon, selfId) {
 
   if (addon.homepageUrl) {
     actions.appendChild(button('Pagina', () => {
-      browser.tabs.create({ url: addon.homepageUrl });
+      browser.tabs.create({ url: addon.homepageUrl }).catch(showError);
     }));
   }
 
@@ -45,7 +50,7 @@ function makeAddonRow(addon, selfId) {
         try {
           await browser.management.setEnabled(addon.id, !addon.enabled);
           await render();
-        } catch (_) {}
+        } catch (error) { showError(error); }
       }));
     }
 
@@ -53,9 +58,7 @@ function makeAddonRow(addon, selfId) {
       try {
         await browser.management.uninstall(addon.id, { showConfirmDialog: true });
         await render();
-      } catch (_) {
-        // User cancellation or protected addon.
-      }
+      } catch (error) { showError(error); }
     }));
   }
 
@@ -64,6 +67,7 @@ function makeAddonRow(addon, selfId) {
 }
 
 async function render() {
+  status.textContent = '';
   const [addons, self] = await Promise.all([
     browser.management.getAll(),
     browser.management.getSelf()
@@ -90,7 +94,7 @@ async function render() {
 }
 
 document.getElementById('store').addEventListener('click', () => {
-  browser.tabs.create({ url: 'https://addons.mozilla.org/firefox/extensions/' });
+  browser.tabs.create({ url: 'https://addons.mozilla.org/firefox/extensions/' }).catch(showError);
 });
 
-render();
+render().catch(showError);

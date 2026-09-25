@@ -67,22 +67,17 @@ def patch_native_filum_button(path: Path):
     text = path.read_text(encoding="utf-8")
     if 'id="filum-sidebar-button"' in text:
         return
+    anchor = '  <toolbarbutton id="nav-bar-overflow-button"'
+    if anchor not in text:
+        raise RuntimeError("Navbar overflow button anchor not found")
+    button = '''  <toolbarbutton id="filum-sidebar-button"
+                 class="toolbarbutton-1 chromeclass-toolbar-additional"
+                 label="FILUM"
+                 tooltiptext="Apri/chiudi pannello FILUM"
+                 removable="false" overflows="false"/>
 
-    needle = '      <toolbarbutton id="downloads-button"'
-    if needle not in text:
-        raise RuntimeError("downloads toolbar button anchor not found")
-
-    button = """      <toolbarbutton id="filum-sidebar-button"
-                     class="toolbarbutton-1 chromeclass-toolbar-additional"
-                     label="FILUM"
-                     tooltiptext="Apri/chiudi pannello FILUM"
-                     removable="false"
-                     overflows="false"
-                     cui-areatype="toolbar"/>
-
-"""
-    text = text.replace(needle, button + needle, 1)
-    path.write_text(text, encoding="utf-8")
+'''
+    path.write_text(text.replace(anchor, button + anchor, 1), encoding="utf-8")
 
 
 def patch_filum_panel_markup(path: Path):
@@ -141,21 +136,22 @@ var FilumPanel = {
     return document.getElementById(this.buttonId);
   },
 
+  traceSelfTest(stage) {
+    if (!Services.prefs.getBoolPref("filum.selftest.enabled", false)) return;
+    Services.prefs.setStringPref("filum.selftest.panel", stage);
+    Services.prefs.savePrefFile(null);
+  },
+
   bindButton() {
     if (this._bound) {
       return true;
     }
-
     const button = this.button;
-    if (!button) {
-      console.error("FILUM native toolbar button is unavailable");
-      return false;
-    }
-
+    if (!button) return false;
     button.addEventListener("command", () => {
+      this.traceSelfTest("COMMAND");
       this.toggle();
     });
-
     this._bound = true;
     return true;
   },
@@ -304,12 +300,22 @@ var FilumPanel = {
       return this.hide();
     } catch (error) {
       console.error("FILUM native panel toggle failed", error);
+      Services.prompt.alert(window, "FILUM", "Impossibile aprire la barra: " + String(error));
       return { open: false, error: String(error) };
     }
   },
 
   async waitForPanelLoad(expectedBase) {
-    const browser = this.browser;
+    // The command handler opens the panel asynchronously; the browser node
+    // does not exist yet at the instant button.click() returns.
+    let browser = this.browser;
+    for (let attempt = 0; !browser && attempt < 100; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      browser = this.browser;
+    }
+    if (!browser) {
+      throw new Error("FILUM panel browser was not created after button click");
+    }
 
     await new Promise(resolve => {
       if (browser.currentURI?.spec?.startsWith(expectedBase)) {
@@ -333,9 +339,12 @@ var FilumPanel = {
 
   async runSelfTest() {
     try {
+      this.traceSelfTest("START");
       if (!this.bindButton()) {
         throw new Error("FILUM toolbar button could not be bound");
       }
+
+      this.traceSelfTest("BOUND:" + !!this.button);
 
       this.hide();
 
@@ -343,36 +352,40 @@ var FilumPanel = {
       const expectedBase = policy.getURL(this.panelPath);
 
       const button = this.button;
-      const command = document.createEvent("Events");
-      command.initEvent("command", true, true);
-      button.dispatchEvent(command);
+      if (!button) {
+        throw new Error("FILUM toolbar button is unavailable");
+      }
+      button.click();
+
+      this.traceSelfTest("CLICKED");
 
       const current = await this.waitForPanelLoad(expectedBase);
       const passed =
         !this.box.hidden &&
         current.startsWith(expectedBase);
 
-      Services.prefs.setStringPref(
-        "filum.selftest.panel",
-        passed ? "PASS" : "FAIL:" + current
-      );
+      this.traceSelfTest(passed ? "PASS" : "FAIL:" + current);
 
       return { passed, current };
     } catch (error) {
-      Services.prefs.setStringPref(
-        "filum.selftest.panel",
-        "FAIL:" + String(error)
-      );
+      this.traceSelfTest("FAIL:" + String(error));
       this.hide();
       return { passed: false, error: String(error) };
     }
   },
 };
 
+window.FilumPanel = FilumPanel;
+
 window.addEventListener(
   "load",
   () => {
-    FilumPanel.bindButton();
+    try {
+      FilumPanel.bindButton();
+    } catch (error) {
+      FilumPanel.traceSelfTest("FAIL:bind:" + String(error));
+      console.error("FILUM toolbar widget registration failed", error);
+    }
 
     if (Services.prefs.getBoolPref("filum.selftest.enabled", false)) {
       setTimeout(() => FilumPanel.runSelfTest(), 1500);

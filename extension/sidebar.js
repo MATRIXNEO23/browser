@@ -1,4 +1,5 @@
 const statusEl = document.getElementById('status');
+const modeWarning = document.getElementById('mode-warning');
 const resourceEl = document.getElementById('resource-stats');
 const adsButton = document.getElementById('ads');
 const modeButtons = [...document.querySelectorAll('[data-mode]')];
@@ -6,6 +7,7 @@ const browserTheme = document.getElementById('browser-theme');
 const websiteAppearance = document.getElementById('website-appearance');
 const httpsOnly = document.getElementById('https-only');
 const secureDns = document.getElementById('secure-dns');
+const dnsProvider = document.getElementById('dns-provider');
 const dnsEndpoint = document.getElementById('dns-endpoint');
 const applyDns = document.getElementById('apply-dns');
 const dnsStatus = document.getElementById('dns-status');
@@ -14,11 +16,24 @@ const hardwareNote = document.getElementById('hardware-note');
 const torButton = document.getElementById('tor-toggle');
 const torStatus = document.getElementById('tor-status');
 const applyNetworkButton = document.getElementById('apply-network');
+const diagnosticsButton = document.getElementById('diagnostics');
 
-let adsEnabled = true;
+let adsEnabled = null;
 let torEnabled = false;
+let torStarting = false;
 let torActionError = '';
 let previousCpuSample = null;
+const DNS_PROVIDERS = Object.freeze({
+  cloudflare: 'https://cloudflare-dns.com/dns-query',
+  google: 'https://dns.google/dns-query',
+  quad9: 'https://dns.quad9.net/dns-query'
+});
+
+function providerFor(level, uri) {
+  if (level === 'off') return 'system';
+  if (!uri) return 'default';
+  return Object.keys(DNS_PROVIDERS).find(key => DNS_PROVIDERS[key] === uri) || 'custom';
+}
 
 function formatMb(bytes) {
   return (Number(bytes || 0) / 1024 / 1024).toFixed(0) + ' MB';
@@ -78,30 +93,62 @@ function renderResources(stats) {
 
 function render(data) {
   const mode = data?.mode || 'NORMAL';
-  adsEnabled = data?.adsEnabled !== false;
+  adsEnabled = typeof data?.adsEnabled === 'boolean' ? data.adsEnabled : null;
   torEnabled = !!data?.torEnabled;
+  torStarting = !!data?.torStarting;
 
   setModeVisual(mode);
+  const health = data?.modeHealth;
+  const warnings = [];
+  if (adsEnabled === null) warnings.push('ADS: stato non verificabile.');
+  if (!health?.ok) warnings.push(
+    `${mode}: applicazione incompleta o interrotta. ${health?.issues?.join(' · ') || 'Stato non verificabile.'}`
+  );
+  if (mode === 'GHOST' && data?.ghostSessionRestartedAt) {
+    warnings.push('GHOST: pulizia eseguita, poi un errore ha riavviato una nuova sessione vuota.');
+  }
+  if (torEnabled && (!data?.torProcess?.bootstrapped || !data?.torRouted)) {
+    warnings.push('TOR: connessione o instradamento interrotto; arresta TOR per ripristinare il proxy.');
+  }
+  if (!torEnabled && !data?.torStarting && data?.torProcess?.running) {
+    warnings.push('TOR: processo inatteso senza instradamento confermato; arresta TOR.');
+  }
+  modeWarning.hidden = !warnings.length;
+  modeWarning.textContent = warnings.length ? '⚠ ' + warnings.join(' · ') : '';
 
-  adsButton.textContent = adsEnabled ? 'ADS: ON' : 'ADS: OFF';
+  adsButton.textContent = adsEnabled === null ? 'ADS: ERRORE' : adsEnabled ? 'ADS: ON' : 'ADS: OFF';
   adsButton.classList.toggle('active', adsEnabled);
   adsButton.setAttribute('aria-pressed', String(adsEnabled));
 
   const torReady = !!data?.torProcess?.bootstrapped;
-  torButton.textContent = torEnabled && torReady ? 'TOR: ON' : 'TOR: OFF';
-  torButton.classList.toggle('active', torEnabled && torReady);
-  torButton.setAttribute('aria-pressed', String(torEnabled && torReady));
+  const torRouted = torEnabled && torReady && data?.torRouted;
+  torButton.textContent = torRouted ? 'TOR: ON' : data?.torStarting ? 'TOR: AVVIO' : torEnabled || data?.torProcess?.running
+    ? 'TOR: ERRORE' : 'TOR: OFF';
+  torButton.classList.toggle('active', torRouted);
+  torButton.setAttribute('aria-pressed', String(torRouted));
+  dnsProvider.disabled = torEnabled || torStarting;
+  secureDns.disabled = torEnabled || torStarting;
+  dnsEndpoint.disabled = torEnabled || torStarting;
+  applyDns.disabled = torEnabled || torStarting;
 
-  if (data?.torProcess?.error) {
+  if (torEnabled && data?.torProcess?.error) {
     torStatus.textContent = 'TOR: ' + data.torProcess.error;
-  } else if (torEnabled && torReady) {
+  } else if (torEnabled && !torReady) {
+    torStatus.textContent = '⚠ TOR interrotto o bootstrap perso. Premi per arrestare e ripristinare il proxy.';
+  } else if (torEnabled && !torRouted) {
+    torStatus.textContent = '⚠ TOR avviato, ma proxy SOCKS5/DNS non confermato. Premi per arrestare.';
+  } else if (torRouted) {
     torStatus.textContent =
       'TOR attivo · bootstrap 100% · SOCKS5 + DNS remoto · WebRTC bloccato.';
+  } else if (data?.torStarting) {
+    torStatus.textContent = 'TOR in avvio e bootstrap…';
   } else if (data?.torProcess?.running) {
-    torStatus.textContent = 'TOR in avvio…';
+    torStatus.textContent = '⚠ Processo TOR inatteso; premi per arrestare.';
   } else {
     torStatus.textContent = 'TOR disattivato.';
   }
+
+  if (torEnabled) dnsStatus.textContent = 'DNS gestito da TOR; modifica disponibile dopo lo stop.';
 
   renderResources(data?.processStats);
   updateSocksVisibility();
@@ -156,10 +203,13 @@ async function loadAdvancedSettings() {
     httpsOnly.checked = !!data.httpsOnly;
     secureDns.value = data.secureDns || 'off';
     dnsEndpoint.value = data.secureDnsUri || '';
+    dnsProvider.value = providerFor(secureDns.value, dnsEndpoint.value);
     hardwareAccel.checked = data.hardwareAcceleration !== false;
 
     dnsStatus.textContent =
-      data.secureDns === 'off'
+      torEnabled
+        ? 'DNS gestito da TOR; modifica disponibile dopo lo stop.'
+        : data.secureDns === 'off'
         ? 'DNS di sistema attivo.'
         : data.secureDnsUri
           ? 'DoH personalizzato: ' + data.secureDnsUri
@@ -184,7 +234,7 @@ async function selectMode(mode) {
       mode
     });
 
-    if (!result?.ok || result.mode !== mode) {
+    if (!result || result.mode !== mode) {
       throw new Error('La modalità non è stata confermata dal core.');
     }
 
@@ -195,9 +245,14 @@ async function selectMode(mode) {
       throw new Error('La modalità riletta non corrisponde a ' + mode + '.');
     }
 
+    if (!data.modeHealth?.ok) {
+      setPanelStatus('Modalità parziale: controlla il warning in alto.', true);
+    }
+
     return data;
   } catch (error) {
-    setModeVisual(previous);
+    try { await refresh(); }
+    catch (_) { setModeVisual(previous); }
     setPanelStatus('Modalità: ' + errorText(error), true);
     throw error;
   }
@@ -211,7 +266,16 @@ for (const button of modeButtons) {
   });
 }
 
+diagnosticsButton.addEventListener('click', async () => {
+  try {
+    await browser.tabs.create({ url: browser.runtime.getURL('diagnostics.html') });
+  } catch (error) {
+    setPanelStatus('Diagnostica: ' + errorText(error), true);
+  }
+});
+
 adsButton.addEventListener('click', async () => {
+  if (adsEnabled === null) { await refresh(); return; }
   const requested = !adsEnabled;
   adsButton.classList.toggle('active', requested);
   adsButton.textContent = requested ? 'ADS: ON' : 'ADS: OFF';
@@ -236,17 +300,17 @@ adsButton.addEventListener('click', async () => {
 torButton.addEventListener('click', async () => {
   torButton.disabled = true;
   torActionError = '';
-  torStatus.textContent = torEnabled
-    ? 'Disattivazione TOR…'
-    : 'Avvio TOR e bootstrap della rete…';
 
   try {
+    const current = await getStatus();
+    const stopping = current.torEnabled || current.torProcess?.running;
+    torStatus.textContent = stopping ? 'Disattivazione TOR…' : 'Avvio TOR e bootstrap della rete…';
     const result = await browser.runtime.sendMessage({
       type: 'set-tor',
-      enabled: !torEnabled
+      enabled: !stopping
     });
 
-    if (!torEnabled && (!result?.enabled || !result?.process?.bootstrapped)) {
+    if (!stopping && (!result?.enabled || !result?.process?.bootstrapped)) {
       throw new Error('TOR non ha completato il bootstrap.');
     }
 
@@ -324,6 +388,27 @@ httpsOnly.addEventListener('change', async () => {
 });
 
 secureDns.addEventListener('change', () => {
+  if (secureDns.value === 'off') dnsEndpoint.value = '';
+  dnsProvider.value = providerFor(secureDns.value, dnsEndpoint.value);
+  dnsStatus.textContent = 'Premi “Applica DNS” per confermare la modifica.';
+});
+
+dnsProvider.addEventListener('change', () => {
+  const choice = dnsProvider.value;
+  if (choice === 'system') {
+    secureDns.value = 'off';
+    dnsEndpoint.value = '';
+  } else {
+    if (secureDns.value === 'off') secureDns.value = 'balanced';
+    if (choice === 'default') dnsEndpoint.value = '';
+    else if (DNS_PROVIDERS[choice]) dnsEndpoint.value = DNS_PROVIDERS[choice];
+  }
+  dnsStatus.textContent = 'Premi “Applica DNS” per confermare la modifica.';
+});
+
+dnsEndpoint.addEventListener('input', () => {
+  if (dnsEndpoint.value.trim() && secureDns.value === 'off') secureDns.value = 'balanced';
+  dnsProvider.value = providerFor(secureDns.value, dnsEndpoint.value.trim());
   dnsStatus.textContent = 'Premi “Applica DNS” per confermare la modifica.';
 });
 
@@ -346,23 +431,27 @@ applyDns.addEventListener('click', async () => {
       uri
     });
 
-    if (result?.level !== level) {
+    if (result?.level !== level || (level !== 'off' && result.uri !== uri)) {
       throw new Error('Configurazione DNS non confermata.');
     }
 
-    await loadAdvancedSettings();
+    const confirmed = await loadAdvancedSettings();
+    if (confirmed.secureDns !== level ||
+        (level !== 'off' && confirmed.secureDnsUri !== uri)) {
+      throw new Error('DNS applicato ma la rilettura non corrisponde.');
+    }
     dnsStatus.textContent =
       level === 'off'
         ? 'DNS di sistema applicato.'
         : result.uri
-          ? 'DNS DoH personalizzato applicato.'
+          ? `${dnsProvider.options[dnsProvider.selectedIndex].text} applicato (DoH).`
           : 'DNS DoH predefinito applicato.';
     setPanelStatus('DNS applicato: ' + level.toUpperCase());
   } catch (error) {
     dnsStatus.textContent = 'DNS: ' + errorText(error);
     setPanelStatus('DNS: ' + errorText(error), true);
   } finally {
-    applyDns.disabled = false;
+    applyDns.disabled = torEnabled || torStarting;
   }
 });
 
@@ -452,11 +541,11 @@ const socksPort = document.getElementById('socks-port');
 
 function updateSocksVisibility() {
   socksFields.style.display =
-    networkMode.value === 'socks' && !torEnabled ? 'grid' : 'none';
-  networkMode.disabled = torEnabled;
-  socksHost.disabled = torEnabled;
-  socksPort.disabled = torEnabled;
-  applyNetworkButton.disabled = torEnabled;
+    networkMode.value === 'socks' && !torEnabled && !torStarting ? 'grid' : 'none';
+  networkMode.disabled = torEnabled || torStarting;
+  socksHost.disabled = torEnabled || torStarting;
+  socksPort.disabled = torEnabled || torStarting;
+  applyNetworkButton.disabled = torEnabled || torStarting;
 }
 
 async function loadNetworkSettings() {
@@ -550,6 +639,25 @@ async function runControlSelfTest() {
   const initialProxy = (await browser.proxy.settings.get({})).value;
 
   try {
+    const initialTabs = await browser.tabs.query({ active: true });
+    const expectedNewTab = browser.runtime.getURL('newtab.html');
+    const startup = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
+    record('startup-homepage-config', startup.startupPage === 1 &&
+      startup.startupHomepage === 'about:newtab', JSON.stringify({
+        page: startup.startupPage, homepage: startup.startupHomepage,
+        headlessInitialTabs: initialTabs.map(tab => tab.url || tab.pendingUrl || '')
+      }));
+    const newTab = await browser.tabs.create({ url: expectedNewTab, active: false });
+    try {
+      const resolved = await waitFor(async () => {
+        const tab = await browser.tabs.get(newTab.id);
+        return (tab.url || tab.pendingUrl || '').startsWith(expectedNewTab);
+      }, 10000).catch(() => false);
+      record('filum-newtab-page-load', !!resolved, (await browser.tabs.get(newTab.id)).url || '');
+    } finally {
+      await browser.tabs.remove(newTab.id);
+    }
+
     for (const mode of ['NORMAL', 'TURBO', 'PRIVATE', 'GHOST']) {
       const button = modeButtons.find(item => item.dataset.mode === mode);
       button.click();
@@ -557,12 +665,25 @@ async function runControlSelfTest() {
       await waitFor(async () => (await getStatus()).mode === mode);
       await waitFor(() => button.classList.contains('active') &&
         button.getAttribute('aria-pressed') === 'true');
+      await waitFor(async () => (await getStatus()).modeHealth?.ok, 10000)
+        .catch(() => {});
+
+      const applied = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
+      const privacy = await browser.privacy.websites.resistFingerprinting.get({});
+      const health = (await getStatus()).modeHealth;
+      const protectedMode = mode === 'PRIVATE' || mode === 'GHOST';
+      const expectedAutoplay = mode === 'TURBO' || mode === 'GHOST' ? 5 : 1;
 
       record(
         'mode-' + mode.toLowerCase(),
         button.classList.contains('active') &&
-          button.getAttribute('aria-pressed') === 'true',
-        'selected=' + mode
+          button.getAttribute('aria-pressed') === 'true' &&
+          applied.httpsOnly === protectedMode &&
+          applied.fingerprintResistance === protectedMode &&
+          applied.autoplay === expectedAutoplay &&
+          privacy.value === protectedMode && health?.ok,
+        JSON.stringify({ selected: mode, applied, fingerprintPrivacy: privacy.value,
+          issues: health?.issues || [] })
       );
     }
 
@@ -607,6 +728,19 @@ async function runControlSelfTest() {
       );
     });
     record('dns-custom-endpoint', true);
+    await waitFor(() => !applyDns.disabled);
+
+    dnsProvider.value = 'cloudflare';
+    dnsProvider.dispatchEvent(new Event('change'));
+    applyDns.click();
+    await waitFor(async () => {
+      const value = await browser.runtime.sendMessage({
+        type: 'get-advanced-settings'
+      });
+      return value.secureDns === 'balanced' &&
+        value.secureDnsUri === DNS_PROVIDERS.cloudflare;
+    });
+    record('dns-cloudflare-preset', dnsEndpoint.value === DNS_PROVIDERS.cloudflare);
 
     await browser.runtime.sendMessage({
       type: 'set-secure-dns',
@@ -702,14 +836,15 @@ async function runControlSelfTest() {
     let torStatusError = '';
     torButton.click();
 
-    while (Date.now() - torStartedAt < 60000) {
+    while (Date.now() - torStartedAt < 195000) {
       try {
         lastTorStatus = await getStatus();
         observedTorProcess ||= !!lastTorStatus.torProcess?.running;
         if (lastTorStatus.torProcess?.lastLog?.trim()) {
           lastTorLog = lastTorStatus.torProcess.lastLog.trim();
         }
-        if (lastTorStatus.torEnabled && lastTorStatus.torProcess?.bootstrapped) {
+        if (lastTorStatus.torEnabled && lastTorStatus.torRouted &&
+            lastTorStatus.torProcess?.bootstrapped) {
           torOn = lastTorStatus;
           break;
         }
@@ -745,6 +880,16 @@ async function runControlSelfTest() {
       error: torStatusError || torActionError || (torOn ? '' : torStatus.textContent)
     });
     record('tor-bootstrap-100', !!torOn?.torProcess?.bootstrapped, torDiagnostic);
+
+    if (torOn) {
+      await browser.runtime.sendMessage({ type: 'set-mode', mode: 'NORMAL' });
+      const webRtc = await browser.privacy.network.peerConnectionEnabled.get({});
+      record('tor-mode-switch-webrtc', webRtc.value === false,
+        `WebRTC enabled=${webRtc.value}`);
+      await browser.runtime.sendMessage({
+        type: 'set-mode', mode: initialStatus.mode || 'NORMAL'
+      });
+    }
     record(
       'tor-proxy',
       !!torOn && proxy?.value?.proxyType === 'manual' &&
@@ -823,6 +968,8 @@ async function runControlSelfTest() {
       'https://addons.mozilla.org/firefox/extensions/');
     await verifyLauncher('library', 'library',
       browser.runtime.getURL('library.html'));
+    await verifyLauncher('diagnostics', 'diagnostics',
+      browser.runtime.getURL('diagnostics.html'));
 
     for (const [name, buttonId, url] of [
       ['internal-settings', 'settings', 'about:preferences'],

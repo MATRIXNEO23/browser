@@ -10,6 +10,7 @@ const { setTimeout, clearTimeout } = ChromeUtils.importESModule(
 );
 
 const Ci = Components.interfaces;
+const TOR_BOOTSTRAP_TIMEOUT_MS = 180000;
 let torProcess = null;
 let torWaitPromise = null;
 let torBootstrapped = false;
@@ -181,8 +182,8 @@ async function startBundledTor() {
   let timeoutId;
   const timeout = new Promise((_, reject) => {
     timeoutId = setTimeout(
-      () => reject(new Error("Tor bootstrap timeout after 45 seconds.")),
-      45000
+      () => reject(new Error("Tor bootstrap timeout after 180 seconds.")),
+      TOR_BOOTSTRAP_TIMEOUT_MS
     );
   });
 
@@ -259,6 +260,8 @@ this.browserControl = class extends ExtensionAPI {
         async applyMode(mode) {
           setBool("network.prefetch-next", false);
           setBool("network.dns.disablePrefetch", true);
+          // cookieConfig.nonPersistentCookies has no effect in current Firefox.
+          setBool("network.cookie.noPersistentStorage", mode === "GHOST");
 
           if (mode === "NORMAL") {
             setInt("media.autoplay.default", 1);
@@ -403,6 +406,19 @@ this.browserControl = class extends ExtensionAPI {
                 : websiteAppearanceValue === 1
                   ? "light"
                   : "auto"
+          };
+        },
+
+        async getModeDiagnostics() {
+          return {
+            cookieNoPersistentStorage: Services.prefs.getBoolPref("network.cookie.noPersistentStorage", false),
+            startupHomepage: Services.prefs.getStringPref("browser.startup.homepage", ""),
+            startupPage: Services.prefs.getIntPref("browser.startup.page", 0),
+            httpsOnly: Services.prefs.getBoolPref("dom.security.https_only_mode", false),
+            fingerprintResistance: Services.prefs.getBoolPref("privacy.resistFingerprinting", false),
+            autoplay: Services.prefs.getIntPref("media.autoplay.default", 1),
+            prefetch: Services.prefs.getBoolPref("network.prefetch-next", true),
+            dnsPrefetch: Services.prefs.getBoolPref("network.dns.disablePrefetch", false)
           };
         },
 

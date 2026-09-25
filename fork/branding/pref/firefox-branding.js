@@ -1,6 +1,8 @@
 pref("startup.homepage_override_url", "");
 pref("startup.homepage_welcome_url", "");
 pref("startup.homepage_welcome_url.additional", "");
+pref("browser.startup.page", 1);
+pref("browser.startup.homepage", "about:newtab");
 pref("browser.toolbars.bookmarks.visibility", "always");
 pref("browser.uidensity", 1);
 pref("network.prefetch-next", false);

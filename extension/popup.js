@@ -1,17 +1,17 @@
 const statusEl = document.getElementById('status');
 const adsButton = document.getElementById('ads');
 const buttons = [...document.querySelectorAll('[data-mode]')];
-let adsEnabled = true;
+let adsEnabled = null;
 
 function render(data) {
   const mode = data?.mode || 'NORMAL';
-  adsEnabled = data?.adsEnabled !== false;
+  adsEnabled = typeof data?.adsEnabled === 'boolean' ? data.adsEnabled : null;
 
   for (const button of buttons) {
     button.classList.toggle('active', button.dataset.mode === mode);
   }
 
-  adsButton.textContent = adsEnabled ? 'ADS: ON' : 'ADS: OFF';
+  adsButton.textContent = adsEnabled === null ? 'ADS: ERRORE' : adsEnabled ? 'ADS: ON' : 'ADS: OFF';
   adsButton.classList.toggle('active', adsEnabled);
 
   const s = data?.status;
@@ -26,7 +26,7 @@ function render(data) {
 
   statusEl.textContent =
     `Modalità: ${mode}` +
-    `\nADS: ${adsEnabled ? 'ON' : 'OFF'}` +
+    `\nADS: ${adsEnabled === null ? 'ERRORE' : adsEnabled ? 'ON' : 'OFF'}` +
     `\nLimite background: ${s.limit}` +
     `\nAttive background: ${s.activeBackground}` +
     `\nProtette/non scaricabili: ${s.protectedBackground}` +
@@ -46,6 +46,7 @@ for (const button of buttons) {
 }
 
 adsButton.addEventListener('click', async () => {
+  if (adsEnabled === null) { await refresh(); return; }
   await browser.runtime.sendMessage({ type: 'set-ads', enabled: !adsEnabled });
   await refresh();
 });

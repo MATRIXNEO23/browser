@@ -110,6 +110,12 @@
         "parameters": []
       },
       {
+        "name": "getModeDiagnostics",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
         "name": "startTor",
         "type": "function",
         "async": true,
