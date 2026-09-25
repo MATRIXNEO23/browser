@@ -7,43 +7,52 @@
   <link rel="stylesheet" href="newtab.css">
 </head>
 <body>
-  <main>
-    <section class="topline">
-      <div class="brandline">
-        <span class="brand-mark"><img src="icons/browser.png" alt=""></span>
+  <main class="page">
+    <header class="hud">
+      <div class="mini-brand">
+        <img src="icons/browser.png" alt="">
         <div>
           <strong>FILUM</strong>
-          <span class="mode-label">Pronto</span>
+          <span class="mode-label">NORMAL</span>
         </div>
       </div>
       <div class="clock-block">
         <strong class="clock">--:--</strong>
         <span class="date">—</span>
       </div>
-    </section>
+    </header>
 
     <section class="hero">
-      <p class="eyebrow">NAVIGA SENZA RUMORE</p>
-      <h1>Cosa vuoi trovare?</h1>
-      <form id="normal-search">
-        <input id="q" type="search" autocomplete="off" placeholder="Cerca sul web o digita quello che ti serve" autofocus>
-        <button type="submit">Cerca</button>
+      <img class="hero-logo" src="icons/browser.png" alt="">
+      <div class="wordmark">FILUM</div>
+      <p class="tagline">Naviga leggero. Più libero.</p>
+
+      <form id="normal-search" class="search-box">
+        <input id="q" type="search" autocomplete="off"
+               placeholder="Cerca nel web con FILUM…" autofocus>
+        <button type="submit" aria-label="Cerca">Cerca</button>
       </form>
-      <div class="actions">
-        <button id="smart" class="primary">
+
+      <div class="quick-actions">
+        <button id="smart" class="quick primary">
           <b>SMART SEARCH</b>
-          <span>Filtra e riordina i risultati per pertinenza reale</span>
+          <span>Ricerca filtrata e contestuale</span>
         </button>
-        <button id="library">
-          <b>Libreria</b>
-          <span>Cronologia · Preferiti · Download</span>
+        <button id="library" class="quick">
+          <b>LIBRERIA</b>
+          <span>Preferiti · cronologia · download</span>
         </button>
-        <button id="addons">
-          <b>Addon</b>
-          <span>Gestisci o trova estensioni</span>
+        <button id="addons" class="quick">
+          <b>ADDON</b>
+          <span>Estensioni e strumenti</span>
         </button>
       </div>
     </section>
+
+    <footer class="footnote">
+      <span>FILUM</span>
+      <span>Web più leggero, controllo più vicino.</span>
+    </footer>
   </main>
   <script src="newtab.js"></script>
 </body>
