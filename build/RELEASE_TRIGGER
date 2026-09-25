@@ -1,5 +1,5 @@
 release_request: final
-source_head_before_trigger: 583451d4618cf1b94783e15182caa58642143929
+source_head_before_trigger: 2223bd151f87ac37f2c658bddd848447d1baa7ee
 product_gate: required
 webextension_panel_context: required
 all_sidebar_controls_selftest: required
@@ -9,4 +9,4 @@ compact_sidebar: required
 approved_cyber_background: unchanged
 windows_runtime_smoke: required
 stable_release_only: false
-rerun_reason: sidebar_functional_verification
+rerun_reason: tor_timer_fix_strict_functional_verification
