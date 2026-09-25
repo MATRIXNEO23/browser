@@ -124,6 +124,7 @@ var FilumPanel = {
   browserId: "filum-panel-browser",
   _bound: false,
   _initializedBrowser: null,
+  _lastClickAt: 0,
 
   get box() {
     return document.getElementById("filum-panel-box");
@@ -146,15 +147,22 @@ var FilumPanel = {
       return true;
     }
 
-    const button = this.button;
-    if (!button) {
-      console.error("FILUM native toolbar button is unavailable");
-      return false;
-    }
-
-    button.addEventListener("command", () => {
+    // CustomizableUI may replace/reparent the toolbarbutton after startup.
+    // Delegate from the document so the current visible button always works.
+    const isFilumButton = event =>
+      event.target?.id === this.buttonId ||
+      event.target?.closest?.("#" + this.buttonId);
+    document.addEventListener("click", event => {
+      if (event.button !== 0 || !isFilumButton(event)) return;
+      this._lastClickAt = Date.now();
       this.toggle();
-    });
+    }, true);
+    document.addEventListener("command", event => {
+      if (!isFilumButton(event)) return;
+      // A mouse click also emits command. Process it only once.
+      if (Date.now() - this._lastClickAt < 500) return;
+      this.toggle();
+    }, true);
 
     this._bound = true;
     return true;
@@ -304,6 +312,7 @@ var FilumPanel = {
       return this.hide();
     } catch (error) {
       console.error("FILUM native panel toggle failed", error);
+      Services.prompt.alert(window, "FILUM", "Impossibile aprire la barra: " + String(error));
       return { open: false, error: String(error) };
     }
   },
@@ -343,9 +352,10 @@ var FilumPanel = {
       const expectedBase = policy.getURL(this.panelPath);
 
       const button = this.button;
-      const command = document.createEvent("Events");
-      command.initEvent("command", true, true);
-      button.dispatchEvent(command);
+      if (!button) {
+        throw new Error("FILUM toolbar button is unavailable");
+      }
+      button.click();
 
       const current = await this.waitForPanelLoad(expectedBase);
       const passed =

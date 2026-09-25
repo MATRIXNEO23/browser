@@ -1,5 +1,9 @@
 # FILUM functional audit — 2026-09-25
 
+## User-machine toolbar failure after run #103
+
+Alberto reports that clicking the visible FILUM button does not open the sidebar. Run #103's self-test dispatched a synthetic `command` event on the button soon after startup; that did not prove a later real click still reaches the same node. The controller bound only the initial toolbarbutton, which CustomizableUI can replace or reparent. The proposed correction delegates `click` and keyboard `command` handling at the document level, deduplicates click-generated commands, and shows a visible error if panel initialization fails. The native self-test now calls `button.click()` rather than constructing a command event. This requires a new native Windows run and a user-machine GUI retest; do not treat the previous passing smoke as proof of this interaction.
+
 ## Native Windows run #101 and corrections
 
 Run #102 confirmed the homepage preference readback (`about:newtab`, startup page 1), then stopped at a test-harness error: WebExtensions `tabs.create({url:'about:newtab'})` is rejected as `Illegal URL`. The smoke now opens its own `newtab.html` to check that the page loads. This does not prove that an ordinary first GUI window opens on the branded page; the headless runner cannot supply that visual evidence.
