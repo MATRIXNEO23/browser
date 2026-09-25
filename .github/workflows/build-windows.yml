@@ -131,6 +131,30 @@ jobs:
             cp firefox-src/toolkit/content/license.html dist/stage/Browser/LICENSE.html
           fi
 
+          # Bundle the official stable Tor Expert Bundle for .onion/TOR mode.
+          TOR_VERSION="15.0.23"
+          TOR_FILE="tor-expert-bundle-windows-x86_64-$TOR_VERSION.tar.gz"
+          TOR_SHA256="231dad6b9cb401a54c260db7046965ef04e4f72ff071b140d423fb5da281ab1e"
+          TOR_URL="https://dist.torproject.org/torbrowser/$TOR_VERSION/$TOR_FILE"
+
+          curl --fail --location --retry 3 --retry-delay 2 "$TOR_URL" -o "/tmp/$TOR_FILE"
+          echo "$TOR_SHA256  /tmp/$TOR_FILE" | sha256sum -c -
+
+          mkdir -p dist/stage/Browser/tor-expert
+          tar -xzf "/tmp/$TOR_FILE" -C dist/stage/Browser/tor-expert
+
+          TOR_EXE=$(find dist/stage/Browser/tor-expert -type f -iname 'tor.exe' | head -1)
+          if [ -z "$TOR_EXE" ]; then
+            echo "Bundled Tor executable missing after extraction."
+            exit 1
+          fi
+
+          cat > dist/stage/Browser/tor-expert/FILUM_TOR_SOURCE.txt <<EOF
+Tor Expert Bundle $TOR_VERSION
+Source: $TOR_URL
+SHA256: $TOR_SHA256
+EOF
+
           OMNI_MATCHES=$(find dist/stage/Browser -type f -name 'omni.ja' -print)
           if [ -z "$OMNI_MATCHES" ]; then
             echo "omni.ja missing."
@@ -262,19 +286,32 @@ jobs:
           }
           if (-not $found) { throw "Browser Control Core is not registered in packaged omni resources." }
 
-      - name: Launch Browser and render custom New Tab
+      - name: Verify bundled TOR executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tor = Get-ChildItem $env:APP_DIR -Recurse -Filter "tor.exe" | Select-Object -First 1
+          if (-not $tor) { throw "Bundled tor.exe missing." }
+
+          $version = (& $tor.FullName --version | Out-String)
+          Write-Host $version
+          if ($version -notmatch "Tor version") {
+            throw "Bundled Tor executable did not report a Tor version."
+          }
+
+      - name: Launch Browser and render engine smoke page
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $profile = Join-Path $env:RUNNER_TEMP "browser-smoke-profile"
-          $shot = Join-Path $env:GITHUB_WORKSPACE "Browser-NewTab-Smoke.png"
+          $shot = Join-Path $env:GITHUB_WORKSPACE "Browser-Engine-Smoke.png"
           New-Item -ItemType Directory -Force -Path $profile | Out-Null
           $args = @(
             "-headless",
             "-no-remote",
             "-profile", $profile,
             "-screenshot", $shot,
-            "about:newtab"
+            "data:text/html,<html><body style='background:%23090b0e;color:%23f5f7fa;font-family:sans-serif'><h1>FILUM Browser smoke</h1></body></html>"
           )
           $p = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -PassThru
           $deadline = (Get-Date).AddSeconds(60)
@@ -284,20 +321,20 @@ jobs:
                 if ((Get-Item $shot).Length -ge 4096) { break }
               }
               if ($p.HasExited) {
-                throw "Browser exited before producing a valid New Tab screenshot. ExitCode=$($p.ExitCode)"
+                throw "Browser exited before producing a valid engine smoke screenshot. ExitCode=$($p.ExitCode)"
               }
               Start-Sleep -Seconds 1
               $p.Refresh()
             }
 
             if (-not (Test-Path $shot)) {
-              throw "Browser did not render the New Tab screenshot within 60 seconds."
+              throw "Browser did not render the engine smoke screenshot within 60 seconds."
             }
             if ((Get-Item $shot).Length -lt 4096) {
               throw "New Tab smoke screenshot is unexpectedly small."
             }
 
-            Write-Host "Windows launch + New Tab render passed."
+            Write-Host "Windows launch + engine render passed."
           }
           finally {
             if (-not $p.HasExited) {
@@ -308,8 +345,8 @@ jobs:
       - name: Upload visual smoke evidence
         uses: actions/upload-artifact@v4
         with:
-          name: Browser-Visual-Smoke
-          path: Browser-NewTab-Smoke.png
+          name: Browser-Engine-Smoke
+          path: Browser-Engine-Smoke.png
           if-no-files-found: error
           retention-days: 30
 
