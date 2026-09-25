@@ -1,9 +1,12 @@
 release_request: final
-source_head_before_trigger: 04e7d22feb81a8eefd08076f399e1535421ba113
+source_head_before_trigger: 583451d4618cf1b94783e15182caa58642143929
 product_gate: required
-single_native_filum_button: required
-native_filum_button_command_selftest: required
-approved_cyber_background: required
+webextension_panel_context: required
+all_sidebar_controls_selftest: required
+tor_bootstrap_100: required
+custom_dns: required
+compact_sidebar: required
+approved_cyber_background: unchanged
 windows_runtime_smoke: required
 stable_release_only: false
-rerun_reason: bind_real_filum_button_command
+rerun_reason: sidebar_functional_verification
