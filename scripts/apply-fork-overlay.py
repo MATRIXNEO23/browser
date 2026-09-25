@@ -64,10 +64,20 @@ def patch_browser_chrome(path: Path, project: Path):
 
 
 def patch_native_filum_button(path: Path):
-    # The FILUM control is a CustomizableUI widget registered by browser.js.
-    # A raw toolbarbutton here would compete with that widget for the same ID.
-    if 'id="filum-sidebar-button"' in path.read_text(encoding="utf-8"):
-        raise RuntimeError("FILUM toolbar ID already exists in upstream markup")
+    text = path.read_text(encoding="utf-8")
+    if 'id="filum-sidebar-button"' in text:
+        return
+    anchor = '  <toolbarbutton id="nav-bar-overflow-button"'
+    if anchor not in text:
+        raise RuntimeError("Navbar overflow button anchor not found")
+    button = '''  <toolbarbutton id="filum-sidebar-button"
+                 class="toolbarbutton-1 chromeclass-toolbar-additional"
+                 label="FILUM"
+                 tooltiptext="Apri/chiudi pannello FILUM"
+                 removable="false" overflows="false"/>
+
+'''
+    path.write_text(text.replace(anchor, button + anchor, 1), encoding="utf-8")
 
 
 def patch_filum_panel_markup(path: Path):
@@ -136,24 +146,12 @@ var FilumPanel = {
     if (this._bound) {
       return true;
     }
-    if (!CustomizableUI.getWidget(this.buttonId)) {
-      CustomizableUI.createWidget({
-        id: this.buttonId,
-        type: "button",
-        defaultArea: CustomizableUI.AREA_NAVBAR,
-        removable: false,
-        overflows: false,
-        label: "FILUM",
-        tooltiptext: "Apri/chiudi pannello FILUM",
-        onCommand(event) {
-          event.target.ownerGlobal.FilumPanel.traceSelfTest("COMMAND");
-          event.target.ownerGlobal.FilumPanel.toggle();
-        },
-      });
-    }
-    if (!CustomizableUI.getPlacementOfWidget(this.buttonId) || !this.button) {
-      CustomizableUI.addWidgetToArea(this.buttonId, CustomizableUI.AREA_NAVBAR);
-    }
+    const button = this.button;
+    if (!button) return false;
+    button.addEventListener("command", () => {
+      this.traceSelfTest("COMMAND");
+      this.toggle();
+    });
     this._bound = true;
     return true;
   },
@@ -337,10 +335,7 @@ var FilumPanel = {
         throw new Error("FILUM toolbar button could not be bound");
       }
 
-      this.traceSelfTest(
-        "BOUND:" + !!this.button + ":placement:" +
-        JSON.stringify(CustomizableUI.getPlacementOfWidget(this.buttonId))
-      );
+      this.traceSelfTest("BOUND:" + !!this.button);
 
       this.hide();
 

@@ -79,8 +79,8 @@ jobs:
           grep -n "browser-core" firefox-src/browser/extensions/moz.build
           grep -n "MATRIXNEO23 Browser fork" firefox-src/browser/themes/shared/toolbarbuttons.css
           grep -n "#navigator-toolbox" firefox-src/browser/themes/shared/toolbarbuttons.css
-          grep -n 'CustomizableUI.createWidget' firefox-src/browser/base/content/browser.js
-          grep -n 'onCommand(event)' firefox-src/browser/base/content/browser.js
+          grep -n 'id="filum-sidebar-button"' firefox-src/browser/base/content/navigator-toolbox.inc.xhtml
+          grep -n 'button.addEventListener("command"' firefox-src/browser/base/content/browser.js
           grep -n 'button.click()' firefox-src/browser/base/content/browser.js
           grep -n 'id="filum-panel-box"' firefox-src/browser/base/content/browser-box.inc.xhtml
           grep -n 'browserId: "filum-panel-browser"' firefox-src/browser/base/content/browser.js
@@ -194,7 +194,8 @@ jobs:
             fi
 
             if grep -aq 'buttonId: "filum-sidebar-button"' <<< "$BROWSER_JS" && \
-               grep -aq 'CustomizableUI.createWidget' <<< "$BROWSER_JS"; then
+               grep -aq 'button.addEventListener("command"' <<< "$BROWSER_JS" && \
+               grep -aq 'id="filum-sidebar-button"' <<< "$BROWSER_XHTML"; then
               NATIVE_BUTTON_FOUND=1
             fi
 
