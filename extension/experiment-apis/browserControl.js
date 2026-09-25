@@ -378,6 +378,7 @@ this.browserControl = class extends ExtensionAPI {
 
         async reportControlSelfTest(result) {
           Services.prefs.setStringPref("filum.selftest.controls", result);
+          Services.prefs.savePrefFile(null);
           return { stored: true };
         },
 
