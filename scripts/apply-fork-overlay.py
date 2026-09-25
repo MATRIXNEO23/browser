@@ -1,4 +1,6 @@
 import argparse
+import base64
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -15,6 +17,28 @@ def copy_tree(src: Path, dst: Path):
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, target)
+
+
+def restore_filum_background(project: Path, core: Path):
+    parts = [
+        project / "extension" / "assets" / f"filum-background.b64.{i:02d}"
+        for i in range(1, 6)
+    ]
+    missing = [str(p) for p in parts if not p.is_file()]
+    if missing:
+        raise RuntimeError("Missing FILUM background payload parts: " + ", ".join(missing))
+
+    encoded = "".join(p.read_text(encoding="ascii").strip() for p in parts)
+    data = base64.b64decode(encoded, validate=True)
+    digest = hashlib.sha256(data).hexdigest()
+    expected = "2b2c7f659eaade035375be20f8735ab3daada878645cfb0cda5f7381721c1bc6"
+
+    if digest != expected:
+        raise RuntimeError(f"FILUM background SHA256 mismatch: {digest}")
+
+    target = core / "extension" / "assets" / "filum-background.jpg"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
 
 def patch_extensions_mozbuild(path: Path):
     text = path.read_text(encoding="utf-8")
@@ -104,6 +128,7 @@ def main():
         shutil.rmtree(core)
     (core / "extension").mkdir(parents=True, exist_ok=True)
     copy_tree(project / "extension", core / "extension")
+    restore_filum_background(project, core)
 
     (core / "moz.build").write_text('JAR_MANIFESTS += ["jar.mn"]\n', encoding="utf-8")
     (core / "jar.mn").write_text(
