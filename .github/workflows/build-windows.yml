@@ -173,25 +173,27 @@ jobs:
           NATIVE_CONTROLLER_FOUND=0
           CYBER_BACKGROUND_FOUND=0
           while IFS= read -r omni; do
-            LISTING=$(unzip -l "$omni" 2>/dev/null || true)
+            LISTING=$(unzip -Z1 "$omni" 2>/dev/null || true)
+            BROWSER_XHTML=$(unzip -p "$omni" 'chrome/browser/content/browser/browser.xhtml' 2>/dev/null || true)
+            BROWSER_JS=$(unzip -p "$omni" 'chrome/browser/content/browser/browser.js' 2>/dev/null || true)
 
-            if echo "$LISTING" | grep -q 'builtin-addons/browser-core/manifest.json'; then
+            if [[ "$LISTING" == *"chrome/browser/builtin-addons/browser-core/manifest.json"* ]]; then
               BUILTIN_FOUND=1
             fi
 
-            if echo "$LISTING" | grep -q 'builtin-addons/browser-core/assets/filum-background.jpg'; then
+            if [[ "$LISTING" == *"chrome/browser/builtin-addons/browser-core/assets/filum-background.jpg"* ]]; then
               CYBER_BACKGROUND_FOUND=1
             fi
 
-            if unzip -p "$omni" 2>/dev/null | grep -aq 'id="filum-sidebar-button"'; then
+            if grep -aq 'id="filum-sidebar-button"' <<< "$BROWSER_XHTML"; then
               NATIVE_BUTTON_FOUND=1
             fi
 
-            if unzip -p "$omni" 2>/dev/null | grep -aq 'id="filum-panel-box"'; then
+            if grep -aq 'id="filum-panel-box"' <<< "$BROWSER_XHTML"; then
               NATIVE_PANEL_FOUND=1
             fi
 
-            if unzip -p "$omni" 2>/dev/null | grep -aq 'MATRIXNEO23 FILUM native panel controller'; then
+            if grep -aq 'MATRIXNEO23 FILUM native panel controller' <<< "$BROWSER_JS"; then
               NATIVE_CONTROLLER_FOUND=1
             fi
           done <<< "$OMNI_MATCHES"
