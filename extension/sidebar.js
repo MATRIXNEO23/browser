@@ -660,7 +660,11 @@ async function runControlSelfTest() {
       await browser.tabs.remove(newTab.id);
     }
 
-    for (const mode of ['NORMAL', 'TURBO', 'PRIVATE', 'GHOST']) {
+    for (const [index, mode] of [
+      'NORMAL', 'TURBO', 'PRIVATE', 'GHOST',
+      'NORMAL', 'TURBO', 'PRIVATE', 'GHOST',
+      'NORMAL', 'TURBO', 'PRIVATE', 'GHOST', 'NORMAL'
+    ].entries()) {
       const button = modeButtons.find(item => item.dataset.mode === mode);
       button.click();
 
@@ -677,7 +681,7 @@ async function runControlSelfTest() {
       const expectedAutoplay = mode === 'TURBO' || mode === 'GHOST' ? 5 : 1;
 
       record(
-        'mode-' + mode.toLowerCase(),
+        'mode-' + mode.toLowerCase() + (index < 4 ? '' : '-transition-' + (index + 1)),
         button.classList.contains('active') &&
           button.getAttribute('aria-pressed') === 'true' &&
           applied.httpsOnly === protectedMode &&
