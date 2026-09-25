@@ -1,5 +1,10 @@
 {
   "policies": {
+    "Homepage": {
+      "URL": "about:newtab",
+      "StartPage": "homepage",
+      "Locked": false
+    },
     "DisableTelemetry": true,
     "DisableFirefoxStudies": true,
     "DisableDefaultBrowserAgent": true,

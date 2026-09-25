@@ -90,12 +90,13 @@ async function verify() {
     row(modeEl, 'HTTPS-only (controllo indipendente)',
       `${String(prefs.httpsOnly)} · base modalità ${String(privateMode)}`);
     check('Resistenza fingerprint (preferenza)', prefs.fingerprintResistance, privateMode);
+    check('Cookie senza archiviazione persistente (preferenza)',
+      prefs.cookieNoPersistentStorage, mode === 'GHOST');
     check('Autoplay (preferenza)', prefs.autoplay, expectedAutoplay);
     check('Prefetch disabilitato', prefs.prefetch, false);
     check('DNS prefetch disabilitato', prefs.dnsPrefetch, true);
     check('Resistenza fingerprint (API privacy)', fingerprinting, privateMode);
     check('Protezione tracciamento', tracking, 'always');
-    check('Cookie non persistenti', cookies?.nonPersistentCookies, mode === 'GHOST');
     check('WebRTC abilitato', webRtc, mode !== 'GHOST' && !status.torEnabled);
     check('Referrer abilitati', referrers, mode !== 'GHOST');
     row(modeEl, 'Schede background attive / limite',

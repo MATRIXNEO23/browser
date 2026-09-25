@@ -101,6 +101,10 @@ require_text(
     ".quick-actions"
 )
 require_text("extension/newtab.js", "browser.search.search", "smart-search.html", "library.html", "addons.html")
+policies = json.loads((ROOT / "distribution/policies.json").read_text(encoding="utf-8"))
+homepage = policies.get("policies", {}).get("Homepage", {})
+if homepage.get("URL") != "about:newtab" or homepage.get("StartPage") != "homepage":
+    raise SystemExit("FILUM startup homepage policy is missing")
 require_text("extension/smart-search.js", "searchCandidates", "scoreCandidate", "inspectPage")
 require_text("extension/library.js", "browser.history", "browser.bookmarks", "browser.downloads")
 require_text("extension/addons.js", "browser.management.getAll", "browser.management.uninstall")

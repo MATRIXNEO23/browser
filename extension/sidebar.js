@@ -641,9 +641,22 @@ async function runControlSelfTest() {
   try {
     const initialTabs = await browser.tabs.query({ active: true });
     const expectedNewTab = browser.runtime.getURL('newtab.html');
-    record('startup-newtab', initialTabs.some(tab =>
-      (tab.url || tab.pendingUrl || '').startsWith(expectedNewTab)),
-      initialTabs.map(tab => tab.url || tab.pendingUrl || '').join(', '));
+    const startup = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
+    record('startup-homepage-config', startup.startupPage === 1 &&
+      startup.startupHomepage === 'about:newtab', JSON.stringify({
+        page: startup.startupPage, homepage: startup.startupHomepage,
+        headlessInitialTabs: initialTabs.map(tab => tab.url || tab.pendingUrl || '')
+      }));
+    const newTab = await browser.tabs.create({ url: 'about:newtab', active: false });
+    try {
+      const resolved = await waitFor(async () => {
+        const tab = await browser.tabs.get(newTab.id);
+        return (tab.url || tab.pendingUrl || '').startsWith(expectedNewTab);
+      }, 10000).catch(() => false);
+      record('newtab-override', !!resolved, (await browser.tabs.get(newTab.id)).url || '');
+    } finally {
+      await browser.tabs.remove(newTab.id);
+    }
 
     for (const mode of ['NORMAL', 'TURBO', 'PRIVATE', 'GHOST']) {
       const button = modeButtons.find(item => item.dataset.mode === mode);

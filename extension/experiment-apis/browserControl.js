@@ -260,6 +260,8 @@ this.browserControl = class extends ExtensionAPI {
         async applyMode(mode) {
           setBool("network.prefetch-next", false);
           setBool("network.dns.disablePrefetch", true);
+          // cookieConfig.nonPersistentCookies has no effect in current Firefox.
+          setBool("network.cookie.noPersistentStorage", mode === "GHOST");
 
           if (mode === "NORMAL") {
             setInt("media.autoplay.default", 1);
@@ -409,6 +411,9 @@ this.browserControl = class extends ExtensionAPI {
 
         async getModeDiagnostics() {
           return {
+            cookieNoPersistentStorage: Services.prefs.getBoolPref("network.cookie.noPersistentStorage", false),
+            startupHomepage: Services.prefs.getStringPref("browser.startup.homepage", ""),
+            startupPage: Services.prefs.getIntPref("browser.startup.page", 0),
             httpsOnly: Services.prefs.getBoolPref("dom.security.https_only_mode", false),
             fingerprintResistance: Services.prefs.getBoolPref("privacy.resistFingerprinting", false),
             autoplay: Services.prefs.getIntPref("media.autoplay.default", 1),

@@ -295,8 +295,7 @@ async function applyRuntimePrivacy(mode) {
   if (mode === 'NORMAL') {
     await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
     await safeSet(browser.privacy.websites.cookieConfig, {
-      behavior: 'reject_trackers_and_partition_foreign',
-      nonPersistentCookies: false
+      behavior: 'reject_trackers_and_partition_foreign'
     });
     await safeSet(browser.privacy.websites.resistFingerprinting, false);
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
@@ -310,8 +309,7 @@ async function applyRuntimePrivacy(mode) {
   if (mode === 'TURBO') {
     await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
     await safeSet(browser.privacy.websites.cookieConfig, {
-      behavior: 'reject_trackers_and_partition_foreign',
-      nonPersistentCookies: false
+      behavior: 'reject_trackers_and_partition_foreign'
     });
     await safeSet(browser.privacy.websites.resistFingerprinting, false);
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
@@ -325,8 +323,7 @@ async function applyRuntimePrivacy(mode) {
   if (mode === 'PRIVATE') {
     await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
     await safeSet(browser.privacy.websites.cookieConfig, {
-      behavior: 'reject_trackers_and_partition_foreign',
-      nonPersistentCookies: false
+      behavior: 'reject_trackers_and_partition_foreign'
     });
     await safeSet(browser.privacy.websites.resistFingerprinting, true);
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
@@ -340,8 +337,7 @@ async function applyRuntimePrivacy(mode) {
   if (mode === 'GHOST') {
     await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
     await safeSet(browser.privacy.websites.cookieConfig, {
-      behavior: 'reject_trackers_and_partition_foreign',
-      nonPersistentCookies: true
+      behavior: 'reject_trackers_and_partition_foreign'
     });
     await safeSet(browser.privacy.websites.resistFingerprinting, true);
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
@@ -372,6 +368,7 @@ async function getModeHealth(mode, torEnabled) {
     expect('Fingerprint (preferenza)', prefs.fingerprintResistance, protectedMode);
     expect('Prefetch', prefs.prefetch, false);
     expect('DNS prefetch', prefs.dnsPrefetch, true);
+    expect('Cookie senza archiviazione persistente', prefs.cookieNoPersistentStorage, mode === 'GHOST');
 
     const [fingerprint, tracking, cookies, webRtc, referrers, webRtcPolicy, prediction, auditing] = await Promise.all([
       read('Fingerprint', browser.privacy.websites.resistFingerprinting),
@@ -386,7 +383,6 @@ async function getModeHealth(mode, torEnabled) {
     if (fingerprint !== undefined) expect('Fingerprint', fingerprint, protectedMode);
     if (tracking !== undefined) expect('Protezione tracciamento', tracking, 'always');
     if (cookies !== undefined) {
-      expect('Cookie non persistenti', cookies?.nonPersistentCookies, mode === 'GHOST');
       expect('Protezione cookie', cookies?.behavior, 'reject_trackers_and_partition_foreign');
     }
     if (webRtc !== undefined) expect('WebRTC', webRtc, !torEnabled && mode !== 'GHOST');

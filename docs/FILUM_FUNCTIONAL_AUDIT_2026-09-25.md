@@ -1,5 +1,9 @@
 # FILUM functional audit — 2026-09-25
 
+## Native Windows run #101 and corrections
+
+Run #101 built successfully and registered the built-in extension. Native controls passed NORMAL/TURBO/PRIVATE, ADS, DNS preset/custom, network modes, Tor bootstrap (100% in 12 seconds), SOCKS5 remote DNS, WebRTC on mode switch, Tor egress (`IsTor=true`) and stop, and launcher checks. Two checks failed: the headless runner's initial tab was `about:blank`, and Firefox returned `cookieConfig.nonPersistentCookies=false` in GHOST. The latter API field is deprecated and ineffective; GHOST now uses the privileged `network.cookie.noPersistentStorage` preference and verifies its effective value. The startup policy sets `Homepage.URL=about:newtab` and `StartPage=homepage`; the smoke verifies effective startup preferences separately from an explicit `about:newtab` override tab. Headless startup cannot establish the first visible graphical window; that still requires a GUI check on Alberto's machine. Retest the exact new source revision before delivery.
+
 ## Additional regression pass (unpublished)
 
 Diagnostics export: the existing sidebar launcher opens `diagnostics.html`. The view now has a Copy diagnostics action and includes mode health, ADS, DNS, HTTPS-only, GHOST recovery and Tor readbacks. It formats labeled rows with a timestamp for pasting into a support conversation. The copied report omits API keys and reduces the proxy object to routing fields. A focused mock exercises report formatting and clipboard writing. Native clipboard permission and rendered layout remain to be checked on Windows.
