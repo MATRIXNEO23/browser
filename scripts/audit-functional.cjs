@@ -25,6 +25,9 @@ async function main() {
     browsingData: { async remove(options, types) {
       calls.push({ options, types });
       if (failCleanup) throw new Error('cleanup failed');
+      if (types.localStorage && 'since' in options) {
+        throw new Error("Firefox does not support clearing localStorage with 'since'.");
+      }
     } },
     proxy: { settings: { async get() { return { value: currentProxy }; }, async set(value) {
       calls.push({ proxy: value });
@@ -49,9 +52,13 @@ async function main() {
   failCleanup = false;
   await vm.runInContext('endGhostSession()', context);
   assert.equal(data.ghostSession, undefined);
-  assert.equal(calls[1].options.since, 100);
+  assert.equal(calls[1].options.since, undefined);
   assert.equal(calls[1].options.hostnames[0], 'example.org');
+  assert.equal(calls[1].types.localStorage, true);
   assert.equal(calls[2].options.since, 100);
+  assert.equal(calls[2].types.cookies, true);
+  assert.equal(calls[3].options.since, 100);
+  assert.equal(calls[3].types.history, true);
 
   vm.runInContext(section('async function trackGhostHost(', 'async function endGhostSession()'), context);
   context.getMode = async () => 'GHOST';
@@ -212,6 +219,15 @@ async function main() {
   await assert.rejects(vm.runInContext("handleMode({type:'set-mode',mode:'PRIVATE'})", context), /WebRTC locked/);
   assert.equal(data.mode, 'NORMAL', 'Tor WebRTC failure must abort the mode change');
   data.torEnabled = false;
+
+  browser.privacy.network.peerConnectionEnabled.set = async () => {};
+  browser.browserControl.applyMode = async () => {};
+  data.mode = 'GHOST';
+  data.ghostSession = { startedAt: 101, hosts: ['example.org'] };
+  const ghostExit = await vm.runInContext("handleMode({type:'set-mode',mode:'NORMAL'})", context);
+  assert.equal(data.mode, 'NORMAL', 'GHOST exit must complete on Firefox');
+  assert.equal(data.ghostSession, undefined, 'successful cleanup must close GHOST session');
+  assert.equal(ghostExit.mode, 'NORMAL');
 
   data.mode = 'GHOST';
   data.ghostSession = { startedAt: 101, hosts: ['example.org'] };

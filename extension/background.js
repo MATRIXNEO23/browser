@@ -458,14 +458,19 @@ async function endGhostSession() {
   const hosts = Array.isArray(session.hosts) ? session.hosts : [];
 
   if (hosts.length) {
+    // Firefox rejects `since` for localStorage. Site storage must be removed
+    // by hostname; time filtering remains valid for history and form data.
     await browser.browsingData.remove(
-      { hostnames: hosts, since: session.startedAt },
+      { hostnames: hosts },
       {
-        cookies: true,
         indexedDB: true,
         localStorage: true,
         serviceWorkers: true
       }
+    );
+    await browser.browsingData.remove(
+      { hostnames: hosts, since: session.startedAt },
+      { cookies: true }
     );
   }
 
