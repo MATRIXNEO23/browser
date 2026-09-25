@@ -208,7 +208,7 @@ document.getElementById('library').addEventListener('click', async () => {
 });
 
 document.getElementById('close').addEventListener('click', async () => {
-  await browser.sidebarAction.close();
+  await browser.runtime.sendMessage({ type: 'set-filum-panel-open', open: false });
 });
 
 const networkMode = document.getElementById('network-mode');
