@@ -11,6 +11,9 @@ let torProcess = null;
 let torWaitPromise = null;
 let torBootstrapped = false;
 let torLastLog = "";
+let torLastError = "";
+let torStage = "idle";
+let torLastExitCode = null;
 
 function childPath(base, parts) {
   const file = base.clone();
@@ -54,6 +57,9 @@ function torResourcePath(parts) {
 }
 
 async function startBundledTor() {
+  torLastError = "";
+  torLastExitCode = null;
+  torStage = "starting";
   if (torProcess && torBootstrapped) {
     return {
       running: true,
@@ -74,7 +80,9 @@ async function startBundledTor() {
     torProcess = null;
   }
 
+  torStage = "find-executable";
   const executable = findTorExecutable();
+  torStage = "create-data-directory";
   const dataDir = ensureTorDataDirectory();
   const args = [
     "--SocksPort", "127.0.0.1:19050",
@@ -96,6 +104,7 @@ async function startBundledTor() {
     args.push("--GeoIPv6File", geoip6.path);
   }
 
+  torStage = "subprocess-call";
   const proc = await Subprocess.call({
     command: executable.path,
     arguments: args,
@@ -106,11 +115,13 @@ async function startBundledTor() {
   });
 
   torProcess = proc;
+  torStage = "reading-bootstrap";
   torBootstrapped = false;
   torLastLog = "";
 
   torWaitPromise = proc.wait().then(
     result => {
+      torLastExitCode = result?.exitCode ?? null;
       if (torProcess === proc) {
         torProcess = null;
         torBootstrapped = false;
@@ -174,6 +185,7 @@ async function startBundledTor() {
   try {
     await Promise.race([bootstrapPromise, exitedBeforeBootstrap, timeout]);
   } catch (error) {
+    torStage = "bootstrap-failed";
     try {
       proc.kill(1000);
     } catch (_) {}
@@ -189,6 +201,7 @@ async function startBundledTor() {
     );
   }
 
+  torStage = "ready";
   return {
     running: true,
     bootstrapped: true,
@@ -259,7 +272,13 @@ this.browserControl = class extends ExtensionAPI {
         },
 
         async startTor() {
-          return startBundledTor();
+          try {
+            return await startBundledTor();
+          } catch (error) {
+            torLastError = `${torStage}: ${error?.message || error}` +
+              (error?.errorCode ? ` [${error.errorCode}]` : "");
+            throw error;
+          }
         },
 
         async stopTor() {
@@ -272,7 +291,10 @@ this.browserControl = class extends ExtensionAPI {
             bootstrapped: !!torProcess && torBootstrapped,
             socksHost: "127.0.0.1",
             socksPort: 19050,
-            lastLog: torLastLog.split("\n").slice(-4).join(" | ")
+            lastLog: torLastLog.split("\n").slice(-4).join(" | "),
+            stage: torStage,
+            error: torLastError || null,
+            exitCode: torLastExitCode
           };
         },
 
