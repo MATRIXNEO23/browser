@@ -121,6 +121,17 @@
         "type": "function",
         "async": true,
         "parameters": []
+      },
+      {
+        "name": "setFilumPanelOpen",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "open",
+            "type": "boolean"
+          }
+        ]
       }
     ]
   }
