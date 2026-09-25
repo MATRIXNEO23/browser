@@ -360,7 +360,7 @@ jobs:
               $_.ExecutablePath -and
               ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($env:BROWSER_EXE))
             } | ForEach-Object {
-              & taskkill /PID $_.ProcessId /T /F | Out-Null
+              Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
             }
           }
 
