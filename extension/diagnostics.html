@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FILUM · Diagnostica</title>
+  <link rel="stylesheet" href="diagnostics.css">
+</head>
+<body>
+  <main>
+    <header><img src="icons/browser.png" alt=""><div><h1>Diagnostica FILUM</h1><p>Valori letti dal browser, aggiornati su richiesta.</p></div></header>
+    <div class="actions"><button id="refresh">Aggiorna verifica</button><button id="copy" disabled>Copia diagnostica</button></div>
+    <p id="checked">Verifica in corso…</p>
+    <section><h2>Modalità</h2><div id="mode"></div></section>
+    <section><h2>Altre funzioni</h2><div id="features"></div></section>
+    <section><h2>Rete Tor</h2><div id="tor"></div></section>
+    <p class="note">La verifica legge impostazioni e processo locali. Non misura anonimato o prestazioni e non esegue una richiesta di rete. Il testo copiato non include chiavi API.</p>
+  </main>
+  <script src="diagnostics.js"></script>
+</body>
+</html>

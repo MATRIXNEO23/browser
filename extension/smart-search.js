@@ -3,8 +3,76 @@ const queryInput = document.getElementById('query');
 const resultsEl = document.getElementById('results');
 const summaryEl = document.getElementById('summary');
 const stopButton = document.getElementById('stop');
+const tavilyButton = document.getElementById('search-tavily');
+const tavilyKeyInput = document.getElementById('tavily-key');
+const tavilyStatus = document.getElementById('tavily-status');
+const tavilyDailyLimit = document.getElementById('tavily-daily-limit');
+const blockedSitesEl = document.getElementById('blocked-sites');
 
 let activeController = null;
+let blockedDomains = [];
+let lastRendered = null;
+
+function siteHost(url) {
+  try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ''); }
+  catch { return ''; }
+}
+
+function isBlockedSite(url) {
+  const host = siteHost(url);
+  return blockedDomains.some(domain => host === domain || host.endsWith('.' + domain));
+}
+
+async function loadBlockedSites() {
+  const data = await browser.storage.local.get('smartSearchBlockedDomains');
+  blockedDomains = Array.isArray(data.smartSearchBlockedDomains)
+    ? data.smartSearchBlockedDomains.filter(value => typeof value === 'string') : [];
+  renderBlockedSites();
+}
+
+function renderBlockedSites() {
+  blockedSitesEl.replaceChildren();
+  if (!blockedDomains.length) {
+    blockedSitesEl.textContent = 'Nessun sito escluso.';
+    return;
+  }
+  for (const domain of blockedDomains) {
+    const item = document.createElement('div');
+    item.className = 'blocked-site';
+    const label = document.createElement('span');
+    label.textContent = domain;
+    const remove = document.createElement('button');
+    remove.textContent = 'Rimuovi';
+    remove.addEventListener('click', async () => {
+      const next = blockedDomains.filter(value => value !== domain);
+      try {
+        await browser.storage.local.set({ smartSearchBlockedDomains: next });
+        blockedDomains = next;
+        renderBlockedSites();
+        // Do not repeat a paid search without another explicit click.
+        summaryEl.textContent = 'Sito rimosso dalla lista. Ripeti la ricerca per rivedere i risultati.';
+      } catch (error) {
+        summaryEl.textContent = 'Rimozione non salvata: ' + (error?.message || error);
+      }
+    });
+    item.append(label, remove);
+    blockedSitesEl.append(item);
+  }
+}
+
+async function blockResultSite(url) {
+  const domain = siteHost(url);
+  if (!domain || blockedDomains.includes(domain)) return;
+  const next = [...blockedDomains, domain].sort();
+  await browser.storage.local.set({ smartSearchBlockedDomains: next });
+  blockedDomains = next;
+  renderBlockedSites();
+  if (lastRendered) {
+    const { results, query, meta } = lastRendered;
+    const visible = results.filter(result => !isBlockedSite(result.url));
+    render(visible, query, { ...meta, blockedCount: meta.blockedCount + results.length - visible.length });
+  }
+}
 
 const STOP_WORDS = new Set([
   'a','ad','al','alla','alle','allo','ai','agli','anche','che','con','da','dal','dalla',
@@ -78,7 +146,8 @@ function decodeResultUrl(href) {
   try {
     const parsed = new URL(href, 'https://html.duckduckgo.com/');
     const redirected = parsed.searchParams.get('uddg');
-    return redirected ? decodeURIComponent(redirected) : parsed.href;
+    // URLSearchParams already decodes the redirect parameter once.
+    return redirected || parsed.href;
   } catch {
     return href;
   }
@@ -90,6 +159,57 @@ function getDomain(url) {
   } catch {
     return '';
   }
+}
+
+function suspiciousUrlReasons(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase();
+    const reasons = [];
+    if (url.username || url.password) reasons.push('credenziali nell’URL');
+    if (host.includes('xn--')) reasons.push('dominio internazionale codificato');
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.startsWith('[')) {
+      reasons.push('indirizzo IP al posto del dominio');
+    }
+    if (host.length > 70 || (host.match(/-/g) || []).length >= 5) {
+      reasons.push('dominio insolitamente complesso');
+    }
+    return reasons;
+  } catch {
+    return ['URL non valido'];
+  }
+}
+
+function isAdResult(node, anchor) {
+  return node.classList.contains('result--ad') ||
+    !!node.querySelector('.result__badge--ad, .result__ad, [data-testid="ad"]') ||
+    /\/y\.js(?:[?#]|$)/.test(anchor.getAttribute('href') || '');
+}
+
+function mergeCandidates(duck, tavily) {
+  const merged = new Map();
+  for (const result of duck) merged.set(result.url, result);
+  for (const item of tavily) {
+    try {
+      const url = new URL(item.url);
+      if (!['http:', 'https:'].includes(url.protocol)) continue;
+      url.hash = '';
+      const address = url.href;
+      const existing = merged.get(address);
+      if (existing) {
+        existing.sources.push('Tavily');
+        if (!existing.snippet && item.snippet) existing.snippet = item.snippet;
+      } else {
+        merged.set(address, {
+          title: item.title || address, url: address, domain: getDomain(address),
+          snippet: item.snippet || '', sources: ['Tavily'],
+          suspiciousReasons: suspiciousUrlReasons(address),
+          deep: null, initialScore: 0, finalScore: 0, reasons: []
+        });
+      }
+    } catch (_) {}
+  }
+  return [...merged.values()];
 }
 
 function scoreCandidate(result, query, options) {
@@ -220,10 +340,15 @@ async function searchCandidates(query, signal) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const candidates = [];
   const seen = new Set();
+  let excludedAds = 0;
 
   for (const node of doc.querySelectorAll('.result')) {
     const anchor = node.querySelector('.result__a');
     if (!anchor) continue;
+    if (isAdResult(node, anchor)) {
+      excludedAds += 1;
+      continue;
+    }
 
     const resultUrl = decodeResultUrl(anchor.getAttribute('href') || anchor.href || '');
     if (!/^https?:/i.test(resultUrl)) continue;
@@ -237,17 +362,19 @@ async function searchCandidates(query, signal) {
       title: anchor.textContent?.trim() || normalizedUrl,
       url: normalizedUrl,
       domain: getDomain(normalizedUrl),
+      sources: ['DuckDuckGo'],
       snippet,
       deep: null,
       initialScore: 0,
       finalScore: 0,
-      reasons: []
+      reasons: [],
+      suspiciousReasons: suspiciousUrlReasons(normalizedUrl)
     });
 
     if (candidates.length >= 30) break;
   }
 
-  return candidates;
+  return { candidates, excludedAds };
 }
 
 function cleanDocumentText(doc) {
@@ -341,6 +468,14 @@ async function inspectPage(result, query, signal) {
 function render(results, query, meta) {
   resultsEl.textContent = '';
 
+  summaryEl.textContent =
+    `${meta.candidates} candidati · ${meta.excludedAds} annunci riconoscibili esclusi · ` +
+    `${meta.hiddenSuspicious} link sospetti nascosti · ${meta.blockedCount} siti esclusi da te · ` +
+    `${meta.deepRead} pagine approfondite · ` +
+    `${Math.min(results.length, 10)} risultati mostrati · ranking locale`;
+
+  lastRendered = { results, query, meta };
+
   const shown = results.slice(0, 10);
   if (!shown.length) {
     resultsEl.textContent = 'Nessun risultato sufficientemente pertinente.';
@@ -369,6 +504,14 @@ function render(results, query, meta) {
       h2.appendChild(badge);
     }
 
+    if (result.suspiciousReasons.length) {
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = 'URL da verificare';
+      badge.title = result.suspiciousReasons.join(' · ');
+      h2.appendChild(badge);
+    }
+
     const score = document.createElement('div');
     score.className = 'score';
     score.textContent = `pertinenza ${Math.round(result.finalScore)}`;
@@ -377,7 +520,7 @@ function render(results, query, meta) {
 
     const domain = document.createElement('div');
     domain.className = 'domain';
-    domain.textContent = result.domain;
+    domain.textContent = `${result.domain} · ${result.sources.join(' + ')}`;
 
     const snippet = document.createElement('div');
     snippet.className = 'snippet';
@@ -398,14 +541,23 @@ function render(results, query, meta) {
     reason.textContent = reasons.length ? 'Perché: ' + reasons.slice(0, 4).join(' · ') : 'Ranking locale';
     article.appendChild(reason);
 
+    const block = document.createElement('button');
+    block.type = 'button';
+    block.className = 'block-site';
+    block.textContent = 'Segna come fake · escludi sito';
+    block.title = `Escludi ${siteHost(result.url)} dalle future ricerche`;
+    block.addEventListener('click', async () => {
+      try { await blockResultSite(result.url); }
+      catch (error) { summaryEl.textContent = 'Blocco non salvato: ' + (error?.message || error); }
+    });
+    article.appendChild(block);
+
     resultsEl.appendChild(article);
   });
 
-  summaryEl.textContent =
-    `${meta.candidates} candidati · ${meta.deepRead} pagine approfondite · ${shown.length} risultati mostrati · ranking locale`;
 }
 
-async function executeSearch(rawQuery) {
+async function executeSearch(rawQuery, useTavily = false) {
   activeController?.abort();
   activeController = new AbortController();
   const signal = activeController.signal;
@@ -415,7 +567,8 @@ async function executeSearch(rawQuery) {
     deep: document.getElementById('deep').checked,
     preferDirect: document.getElementById('prefer-direct').checked,
     penalizeShopping: document.getElementById('penalize-shopping').checked,
-    penalizeSocial: document.getElementById('penalize-social').checked
+    penalizeSocial: document.getElementById('penalize-social').checked,
+    hideSuspicious: document.getElementById('hide-suspicious').checked
   };
 
   stopButton.disabled = false;
@@ -423,7 +576,33 @@ async function executeSearch(rawQuery) {
   summaryEl.textContent = 'Cerco candidati…';
 
   try {
-    let candidates = await searchCandidates(query, signal);
+    await loadBlockedSites();
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const requests = [searchCandidates(query, signal)];
+    if (useTavily) requests.push(browser.runtime.sendMessage({
+      type: 'tavily-search-explicit', query: query.engineQuery
+    }));
+    const outcomes = await Promise.allSettled(requests);
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    const duck = outcomes[0].status === 'fulfilled'
+      ? outcomes[0].value : { candidates: [], excludedAds: 0 };
+    const tavily = useTavily && outcomes[1].status === 'fulfilled'
+      ? outcomes[1].value.results : [];
+    const sourceErrors = outcomes.filter(item => item.status === 'rejected')
+      .map(item => item.reason?.message || String(item.reason));
+    if (outcomes.every(item => item.status === 'rejected')) {
+      throw new Error(sourceErrors.join(' · '));
+    }
+    let candidates = mergeCandidates(duck.candidates, tavily);
+    const collectedCount = candidates.length;
+    if (useTavily) await updateTavilyStatus();
+    const blockedCount = candidates.filter(result => isBlockedSite(result.url)).length;
+    candidates = candidates.filter(result => !isBlockedSite(result.url));
+    const hiddenSuspicious = options.hideSuspicious
+      ? candidates.filter(result => result.suspiciousReasons.length).length : 0;
+    if (options.hideSuspicious) {
+      candidates = candidates.filter(result => !result.suspiciousReasons.length);
+    }
 
     for (const result of candidates) {
       const scored = scoreCandidate(result, query, options);
@@ -454,16 +633,23 @@ async function executeSearch(rawQuery) {
         .sort((a, b) => b.finalScore - a.finalScore);
     }
 
-    render(candidates, query, { candidates: candidates.length, deepRead });
+    render(candidates, query, {
+      candidates: collectedCount, excludedAds: duck.excludedAds,
+      hiddenSuspicious, blockedCount, deepRead
+    });
+    if (sourceErrors.length) summaryEl.textContent += ` · Fonte non disponibile: ${sourceErrors.join(' · ')}`;
   } catch (error) {
+    if (activeController?.signal !== signal) return;
     if (error?.name === 'AbortError') {
       summaryEl.textContent = 'Ricerca interrotta.';
     } else {
       summaryEl.textContent = 'SMART SEARCH non ha completato la ricerca: ' + (error?.message || error);
     }
   } finally {
-    stopButton.disabled = true;
-    activeController = null;
+    if (activeController?.signal === signal) {
+      stopButton.disabled = true;
+      activeController = null;
+    }
   }
 }
 
@@ -471,6 +657,64 @@ form.addEventListener('submit', (event) => {
   event.preventDefault();
   const query = queryInput.value.trim();
   if (query) executeSearch(query);
+});
+
+tavilyButton.addEventListener('click', () => {
+  const query = queryInput.value.trim();
+  if (query) executeSearch(query, true);
+  else queryInput.reportValidity();
+});
+
+async function updateTavilyStatus() {
+  try {
+    const state = await browser.runtime.sendMessage({ type: 'tavily-key-status' });
+    tavilyButton.disabled = !state.configured || state.used >= state.limit ||
+      state.monthUsed >= state.monthLimit;
+    tavilyDailyLimit.value = state.limit;
+    tavilyStatus.textContent = state.configured
+      ? `Chiave configurata · ${state.used}/${state.limit} oggi · ` +
+        `${state.monthUsed}/${state.monthLimit} nel mese (contatori locali; la quota effettiva è su Tavily).`
+      : 'Nessuna chiave configurata. La ricerca senza chiave resta disponibile.';
+  } catch (error) {
+    tavilyButton.disabled = true;
+    tavilyStatus.textContent = 'Stato Tavily non disponibile: ' + (error?.message || error);
+  }
+}
+
+document.getElementById('save-tavily-key').addEventListener('click', async () => {
+  try {
+    await browser.runtime.sendMessage({ type: 'tavily-key-save', key: tavilyKeyInput.value });
+    tavilyKeyInput.value = '';
+    await updateTavilyStatus();
+  } catch (error) {
+    tavilyStatus.textContent = 'Chiave non salvata: ' + (error?.message || error);
+  }
+});
+
+document.getElementById('remove-tavily-key').addEventListener('click', async () => {
+  try {
+    await browser.runtime.sendMessage({ type: 'tavily-key-remove' });
+    tavilyKeyInput.value = '';
+    await updateTavilyStatus();
+  } catch (error) {
+    tavilyStatus.textContent = 'Rimozione fallita: ' + (error?.message || error);
+  }
+});
+
+document.getElementById('save-tavily-limit').addEventListener('click', async () => {
+  try {
+    await browser.runtime.sendMessage({
+      type: 'tavily-limit-save', limit: tavilyDailyLimit.value
+    });
+    await updateTavilyStatus();
+  } catch (error) {
+    tavilyStatus.textContent = 'Limite non salvato: ' + (error?.message || error);
+  }
+});
+
+updateTavilyStatus();
+loadBlockedSites().catch(error => {
+  blockedSitesEl.textContent = 'Lista non disponibile: ' + (error?.message || error);
 });
 
 stopButton.addEventListener('click', () => {

@@ -18,6 +18,7 @@
       </div>
       <button id="close" class="icon-button" title="Chiudi" aria-label="Chiudi">×</button>
     </header>
+    <p id="mode-warning" class="mode-warning" role="alert" hidden></p>
 
     <section class="hero-card">
       <div class="section-head">
@@ -32,7 +33,7 @@
         <button data-mode="PRIVATE"><b>PRIVATE</b><span>Più isolamento</span></button>
         <button data-mode="GHOST"><b>GHOST</b><span>Sessione effimera</span></button>
       </div>
-      <p class="hint">GHOST ripulisce i dati creati nella sua fase quando ne esci.</p>
+      <p class="hint">GHOST ripulisce cronologia della sessione e dati dei siti visitati all'uscita; può rimuovere anche dati preesistenti di quei siti.</p>
     </section>
 
     <section class="card">
@@ -42,6 +43,7 @@
       </div>
       <div id="resource-stats" class="resource">RAM — · CPU — · processi —</div>
       <div id="status" class="status">Caricamento…</div>
+      <button id="diagnostics" class="wide-secondary">DIAGNOSTICA MODALITÀ E TOR</button>
     </section>
 
     <section class="card split-card">
@@ -83,6 +85,14 @@
       </label>
 
       <label class="field-label" for="secure-dns">DNS</label>
+      <select id="dns-provider" aria-label="Provider DNS">
+        <option value="system">Sistema / DNS di Windows</option>
+        <option value="default">DoH predefinito del browser</option>
+        <option value="cloudflare">Cloudflare 1.1.1.1</option>
+        <option value="google">Google Public DNS</option>
+        <option value="quad9">Quad9 (con blocco malware)</option>
+        <option value="custom">Personalizzato</option>
+      </select>
       <select id="secure-dns">
         <option value="off">SISTEMA / DNS DI WINDOWS</option>
         <option value="balanced">DoH + fallback</option>

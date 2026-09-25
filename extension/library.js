@@ -26,8 +26,12 @@ function matchesFilter(...values) {
 function actionButton(label, action) {
   const button = document.createElement('button');
   button.textContent = label;
-  button.addEventListener('click', action);
+  button.addEventListener('click', () => Promise.resolve().then(action).catch(showError));
   return button;
+}
+
+function showError(error) {
+  content.textContent = 'Operazione non riuscita: ' + (error?.message || error);
 }
 
 function row(titleText, metaText, url, actions = []) {
@@ -185,10 +189,10 @@ async function showDownloads() {
 
     if (item.state === 'complete') {
       actions.push(actionButton('Apri', async () => {
-        try { await browser.downloads.open(item.id); } catch (_) {}
+        await browser.downloads.open(item.id);
       }));
       actions.push(actionButton('Cartella', async () => {
-        try { await browser.downloads.show(item.id); } catch (_) {}
+        await browser.downloads.show(item.id);
       }));
     }
 
@@ -216,31 +220,33 @@ for (const tab of tabs) {
   tab.addEventListener('click', () => {
     filterInput.value = '';
     currentTab = tab.dataset.tab;
-    renderCurrent();
+    renderCurrent().catch(showError);
   });
 }
 
 let filterTimer = null;
 filterInput.addEventListener('input', () => {
   clearTimeout(filterTimer);
-  filterTimer = setTimeout(renderCurrent, 160);
+  filterTimer = setTimeout(() => renderCurrent().catch(showError), 160);
 });
 
 clearButton.addEventListener('click', async () => {
-  if (currentTab === 'history') {
-    const ok = confirm('Cancellare tutta la cronologia?');
-    if (!ok) return;
-    await browser.history.deleteAll();
-    await showHistory();
-    return;
-  }
+  try {
+    if (currentTab === 'history') {
+      const ok = confirm('Cancellare tutta la cronologia?');
+      if (!ok) return;
+      await browser.history.deleteAll();
+      await showHistory();
+      return;
+    }
 
-  if (currentTab === 'downloads') {
-    const ok = confirm('Rimuovere l’elenco dei download? I file scaricati non verranno cancellati.');
-    if (!ok) return;
-    await browser.downloads.erase({});
-    await showDownloads();
-  }
+    if (currentTab === 'downloads') {
+      const ok = confirm('Rimuovere l’elenco dei download? I file scaricati non verranno cancellati.');
+      if (!ok) return;
+      await browser.downloads.erase({});
+      await showDownloads();
+    }
+  } catch (error) { showError(error); }
 });
 
-showHistory();
+showHistory().catch(showError);

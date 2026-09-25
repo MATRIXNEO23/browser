@@ -41,6 +41,7 @@
   },
   "host_permissions": [
     "https://html.duckduckgo.com/*",
+    "https://api.tavily.com/*",
     "<all_urls>"
   ],
   "chrome_url_overrides": {

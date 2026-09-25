@@ -1,0 +1,21 @@
+:root { color-scheme: dark; font: 14px/1.45 system-ui, sans-serif; background: #101318; color: #ecf4fa; }
+body { margin: 0; }
+main { max-width: 860px; margin: 0 auto; padding: 28px 18px 50px; }
+header { display: flex; align-items: center; gap: 14px; }
+header img { width: 42px; height: 42px; object-fit: contain; }
+h1 { margin: 0; font-size: 25px; }
+h2 { margin: 0 0 12px; font-size: 17px; }
+p { color: #aabac5; }
+header p { margin: 2px 0 0; }
+button { background: #133c52; border: 1px solid #3682a6; color: #f3fbff; border-radius: 8px; padding: 9px 14px; margin: 20px 0 4px; cursor: pointer; }
+button:hover { background: #1b526d; }
+button:disabled { opacity: .5; cursor: default; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+section { background: #171e26; border: 1px solid #2b3a46; border-radius: 10px; padding: 18px; margin-top: 18px; }
+.row { display: flex; justify-content: space-between; gap: 20px; border-top: 1px solid #293743; padding: 9px 0; }
+.row:first-of-type { border-top: 0; }
+.row span { color: #b8c8d1; }
+.row strong { text-align: right; overflow-wrap: anywhere; font-weight: 600; }
+.pass { color: #77ddba; }.fail { color: #ff9f9f; }.unknown { color: #f2d69b; }
+.log { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.4 ui-monospace, monospace; }
+.note { font-size: 12px; }

@@ -135,8 +135,7 @@ jobs:
             "-headless",
             "-no-remote",
             "-new-instance",
-            "-profile", $profile,
-            "about:blank"
+            "-profile", $profile
           )
 
           $launcher = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -PassThru
@@ -187,7 +186,7 @@ jobs:
             }
 
             $prefsPath = Join-Path $profile "prefs.js"
-            $controlDeadline = (Get-Date).AddSeconds(220)
+            $controlDeadline = (Get-Date).AddSeconds(360)
             $controlsRaw = $null
 
             while ((Get-Date) -lt $controlDeadline) {

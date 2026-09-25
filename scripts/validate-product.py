@@ -52,9 +52,10 @@ sidebar_html = require_text(
     "extension/sidebar.html",
     'data-mode="NORMAL"', 'data-mode="TURBO"', 'data-mode="PRIVATE"', 'data-mode="GHOST"',
     'id="ads"', 'id="enforce"', 'id="smart-search"', 'id="addons-installed"',
-    'id="https-only"', 'id="secure-dns"', 'id="dns-endpoint"', 'id="apply-dns"',
+    'id="https-only"', 'id="secure-dns"', 'id="dns-provider"', 'id="dns-endpoint"', 'id="apply-dns"',
     'id="dns-status"', 'id="hardware-accel"', 'id="network-mode"',
-    'id="resource-stats"', 'id="library"', 'id="tor-toggle"', 'id="tor-status"'
+    'id="resource-stats"', 'id="library"', 'id="tor-toggle"', 'id="tor-status"',
+    'id="diagnostics"'
 )
 
 sidebar_js = require_text(
@@ -65,8 +66,11 @@ sidebar_js = require_text(
     "browser.proxy.settings.set", "set-tor", "set-filum-panel-open",
     "runControlSelfTest", "tor-bootstrap-100", "dns-custom-endpoint",
     "network-direct", "network-system-vpn", "network-socks5",
-    "reportControlSelfTest"
+    "reportControlSelfTest", "dns-cloudflare-preset", "tor-mode-switch-webrtc"
 )
+
+require_text("extension/diagnostics.html", 'id="mode"', 'id="tor"', 'diagnostics.js')
+require_text("extension/diagnostics.js", "get-mode-diagnostics", "browser.proxy.settings.get", "get-status")
 
 background_js = require_text(
     "extension/background.js",
@@ -121,7 +125,7 @@ require_text(
     "#filum-panel-box",
     "#filum-panel-browser",
     "#resource-controller_matrixneo23_browser-browser-action",
-    "chrome://branding/content/icon32.png"
+    "data:image/svg+xml,"
 )
 require_text("scripts/generate-brand-assets.py", "Image.open", "firefox.ico", "default{size}.png")
 require_text(
@@ -154,7 +158,9 @@ require_text(
 )
 require_text(
     "fork/branding/pref/firefox-branding.js",
-    'pref("sidebar.position_start", false);'
+    'pref("sidebar.position_start", false);',
+    'pref("browser.startup.homepage", "about:newtab");',
+    'pref("browser.startup.page", 1);'
 )
 require_text(
     "docs/CANONICAL_PRODUCT_REQUIREMENTS.md",
@@ -192,4 +198,3 @@ if errors:
 
 print("PRODUCT GATE PASSED")
 print("Required visual and functional surfaces are present and wired.")
-
