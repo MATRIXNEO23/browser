@@ -80,7 +80,8 @@ api_js = require_text(
     "startTor", "stopTor", "getTorStatus", "Subprocess.call"
 )
 
-require_text("extension/newtab.html", 'id="normal-search"', 'id="smart"', 'id="library"', 'id="addons"')
+require_text("extension/newtab.html", 'id="normal-search"', 'id="smart"', 'id="library"', 'id="addons"', "<strong>FILUM</strong>")
+require_text("extension/newtab.css", 'url("assets/filum-background.jpg")', ".brand-mark img")
 require_text("extension/newtab.js", "browser.search.search", "smart-search.html", "library.html", "addons.html")
 require_text("extension/smart-search.js", "searchCandidates", "scoreCandidate", "inspectPage")
 require_text("extension/library.js", "browser.history", "browser.bookmarks", "browser.downloads")
@@ -94,6 +95,8 @@ require_text(
 )
 require_file("fork/branding/browser-icon.png")
 require_file("extension/icons/browser.png")
+for i in range(1, 6):
+    require_file(f"extension/assets/filum-background.b64.{i:02d}")
 require_text(
     "fork/browser-chrome.css",
     "#navigator-toolbox",
@@ -111,7 +114,9 @@ require_text(
     "patch_native_filum_button",
     'id="filum-sidebar-button"',
     "resource-controller_matrixneo23_browser-sidebar-action",
-    "navigator-toolbox.inc.xhtml"
+    "navigator-toolbox.inc.xhtml",
+    "restore_filum_background",
+    "2b2c7f659eaade035375be20f8735ab3daada878645cfb0cda5f7381721c1bc6"
 )
 require_text(
     "fork/branding/pref/firefox-branding.js",
