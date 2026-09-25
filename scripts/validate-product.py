@@ -110,8 +110,13 @@ require_text(
     "MATRIXNEO23 Browser fork",
     "patch_native_filum_button",
     'id="filum-sidebar-button"',
-    "resource-controller_matrixneo23_browser-sidebar-action",
+    'oncommand="FilumSidebar.toggle();"',
+    "patch_filum_sidebar_controller",
+    'extensionId: "resource-controller@matrixneo23.browser"',
+    "SidebarController.sidebars",
+    "SidebarController.show(commandID)",
     "navigator-toolbox.inc.xhtml",
+    "browser.js",
     "restore_filum_background",
     "2b2c7f659eaade035375be20f8735ab3daada878645cfb0cda5f7381721c1bc6"
 )
