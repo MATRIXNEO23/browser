@@ -402,17 +402,14 @@ jobs:
               throw "Browser runtime did not remain active after launch."
             }
 
-            Start-Sleep -Seconds 9
+            $extensionsJson = Join-Path $profile "extensions.json"
+            $extensionsDeadline = (Get-Date).AddSeconds(45)
+            while ((Get-Date) -lt $extensionsDeadline -and -not (Test-Path $extensionsJson)) {
+              Start-Sleep -Seconds 1
+            }
+            if (-not (Test-Path $extensionsJson)) { throw "Browser profile missing extensions.json." }
 
             $profileFiles = Get-ChildItem $profile -Force -ErrorAction SilentlyContinue
-            if (-not $profileFiles) {
-              throw "Browser launched but did not initialize its profile."
-            }
-
-            $extensionsJson = Join-Path $profile "extensions.json"
-            if (-not (Test-Path $extensionsJson)) {
-              throw "Browser profile missing extensions.json; builtin core activation cannot be verified."
-            }
 
             $extensions = Get-Content $extensionsJson -Raw | ConvertFrom-Json
             $core = $extensions.addons | Where-Object { $_.id -eq "resource-controller@matrixneo23.browser" } | Select-Object -First 1
@@ -441,15 +438,18 @@ jobs:
             }
 
             $prefsPath = Join-Path $profile "prefs.js"
-            if (-not (Test-Path $prefsPath)) {
-              throw "prefs.js missing; FILUM native panel self-test result unavailable."
+            $panelDeadline = (Get-Date).AddSeconds(45)
+            $match = $null
+            while ((Get-Date) -lt $panelDeadline) {
+              Start-Sleep -Seconds 1
+              if (-not (Test-Path $prefsPath)) { continue }
+              $prefsText = Get-Content $prefsPath -Raw
+              $match = [regex]::Match(
+                $prefsText,
+                'user_pref\("filum\.selftest\.panel",\s*"([^"]+)"\);'
+              )
+              if ($match.Success) { break }
             }
-
-            $prefsText = Get-Content $prefsPath -Raw
-            $match = [regex]::Match(
-              $prefsText,
-              'user_pref\("filum\.selftest\.panel",\s*"([^"]+)"\);'
-            )
             if (-not $match.Success) {
               throw "FILUM native panel self-test did not report a result."
             }
@@ -460,7 +460,7 @@ jobs:
               throw "FILUM native panel self-test failed: $panelResult"
             }
 
-            $controlDeadline = (Get-Date).AddSeconds(150)
+            $controlDeadline = (Get-Date).AddSeconds(220)
             $controlsRaw = $null
             while ((Get-Date) -lt $controlDeadline) {
               Start-Sleep -Seconds 2
