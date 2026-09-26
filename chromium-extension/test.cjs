@@ -14,7 +14,9 @@ const tabs = [
 const storage = {};
 const rules = new Set(['ads_basic']);
 let alarmActive = false;
+let panelOpensOnActionClick = false;
 const chrome = {
+  sidePanel: { async setPanelBehavior(value) { panelOpensOnActionClick = value.openPanelOnActionClick; } },
   storage: { local: {
     async get(defaults) { return { ...defaults, ...storage }; },
     async set(values) { Object.assign(storage, values); }
@@ -47,6 +49,8 @@ function message(request) {
   return new Promise(resolve => listeners.message(request, {}, resolve));
 }
 (async () => {
+  await Promise.resolve();
+  assert.equal(panelOpensOnActionClick, true);
   assert.equal((await message({ type: 'status' })).data.mode, 'NORMAL');
   let result = await message({ type: 'mode', mode: 'TURBO' });
   assert.equal(result.ok, true);

@@ -1,6 +1,7 @@
 const RULESET = 'ads_basic';
 const ALARM = 'filum-turbo';
 const MODES = new Set(['NORMAL', 'TURBO']);
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.warn);
 let transition = Promise.resolve();
 
 function serial(action) {

@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "FILUM Dark Circuit Theme",
+  "version": "0.1.0",
+  "description": "Dark navy and cyan Chrome frame matching FILUM.",
+  "theme": {
+    "colors": {
+      "frame": [5, 14, 23],
+      "toolbar": [9, 26, 38],
+      "tab_text": [164, 218, 232],
+      "bookmark_text": [180, 224, 236],
+      "ntp_background": [5, 14, 23],
+      "ntp_text": [232, 250, 255],
+      "ntp_link": [83, 221, 244],
+      "button_background": [20, 65, 84]
+    }
+  }
+}
