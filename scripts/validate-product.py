@@ -103,8 +103,17 @@ require_text(
 require_text("extension/newtab.js", "browser.search.search", "smart-search.html", "library.html", "addons.html")
 policies = json.loads((ROOT / "distribution/policies.json").read_text(encoding="utf-8"))
 homepage = policies.get("policies", {}).get("Homepage", {})
-if homepage.get("URL") != "about:newtab" or homepage.get("StartPage") != "homepage":
+expected_newtab = "moz-extension://5db2d283-fbda-489c-9f1f-f77a0a674080/newtab.html"
+if homepage.get("URL") != expected_newtab or homepage.get("StartPage") != "homepage":
     raise SystemExit("FILUM startup homepage policy is missing")
+uuid_pref = policies.get("policies", {}).get("Preferences", {}).get(
+    "extensions.webextensions.uuids", {}
+)
+uuid_mapping = json.loads(uuid_pref.get("Value", "{}"))
+if uuid_pref.get("Status") != "default" or uuid_mapping.get(
+    "resource-controller@matrixneo23.browser"
+) != "5db2d283-fbda-489c-9f1f-f77a0a674080":
+    raise SystemExit("FILUM stable WebExtension UUID mapping is missing")
 require_text("extension/smart-search.js", "searchCandidates", "scoreCandidate", "inspectPage")
 require_text("extension/library.js", "browser.history", "browser.bookmarks", "browser.downloads")
 require_text(
@@ -176,7 +185,8 @@ require_text(
 require_text(
     "fork/branding/pref/firefox-branding.js",
     'pref("sidebar.position_start", false);',
-    'pref("browser.startup.homepage", "about:newtab");',
+    'pref("browser.startup.homepage", "moz-extension://5db2d283-fbda-489c-9f1f-f77a0a674080/newtab.html");',
+    'pref("extensions.webextensions.uuids", "{\\\"resource-controller@matrixneo23.browser\\\":\\\"5db2d283-fbda-489c-9f1f-f77a0a674080\\\"}");',
     'pref("browser.startup.page", 1);'
 )
 require_text(

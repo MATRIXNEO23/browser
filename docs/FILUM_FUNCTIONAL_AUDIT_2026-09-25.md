@@ -1,5 +1,9 @@
 # FILUM functional audit — 2026-09-25
 
+## Fixed FILUM startup extension URL — 2026-09-26
+
+The packaged policy and branding default now use `moz-extension://5db2d283-fbda-489c-9f1f-f77a0a674080/newtab.html` as the startup homepage. The built-in addon ID `resource-controller@matrixneo23.browser` is assigned that same UUID through the default `extensions.webextensions.uuids` mapping, so a fresh profile can resolve the fixed URL while Firefox can still create a user-level mapping containing subsequently installed addons. Product, wiring, functional, addon lifecycle, syntax, JSON and diff gates pass locally. A new native Windows build and fresh-profile smoke are required before delivery.
+
 ## Addon lifecycle correction — 2026-09-26
 
 The FILUM addon page incorrectly used the WebExtensions `management.setEnabled()` path for ordinary extensions. On Firefox that path does not provide reliable enable/disable control for normal WebExtensions, leaving an installed addon without a working re-enable action. Addon enable, disable and uninstall now run through the built-in privileged `AddonManager`, with separate `PERM_CAN_ENABLE`, `PERM_CAN_DISABLE` and `PERM_CAN_UNINSTALL` checks and effective-state readback after every action. The page keeps disabled addons visible, changes the action to **Attiva**, confirms removals, refreshes on lifecycle events, and surfaces failures instead of reporting success optimistically.

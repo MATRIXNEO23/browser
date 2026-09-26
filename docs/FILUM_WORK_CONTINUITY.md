@@ -1,5 +1,13 @@
 # FILUM WORK CONTINUITY
 
+## 2026-09-26 — fixed startup URL requested for packaged build
+
+- Alberto clarified that the change must be inside the build, not only in a separately supplied `policies.json`.
+- Packaged policy and branding startup homepage now use `moz-extension://5db2d283-fbda-489c-9f1f-f77a0a674080/newtab.html`.
+- The default WebExtension UUID mapping binds `resource-controller@matrixneo23.browser` to `5db2d283-fbda-489c-9f1f-f77a0a674080`; the mapping is deliberately not locked so Firefox can add mappings for other installed addons.
+- Sidebar self-test and product validator now require the exact runtime URL and UUID mapping.
+- Local full gate passes. Next action: commit remotely, build, and require Windows fresh-profile smoke before delivery.
+
 ## 2026-09-26 — addon lifecycle fix pending native build
 
 - Reported failure: installed addons could not be removed reliably and a disabled addon no longer exposed a working activation path.

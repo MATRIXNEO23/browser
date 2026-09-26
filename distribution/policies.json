@@ -1,7 +1,7 @@
 {
   "policies": {
     "Homepage": {
-      "URL": "about:newtab",
+      "URL": "moz-extension://5db2d283-fbda-489c-9f1f-f77a0a674080/newtab.html",
       "StartPage": "homepage",
       "Locked": false
     },
@@ -24,6 +24,10 @@
       "Fingerprinting": true
     },
     "Preferences": {
+      "extensions.webextensions.uuids": {
+        "Value": "{\"resource-controller@matrixneo23.browser\":\"5db2d283-fbda-489c-9f1f-f77a0a674080\"}",
+        "Status": "default"
+      },
       "browser.tabs.unloadOnLowMemory": {
         "Value": true,
         "Status": "default"

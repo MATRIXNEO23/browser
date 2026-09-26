@@ -645,7 +645,7 @@ async function runControlSelfTest() {
     const expectedNewTab = browser.runtime.getURL('newtab.html');
     const startup = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
     record('startup-homepage-config', startup.startupPage === 1 &&
-      startup.startupHomepage === 'about:newtab', JSON.stringify({
+      startup.startupHomepage === expectedNewTab, JSON.stringify({
         page: startup.startupPage, homepage: startup.startupHomepage,
         headlessInitialTabs: initialTabs.map(tab => tab.url || tab.pendingUrl || '')
       }));
