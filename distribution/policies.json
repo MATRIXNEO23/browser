@@ -1,7 +1,7 @@
 {
   "policies": {
     "Homepage": {
-      "URL": "about:newtab",
+      "URL": "moz-extension://1c2bbf83-7468-4827-a53a-49f76e8c4530/newtab.html",
       "StartPage": "homepage",
       "Locked": false
     },
