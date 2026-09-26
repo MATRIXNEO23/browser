@@ -1,5 +1,11 @@
 # FILUM functional audit — 2026-09-25
 
+## Addon lifecycle correction — 2026-09-26
+
+The FILUM addon page incorrectly used the WebExtensions `management.setEnabled()` path for ordinary extensions. On Firefox that path does not provide reliable enable/disable control for normal WebExtensions, leaving an installed addon without a working re-enable action. Addon enable, disable and uninstall now run through the built-in privileged `AddonManager`, with separate `PERM_CAN_ENABLE`, `PERM_CAN_DISABLE` and `PERM_CAN_UNINSTALL` checks and effective-state readback after every action. The page keeps disabled addons visible, changes the action to **Attiva**, confirms removals, refreshes on lifecycle events, and surfaces failures instead of reporting success optimistically.
+
+The dedicated lifecycle audit exercises active → disabled → enabled → uninstalled and is mandatory in the Windows workflow. Full JavaScript syntax, JSON parsing, Python compilation, product validation, wiring, functional state tests and diff hygiene pass locally. `about:newtab` remains the stable startup target; Firefox resolves it to the profile-specific `moz-extension://<generated-id>/newtab.html`, avoiding an invalid hard-coded UUID. A new Windows build is still required to establish the privileged AddonManager behavior in the packaged Gecko runtime.
+
 ## Final Windows verification — run #116
 
 The validated build from complete source commit `0ceb64348c178a2073f326678de0bbcc557a82c7` passed the product gate, native build, and Windows runtime smoke. The smoke checked three repeated GHOST → NORMAL exits, the other modes, controls, Tor 100%, SOCKS5 proxy DNS, WebRTC after a mode switch, real Tor egress (`IsTor=true`), and stop/restore. The final inner ZIP SHA-256, Actions artifact digest, job IDs, detailed scope and remaining user-machine checks are recorded in `releases/FILUM_WINDOWS_X64_RUN_116.md`. Earlier sections below are historical findings and must not be read as the final status of run #116.

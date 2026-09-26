@@ -86,6 +86,32 @@
         ]
       },
       {
+        "name": "setAddonEnabled",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "id",
+            "type": "string"
+          },
+          {
+            "name": "enabled",
+            "type": "boolean"
+          }
+        ]
+      },
+      {
+        "name": "uninstallAddon",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "id",
+            "type": "string"
+          }
+        ]
+      },
+      {
         "name": "openInternalPage",
         "type": "function",
         "async": true,

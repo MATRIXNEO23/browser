@@ -1,5 +1,14 @@
 # FILUM WORK CONTINUITY
 
+## 2026-09-26 — addon lifecycle fix pending native build
+
+- Reported failure: installed addons could not be removed reliably and a disabled addon no longer exposed a working activation path.
+- Root cause: the custom addon page used `browser.management.setEnabled()` for ordinary Firefox extensions.
+- Fixed in source: privileged AddonManager enable/disable/uninstall methods, direction-specific permission checks, post-action readback, removal confirmation, lifecycle refresh listeners, and explicit errors.
+- Added `scripts/audit-addons.cjs`; active → disabled → enabled → uninstalled passes and the audit is now a required Windows workflow gate.
+- Reconfirmed startup routing: the stable configured value is `about:newtab`; the visible `moz-extension://<profile UUID>/newtab.html` address is generated per profile and must not be hard-coded.
+- Local full gate passes. Next action: commit/publish the exact source, run the Windows build and smoke tests, then deliver only if green.
+
 Captured: 2026-09-25 Europe/Rome
 Repository: MATRIXNEO23/browser
 Canonical branch: main
