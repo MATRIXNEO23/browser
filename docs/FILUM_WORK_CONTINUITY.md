@@ -1,5 +1,7 @@
 # FILUM WORK CONTINUITY
 
+Per ripartire **esattamente dalla build Windows #117**, usare `releases/FILUM_WINDOWS_X64_RUN_117.md`: commit sorgente, tag, ZIP/hash, gate, differenza dalla #118 e procedura di branching sono registrati lì. Questo documento di continuità segue anche versioni successive e non sostituisce il tag #117.
+
 ## 2026-09-26 — build #118 preservation and security status
 
 - Exact built source: `77a1c1f65db6aeb9e9757d10e44a42d590b4ebce`; Windows run `36208276499`, build and smoke passed. The normal release job was explicitly skipped.
