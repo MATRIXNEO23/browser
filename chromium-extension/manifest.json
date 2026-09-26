@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "FILUM for Chromium (prototype)",
+  "version": "0.1.0",
+  "description": "FILUM new tab, ADS control and TURBO tab management for Chromium.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms",
+    "declarativeNetRequest",
+    "search"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {
+    "default_title": "FILUM",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ads_basic",
+        "enabled": true,
+        "path": "rules/ads-basic.json"
+      }
+    ]
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

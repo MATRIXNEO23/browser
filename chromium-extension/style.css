@@ -1,0 +1,21 @@
+:root { color-scheme:dark; font-family:"Segoe UI",system-ui,sans-serif; background:#07121c; color:#e8faff }
+* { box-sizing:border-box } body { margin:0 } button,input { font:inherit }
+button { cursor:pointer; color:#d7f7ff; background:#102c3c; border:1px solid #28728f; border-radius:9px; padding:10px 14px }
+button:hover,button.active { background:#185273; border-color:#54ddf4 }
+.popup { width:300px; background:#081924 } .popup main { padding:16px }
+.popup h1 { font-size:20px; margin:0 0 14px } .popup small { display:block; font-size:11px; color:#8eafbb; font-weight:400 }
+.buttons { display:flex; gap:8px } .buttons button { flex:1 } .popup #ads,.popup #enforce { width:100%; margin-top:8px }
+#status { line-height:1.5; border:1px solid #24475b; padding:10px; border-radius:8px; min-height:42px }
+.note { color:#9db6c0; font-size:11px; line-height:1.5 }
+.newtab { min-height:100vh; background: radial-gradient(circle at 50% 34%,#123f57 0,#081b29 45%,#050d15 100%) }
+.newtab main { min-height:100vh; display:flex; flex-direction:column }
+.newtab header { display:flex; align-items:center; gap:20px; padding:23px 35px; color:#83ddeb }
+.newtab header strong { letter-spacing:.2em } .newtab header time { margin-left:auto }
+.hero { text-align:center; margin:auto; width:min(760px,92vw) }
+.hero img { width:85px; filter:drop-shadow(0 0 18px #39d7ef88) }
+.hero h1 { font-size:clamp(42px,7vw,78px); letter-spacing:.18em; margin:10px 0 0 }
+.hero p { color:#92bfcd; margin:0 0 40px }
+.hero form { display:flex; background:#092333; border:1px solid #3989a0; border-radius:14px; padding:5px }
+.hero input { flex:1; min-width:0; background:transparent; border:0; outline:0; color:white; padding:12px }
+.hero nav { display:flex; justify-content:center; gap:12px; margin-top:25px; flex-wrap:wrap }
+.newtab footer { text-align:center; color:#6d94a4; padding:25px; font-size:12px }
