@@ -10,6 +10,11 @@ document.getElementById('search').addEventListener('submit', async event => {
   const text = document.getElementById('query').value.trim();
   if (text) await chrome.search.query({ text, disposition: 'CURRENT_TAB' });
 });
+document.getElementById('smart').addEventListener('click', () => {
+  const query = document.getElementById('query').value.trim();
+  if (query) location.href = `smart-search.html?q=${encodeURIComponent(query)}`;
+  else document.getElementById('query').focus();
+});
 for (const [id, url] of [['bookmarks', 'chrome://bookmarks/'], ['history', 'chrome://history/'], ['addons', 'chrome://extensions/']]) {
   document.getElementById(id).addEventListener('click', () => chrome.tabs.update({ url }));
 }

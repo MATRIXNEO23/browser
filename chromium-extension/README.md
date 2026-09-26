@@ -1,4 +1,4 @@
-# FILUM for Chrome/Edge Windows — installable prototype 0.2
+# FILUM for Chrome/Edge Windows — installable prototype 0.5.2
 
 This is an isolated Chromium Manifest V3 extension. It does not replace the Firefox-based Windows FILUM release.
 
@@ -9,7 +9,9 @@ This is an isolated Chromium Manifest V3 extension. It does not replace the Fire
 3. Open a new tab and pin the FILUM icon. Click it to open the FILUM side panel.
 4. Optionally load `../chrome-windows-theme` as a second unpacked package to color the browser frame dark navy/cyan. Only one Chrome/Edge theme can be active at a time.
 
-The prototype implements a FILUM new tab, search using the browser's default search provider, direct links to built-in bookmarks/history/extensions pages, a persistent side panel, ADS ruleset toggle with state readback, and NORMAL/TURBO tab management. TURBO retains up to three non-active tabs, protecting pinned, audible and non-discardable tabs where possible. Changing back to NORMAL stops future discards; discarded tabs reload when selected.
+The bundled FILUM new-tab home opens without an Internet connection. The ordinary Search button uses the browser's default search provider. SMART SEARCH offers exact phrases, required and excluded terms, source preferences, shopping/social penalties, suspicious-URL filtering, a locally stored excluded-domain list and an optional deep read of five candidate pages. Deep read asks for access to websites when enabled. The no-key search first requests DuckDuckGo's HTML page and ranks up to 50 results locally, displaying every candidate returned. The 50-result cap does not force DuckDuckGo to provide 50 results on one page. If that endpoint rejects the request or yields no results, the extension opens a temporary background DuckDuckGo tab, reads visible result titles/URLs/snippets and closes the tab. This requires DuckDuckGo host access and Chrome's scripting permission. If the normal page is also blocked or changes its markup, the UI reports the error and offers a direct search link. An optional Tavily key can be saved in the browser profile, with local daily/monthly limits and an explicitly labelled button that uses a credit. No Tavily request runs from the no-key button. The home remains available offline. Opening Chrome/Edge with its startup option set to “New tab” shows this home.
+
+The extension also provides direct links to built-in bookmarks/history/extensions pages, a persistent side panel, ADS ruleset toggle with state readback, and NORMAL/TURBO tab management. TURBO retains up to three non-active tabs, protecting pinned, audible and non-discardable tabs where possible. Changing back to NORMAL stops future discards; discarded tabs reload when selected.
 
 The extension cannot reproduce the Firefox fork's privileged `browserControl` API, native toolbar, Tor process launcher, direct DNS settings, or whole-browser PRIVATE/GHOST semantics. Tor and DNS are shown as unavailable explanations, never as active controls. A verified Windows native companion would be needed for the Tor process; Chrome's proxy API alone does not launch Tor or prove DNS isolation. Chromium may also restrict new-tab overrides in incognito windows. No claim of feature parity or Tor anonymity is made. The optional theme changes supported frame colors, not tab geometry or Chrome's built-in controls.
 

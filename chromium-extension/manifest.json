@@ -1,15 +1,18 @@
 {
   "manifest_version": 3,
   "name": "FILUM for Chrome Windows (prototype)",
-  "version": "0.2.0",
-  "description": "FILUM new tab, side panel, ADS and TURBO for Chrome on Windows.",
+  "version": "0.5.2",
+  "description": "FILUM offline home, Smart Search, side panel, ADS and TURBO for Chrome on Windows.",
+  "host_permissions": ["https://html.duckduckgo.com/*", "https://duckduckgo.com/*", "https://api.tavily.com/*"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
   "permissions": [
     "storage",
     "tabs",
     "alarms",
     "declarativeNetRequest",
     "search",
-    "sidePanel"
+    "sidePanel",
+    "scripting"
   ],
   "background": {
     "service_worker": "worker.js"

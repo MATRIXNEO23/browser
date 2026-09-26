@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Smart Search</title>
+  <link rel="stylesheet" href="smart-search.css">
+</head>
+<body>
+  <main>
+    <header><a href="newtab.html">← FILUM Home</a>
+      <div>
+        <h1>SMART SEARCH</h1>
+        <p>Il motore trova i candidati; il browser li riordina per la tua richiesta.</p>
+      </div>
+    </header>
+
+    <form id="search-form">
+      <input id="query" type="search" autocomplete="off"
+        placeholder='Cerca... usa +obbligatorio, -escluso o "frase esatta"' required>
+
+      <div class="options">
+        <label><input id="deep" type="checkbox"> Approfondisci i migliori 5</label>
+        <label><input id="prefer-direct" type="checkbox" checked> Preferisci fonti dirette/tecniche</label>
+        <label><input id="penalize-shopping" type="checkbox"> Penalizza shopping</label>
+        <label><input id="penalize-social" type="checkbox"> Penalizza social</label>
+        <label><input id="hide-suspicious" type="checkbox" checked> Nascondi link sospetti</label>
+      </div>
+      <p class="filter-note">La ricerca senza chiave dipende dalla pagina HTML di DuckDuckGo e può essere bloccata. L’approfondimento chiede accesso ai siti quando lo attivi. Annunci riconoscibili esclusi. “Sospetto” indica segnali tecnici nell'URL, non una verifica della verità dei contenuti.</p>
+
+      <div class="actions">
+        <button type="submit">Cerca senza chiave</button>
+        <button id="search-tavily" type="button" disabled>Cerca anche con Tavily · usa 1 credito</button>
+        <button id="stop" type="button" disabled>Ferma</button>
+      </div>
+    </form>
+
+    <section class="api-settings">
+      <h2>Tavily · ricerca aggiuntiva facoltativa</h2>
+      <p>La chiave resta nel profilo locale. Tavily parte solo dal pulsante dedicato. Ricerca basic: 1 credito; nessun retry. Limite iniziale 33 al giorno, modificabile qui sotto.</p>
+      <input id="tavily-key" type="password" autocomplete="off" placeholder="Incolla la chiave Tavily (tvly-…)">
+      <button id="save-tavily-key" type="button">Salva chiave</button>
+      <button id="remove-tavily-key" type="button">Rimuovi chiave</button>
+      <label for="tavily-daily-limit">Limite giornaliero</label>
+      <input id="tavily-daily-limit" type="number" min="1" max="1000" value="33">
+      <button id="save-tavily-limit" type="button">Salva limite</button>
+      <p id="tavily-status" role="status">Lettura stato chiave…</p>
+    </section>
+
+    <section id="summary" class="summary" role="status"></section><p id="fallback" hidden><a id="fallback-link" target="_blank" rel="noreferrer">Apri la stessa ricerca direttamente su DuckDuckGo</a></p>
+    <section id="results" class="results"></section>
+    <section class="api-settings">
+      <h2>Siti esclusi da te</h2>
+      <p>“Segna come fake” aggiunge il dominio alla tua lista locale. Le ricerche future nascondono quel dominio e i suoi sottodomini; puoi rimuoverlo qui. La lista non certifica la falsità dei contenuti.</p>
+      <div id="blocked-sites"></div>
+    </section>
+  </main>
+  <script src="smart-search.js"></script>
+</body>
+</html>
