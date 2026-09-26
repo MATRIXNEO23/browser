@@ -1,5 +1,13 @@
 # FILUM WORK CONTINUITY
 
+## 2026-09-26 — build #118 preservation and security status
+
+- Exact built source: `77a1c1f65db6aeb9e9757d10e44a42d590b4ebce`; Windows run `36208276499`, build and smoke passed. The normal release job was explicitly skipped.
+- Final inner ZIP SHA-256 `78f2160d1014d5da89645b4c73bb414524d3c51e874293c558319fb1b34bc63b`; `browser.exe` SHA-256 `7619adf588c57f40b241bb26938a6317b72f2218d2d63756a1477e2a038451bf`, identical to build #117.
+- Startup URL is inside the package and passed the fresh-profile Windows smoke. The addon lifecycle source gate passed; real third-party addon lifecycle on Alberto's PC remains a separate check.
+- Defender on Alberto's PC detected copies of this executable as `Trojan:Win32/Bearfoos.B!ml`; the cause has not been established. Do not equate CI success or a hash match with security clearance. Separate web-cache redirector alert was observed.
+- Technical manifest: `releases/FILUM_WINDOWS_X64_RUN_118.md`. One-time retention workflow targets source commit `77a1c1f` and creates prerelease `fork-77a1c1f` with the binary and checksum. Verify its actual run and assets before declaring preservation complete.
+
 ## 2026-09-26 — fixed startup URL requested for packaged build
 
 - Alberto clarified that the change must be inside the build, not only in a separately supplied `policies.json`.
