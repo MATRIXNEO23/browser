@@ -107,7 +107,20 @@ if homepage.get("URL") != "about:newtab" or homepage.get("StartPage") != "homepa
     raise SystemExit("FILUM startup homepage policy is missing")
 require_text("extension/smart-search.js", "searchCandidates", "scoreCandidate", "inspectPage")
 require_text("extension/library.js", "browser.history", "browser.bookmarks", "browser.downloads")
-require_text("extension/addons.js", "browser.management.getAll", "browser.management.uninstall")
+require_text(
+    "extension/addons.js",
+    "browser.management.getAll",
+    "browser.browserControl.setAddonEnabled",
+    "browser.browserControl.uninstallAddon",
+)
+require_text(
+    "extension/experiment-apis/browserControl.js",
+    "AddonManager.getAddonByID",
+    "AddonManager.PERM_CAN_ENABLE",
+    "AddonManager.PERM_CAN_DISABLE",
+    "AddonManager.PERM_CAN_UNINSTALL",
+)
+require_file("scripts/audit-addons.cjs")
 require_text(
     "fork/mozconfig.win64",
     "--with-app-name=browser",

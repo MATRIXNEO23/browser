@@ -341,26 +341,28 @@ document.getElementById('enforce').addEventListener('click', async () => {
 });
 
 browserTheme.addEventListener('change', async () => {
+  const requested = browserTheme.value;
   try {
     await browser.runtime.sendMessage({
       type: 'set-browser-theme',
-      mode: browserTheme.value
+      mode: requested
     });
-    setPanelStatus('Interfaccia: ' + browserTheme.value.toUpperCase());
+    setPanelStatus('Interfaccia: ' + requested.toUpperCase());
   } catch (error) {
     setPanelStatus('Interfaccia: ' + errorText(error), true);
   }
 });
 
 websiteAppearance.addEventListener('change', async () => {
+  const requested = websiteAppearance.value;
   try {
     await browser.runtime.sendMessage({
       type: 'set-website-appearance',
-      mode: websiteAppearance.value
+      mode: requested
     });
     await loadAdvancedSettings();
     setPanelStatus(
-      'Aspetto siti: ' + websiteAppearance.value.toUpperCase()
+      'Aspetto siti: ' + requested.toUpperCase()
     );
   } catch (error) {
     setPanelStatus('Aspetto siti: ' + errorText(error), true);
@@ -658,7 +660,11 @@ async function runControlSelfTest() {
       await browser.tabs.remove(newTab.id);
     }
 
-    for (const mode of ['NORMAL', 'TURBO', 'PRIVATE', 'GHOST']) {
+    for (const [index, mode] of [
+      'NORMAL', 'TURBO', 'PRIVATE', 'GHOST',
+      'NORMAL', 'TURBO', 'PRIVATE', 'GHOST',
+      'NORMAL', 'TURBO', 'PRIVATE', 'GHOST', 'NORMAL'
+    ].entries()) {
       const button = modeButtons.find(item => item.dataset.mode === mode);
       button.click();
 
@@ -675,7 +681,7 @@ async function runControlSelfTest() {
       const expectedAutoplay = mode === 'TURBO' || mode === 'GHOST' ? 5 : 1;
 
       record(
-        'mode-' + mode.toLowerCase(),
+        'mode-' + mode.toLowerCase() + (index < 4 ? '' : '-transition-' + (index + 1)),
         button.classList.contains('active') &&
           button.getAttribute('aria-pressed') === 'true' &&
           applied.httpsOnly === protectedMode &&
@@ -748,14 +754,15 @@ async function runControlSelfTest() {
       uri: initialAdvanced.secureDnsUri || ''
     });
 
-    websiteAppearance.value =
+    const requestedAppearance =
       initialAdvanced.websiteAppearance === 'dark' ? 'light' : 'dark';
+    websiteAppearance.value = requestedAppearance;
     websiteAppearance.dispatchEvent(new Event('change'));
     await waitFor(async () => {
       const value = await browser.runtime.sendMessage({
         type: 'get-advanced-settings'
       });
-      return value.websiteAppearance === websiteAppearance.value;
+      return value.websiteAppearance === requestedAppearance;
     });
     record('website-appearance', true);
 
@@ -765,13 +772,14 @@ async function runControlSelfTest() {
     });
 
     const initialTheme = initialAdvanced.browserTheme || 'dark';
-    browserTheme.value = initialTheme === 'black' ? 'dark' : 'black';
+    const requestedTheme = initialTheme === 'black' ? 'dark' : 'black';
+    browserTheme.value = requestedTheme;
     browserTheme.dispatchEvent(new Event('change'));
     await waitFor(async () => {
       const value = await browser.runtime.sendMessage({
         type: 'get-advanced-settings'
       });
-      return value.browserTheme === browserTheme.value;
+      return value.browserTheme === requestedTheme;
     });
     record('browser-theme', true);
 

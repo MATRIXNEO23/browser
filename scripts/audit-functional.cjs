@@ -405,6 +405,37 @@ async function main() {
   assert.equal(ui.adsButton.textContent, 'ADS: ERRORE');
   assert.equal(ui.modeWarning.hidden, false);
 
+  // A delayed settings refresh must not change the value an event submits.
+  const settingsEvents = {};
+  const changedSettings = [];
+  const settingElement = () => ({ value: '', addEventListener(type, listener) {
+    settingsEvents[this.kind + ':' + type] = listener;
+  } });
+  const themeSelect = settingElement(); themeSelect.kind = 'theme';
+  const appearanceSelect = settingElement(); appearanceSelect.kind = 'appearance';
+  const settingsContext = vm.createContext({
+    browserTheme: themeSelect, websiteAppearance: appearanceSelect,
+    browser: { runtime: { async sendMessage(message) {
+      changedSettings.push(message);
+      await Promise.resolve();
+    } } },
+    async loadAdvancedSettings() {}, setPanelStatus() {}, errorText: String
+  });
+  vm.runInContext(sidebar.slice(sidebar.indexOf("browserTheme.addEventListener('change'"),
+    sidebar.indexOf("httpsOnly.addEventListener('change'")), settingsContext);
+  themeSelect.value = 'black';
+  const themeChange = settingsEvents['theme:change']();
+  themeSelect.value = 'dark';
+  await themeChange;
+  appearanceSelect.value = 'light';
+  const appearanceChange = settingsEvents['appearance:change']();
+  appearanceSelect.value = 'auto';
+  await appearanceChange;
+  assert.equal(changedSettings[0].mode, 'black');
+  assert.equal(changedSettings[1].mode, 'light');
+  assert.match(sidebar, /value\.browserTheme === requestedTheme/);
+  assert.match(sidebar, /value\.websiteAppearance === requestedAppearance/);
+
   let rulesets = [];
   browser.declarativeNetRequest = {
     async getEnabledRulesets() { return rulesets; },

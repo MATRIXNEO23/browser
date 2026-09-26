@@ -47,6 +47,7 @@ jobs:
           python3 scripts/validate-product.py
           python3 scripts/audit-wiring.py
           node scripts/audit-functional.cjs
+          node scripts/audit-addons.cjs
           node scripts/audit-toolbar.cjs
           python3 -m json.tool fork/UPSTREAM.json >/dev/null
           python3 -m json.tool extension/manifest.json >/dev/null
