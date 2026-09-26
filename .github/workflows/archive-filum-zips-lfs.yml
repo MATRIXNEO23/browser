@@ -1,0 +1,44 @@
+name: Archive FILUM ZIPs with Git LFS
+
+on:
+  push:
+    branches: [fix/tor-first-bootstrap]
+    paths: [.github/workflows/archive-filum-zips-lfs.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/tor-first-bootstrap
+          persist-credentials: true
+      - uses: actions/checkout@v4
+        with:
+          ref: port/chrome-edge-windows-ui
+          path: chromium-source
+          persist-credentials: false
+      - name: Download, verify and commit original ZIPs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p releases /tmp/filum-117 /tmp/filum-118
+          gh release download fork-3044309 --repo "$GITHUB_REPOSITORY" --pattern Browser-Windows-x64.zip --dir /tmp/filum-117
+          gh release download fork-77a1c1f --repo "$GITHUB_REPOSITORY" --pattern Browser-Windows-x64.zip --dir /tmp/filum-118
+          echo '13e2b8583026cbf4d7a07cdb378124a9f11aec5db7f1e43d6c77de77bf65d52d  /tmp/filum-117/Browser-Windows-x64.zip' | sha256sum -c -
+          echo '78f2160d1014d5da89645b4c73bb414524d3c51e874293c558319fb1b34bc63b  /tmp/filum-118/Browser-Windows-x64.zip' | sha256sum -c -
+          echo 'c90c1323c7f5547f596fee10d3def066bf724681332989a73326baef84bf520d  chromium-source/releases/FILUM-Chrome-Edge-Windows-prototype-0.5.2.zip' | sha256sum -c -
+          cp /tmp/filum-117/Browser-Windows-x64.zip releases/FILUM-Windows-x64-117.zip
+          cp /tmp/filum-118/Browser-Windows-x64.zip releases/FILUM-Windows-x64-118.zip
+          cp chromium-source/releases/FILUM-Chrome-Edge-Windows-prototype-0.5.2.zip releases/
+          git lfs install --local
+          git lfs track 'releases/FILUM-Windows-x64-117.zip' 'releases/FILUM-Windows-x64-118.zip'
+          git add .gitattributes releases/FILUM-Windows-x64-117.zip releases/FILUM-Windows-x64-118.zip releases/FILUM-Chrome-Edge-Windows-prototype-0.5.2.zip
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Store FILUM 117, 118 and Chromium ZIPs in repository'
+          git push origin HEAD:fix/tor-first-bootstrap
