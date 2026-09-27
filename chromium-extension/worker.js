@@ -169,12 +169,19 @@ async function verifyTorEgress() {
   } });
 }
 
+async function markTorUnverified() {
+  const { filumTorSession: saved } = await chrome.storage.session.get('filumTorSession');
+  if (saved?.active) await chrome.storage.session.set({ filumTorSession: {
+    ...saved, verified: false, lastVerifiedAt: 0, ip: null
+  } });
+}
+
 async function refreshTorStatus() {
   if (!(await torStatus()).active) return status();
   try { await verifyTorEgress(); }
   catch (error) {
-    console.warn('FILUM Tor verification failed; releasing proxy', error);
-    await clearFilumTorProxy();
+    console.warn('FILUM Tor verification failed; keeping proxy and retrying', error);
+    await markTorUnverified();
     return { ...(await status()), torError: `Uscita Tor non confermata: ${error.message}` };
   }
   return status();
@@ -378,8 +385,8 @@ chrome.alarms.onAlarm.addListener(alarm => {
     if (!(await torStatus()).active) { await chrome.alarms.clear(TOR_ALARM); return; }
     try { await verifyTorEgress(); }
     catch (error) {
-      console.warn('FILUM Tor verification lost; releasing proxy', error);
-      await clearFilumTorProxy();
+      console.warn('FILUM Tor check failed; keeping proxy and retrying', error);
+      await markTorUnverified();
     }
   }).catch(console.warn);
 });

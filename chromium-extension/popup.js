@@ -29,6 +29,7 @@ const publicIpEl = document.getElementById('public-ip');
 const publicIpDetailsEl = document.getElementById('public-ip-details');
 const PUBLIC_IP_ENDPOINT = 'https://ipwho.is/?fields=success,message,ip,city,country,country_code,connection.isp,timezone.id,timezone.utc';
 let ipRequest;
+let lastPublicIp;
 function validPublicIp(value) {
   const ip = String(value || '').trim();
   const ipv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(ip) &&
@@ -47,8 +48,8 @@ async function refreshPublicIp() {
   if (ipRequest) ipRequest.abort();
   const controller = new AbortController();
   ipRequest = controller;
-  publicIpEl.textContent = 'IP pubblico: verifica…';
-  publicIpDetailsEl.textContent = '';
+  publicIpEl.textContent = lastPublicIp ? `IP pubblico (ultimo controllo): ${lastPublicIp.ip}` : 'IP pubblico: verifica…';
+  publicIpDetailsEl.textContent = lastPublicIp ? `${lastPublicIp.details} · aggiornamento in corso…` : '';
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
     const response = await fetch(PUBLIC_IP_ENDPOINT, {
@@ -64,13 +65,18 @@ async function refreshPublicIp() {
     const timezone = typeof data.timezone?.id === 'string' ? data.timezone.id.slice(0, 80) : '';
     const location = [city, country].filter(Boolean).join(', ');
     if (ipRequest === controller) {
+      lastPublicIp = { ip, details: [location, isp, timezone].filter(Boolean).join(' · ') };
       publicIpEl.textContent = `IP pubblico: ${ip}`;
-      publicIpDetailsEl.textContent = [location, isp, timezone].filter(Boolean).join(' · ');
+      publicIpDetailsEl.textContent = lastPublicIp.details;
     }
   } catch (error) {
     if (ipRequest === controller) {
-      publicIpEl.textContent = 'IP pubblico: non disponibile';
-      publicIpDetailsEl.textContent = '';
+      publicIpEl.textContent = lastPublicIp
+        ? `IP pubblico (ultimo controllo): ${lastPublicIp.ip}`
+        : 'IP pubblico: non disponibile';
+      publicIpDetailsEl.textContent = lastPublicIp
+        ? `${lastPublicIp.details} · aggiornamento non riuscito`
+        : 'Riprovo automaticamente.';
     }
   } finally {
     clearTimeout(timeout);
@@ -125,7 +131,8 @@ function renderTor(tor) {
   torToggleButton.classList.toggle('tor-off', !confirmed);
   torToggleButton.setAttribute('aria-pressed', String(confirmed));
   torStatusEl.hidden = !tor?.active || confirmed;
-  torStatusEl.textContent = tor?.active && !confirmed ? 'Uscita Tor non verificata. Premi il tasto per disconnettere.' : '';
+  torStatusEl.textContent = tor?.active && !confirmed
+    ? 'Verifica Tor non riuscita. Il proxy resta attivo; FILUM riprova automaticamente.' : '';
 }
 
 async function act(type, fields) {
