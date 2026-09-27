@@ -120,6 +120,14 @@ function message(request) {
   torCheckValid = true;
   result = await message({ type: 'tor-connect' });
   assert.equal(result.data.tor.verified, true);
+  torCheckValid = false;
+  result = await message({ type: 'tor-refresh' });
+  assert.equal(result.data.tor.active, false, 'opening panel must not reuse stale ON');
+  assert.match(result.data.torError, /non confermata/);
+  assert.equal(proxyControls, false);
+  torCheckValid = true;
+  result = await message({ type: 'tor-connect' });
+  assert.equal(result.data.tor.verified, true);
   result = await message({ type: 'tor-disconnect' });
   assert.equal(result.data.tor.active, false);
   assert.equal(proxyControls, false);

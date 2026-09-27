@@ -17,6 +17,10 @@ function render(data) {
   statusEl.textContent = `${data.mode} · ${data.activeBackground} schede attive in background` +
     (data.protectedBackground ? ` · ${data.protectedBackground} protette` : '');
   renderTor(data.tor);
+  if (data.torError) {
+    torStatusEl.hidden = false;
+    torStatusEl.textContent = data.torError;
+  }
 }
 
 const torStatusEl = document.getElementById('tor-status');
@@ -94,4 +98,19 @@ torToggleButton.addEventListener('click', async () => {
     torStatusEl.textContent = `Tor: ${error.message}`;
   } finally { torToggleButton.disabled = false; }
 });
-act('status');
+let refreshingTor = false;
+async function refreshTor() {
+  if (refreshingTor || torToggleButton.disabled || document.hidden) return;
+  refreshingTor = true;
+  torToggleButton.disabled = true;
+  torToggleButton.textContent = 'Tor …';
+  torToggleButton.classList.remove('tor-on');
+  torToggleButton.classList.add('tor-off');
+  torToggleButton.setAttribute('aria-pressed', 'false');
+  try { render(await command('tor-refresh')); }
+  catch (error) { torStatusEl.hidden = false; torStatusEl.textContent = `Verifica Tor: ${error.message}`; }
+  finally { refreshingTor = false; torToggleButton.disabled = false; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTor(); });
+setInterval(refreshTor, 30000);
+refreshTor();

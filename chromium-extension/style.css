@@ -11,6 +11,7 @@ button:hover,button.active { background:#185273; border-color:#54ddf4 }
 .network-buttons { display:flex; gap:8px }
 .network-buttons #tor-toggle { flex:0 0 30%; font-weight:600; border-width:2px; transition:border-color .15s,box-shadow .15s; padding:9px 5px }
 .network-buttons #search-home { flex:1 }
+.network-buttons #search-home svg { display:block; margin:auto }
 .network-buttons #home-settings { flex:0 0 43px; font-size:18px; padding:6px }
 .network #tor-toggle.tor-on { border-color:#54ddf4; box-shadow:0 0 12px #54ddf488; background:#185273 }
 .network #tor-toggle.tor-off { border-color:#e79143; box-shadow:0 0 8px #e7914366; background:#3b2a23 }

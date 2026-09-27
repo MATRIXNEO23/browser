@@ -169,6 +169,17 @@ async function verifyTorEgress() {
   } });
 }
 
+async function refreshTorStatus() {
+  if (!(await torStatus()).active) return status();
+  try { await verifyTorEgress(); }
+  catch (error) {
+    console.warn('FILUM Tor verification failed; releasing proxy', error);
+    await clearFilumTorProxy();
+    return { ...(await status()), torError: `Uscita Tor non confermata: ${error.message}` };
+  }
+  return status();
+}
+
 async function connectFilumTor() {
   const current = await torProxySetting();
   if (current.levelOfControl === 'controlled_by_other_extensions' ||
@@ -331,6 +342,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   serial(async () => {
     switch (request?.type) {
       case 'status': return status();
+      case 'tor-refresh': return refreshTorStatus();
       case 'mode': return setMode(request.mode);
       case 'ads': return setAds(request.enabled === true);
       case 'enforce': return { ...(await status()), result: await enforceTurbo() };
