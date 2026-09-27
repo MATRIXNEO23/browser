@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FILUM for Chrome Windows (prototype)",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "description": "FILUM offline home, Smart Search, side panel, ADS, TURBO and optional Tor-routed external proxy.",
   "host_permissions": [
     "https://html.duckduckgo.com/*",
@@ -9,7 +9,7 @@
     "https://api.tavily.com/*",
     "https://goodextensions.mooo.com/*",
     "https://check.torproject.org/*",
-    "https://codewithnodejs.com/*",
+    "https://ipwho.is/*",
     "<all_urls>"
   ],
   "optional_host_permissions": [

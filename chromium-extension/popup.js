@@ -26,7 +26,8 @@ function render(data) {
 const torStatusEl = document.getElementById('tor-status');
 const torToggleButton = document.getElementById('tor-toggle');
 const publicIpEl = document.getElementById('public-ip');
-const PUBLIC_IP_ENDPOINT = 'https://codewithnodejs.com/api/ip-and-location/api.php';
+const publicIpDetailsEl = document.getElementById('public-ip-details');
+const PUBLIC_IP_ENDPOINT = 'https://ipwho.is/?fields=success,message,ip,city,country,country_code,connection.isp,timezone.id,timezone.utc';
 let ipRequest;
 function validPublicIp(value) {
   const ip = String(value || '').trim();
@@ -47,6 +48,7 @@ async function refreshPublicIp() {
   const controller = new AbortController();
   ipRequest = controller;
   publicIpEl.textContent = 'IP pubblico: verifica…';
+  publicIpDetailsEl.textContent = '';
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
     const response = await fetch(PUBLIC_IP_ENDPOINT, {
@@ -54,9 +56,22 @@ async function refreshPublicIp() {
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    if (ipRequest === controller) publicIpEl.textContent = `IP pubblico: ${validPublicIp(data?.ip)}`;
+    if (data?.success !== true) throw new Error('Il servizio IP non ha restituito dati validi.');
+    const ip = validPublicIp(data.ip);
+    const city = typeof data.city === 'string' ? data.city.slice(0, 80) : '';
+    const country = typeof data.country === 'string' ? data.country.slice(0, 80) : '';
+    const isp = typeof data.connection?.isp === 'string' ? data.connection.isp.slice(0, 100) : '';
+    const timezone = typeof data.timezone?.id === 'string' ? data.timezone.id.slice(0, 80) : '';
+    const location = [city, country].filter(Boolean).join(', ');
+    if (ipRequest === controller) {
+      publicIpEl.textContent = `IP pubblico: ${ip}`;
+      publicIpDetailsEl.textContent = [location, isp, timezone].filter(Boolean).join(' · ');
+    }
   } catch (error) {
-    if (ipRequest === controller) publicIpEl.textContent = 'IP pubblico: non disponibile';
+    if (ipRequest === controller) {
+      publicIpEl.textContent = 'IP pubblico: non disponibile';
+      publicIpDetailsEl.textContent = '';
+    }
   } finally {
     clearTimeout(timeout);
     if (ipRequest === controller) ipRequest = null;
@@ -150,6 +165,6 @@ async function refreshTor() {
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshTor(); refreshPublicIp(); } });
 setInterval(refreshTor, 30000);
-setInterval(refreshPublicIp, 20000);
+setInterval(refreshPublicIp, 120000);
 refreshTor();
 refreshPublicIp();
