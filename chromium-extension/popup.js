@@ -68,7 +68,7 @@ searchHomeButton.addEventListener('click', async () => {
 });
 function renderTor(tor) {
   const confirmed = tor?.active === true && tor?.verified === true;
-  torToggleButton.textContent = confirmed ? 'Tor ON' : 'Tor OFF';
+  torToggleButton.setAttribute('aria-label', confirmed ? 'Tor attivo e verificato' : 'Tor disattivato o non verificato');
   torToggleButton.classList.toggle('tor-on', confirmed);
   torToggleButton.classList.toggle('tor-off', !confirmed);
   torToggleButton.setAttribute('aria-pressed', String(confirmed));
@@ -103,7 +103,7 @@ async function refreshTor() {
   if (refreshingTor || torToggleButton.disabled || document.hidden) return;
   refreshingTor = true;
   torToggleButton.disabled = true;
-  torToggleButton.textContent = 'Tor …';
+  torToggleButton.setAttribute('aria-label', 'Verifica Tor in corso');
   torToggleButton.classList.remove('tor-on');
   torToggleButton.classList.add('tor-off');
   torToggleButton.setAttribute('aria-pressed', 'false');
