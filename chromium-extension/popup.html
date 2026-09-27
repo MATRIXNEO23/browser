@@ -11,12 +11,6 @@
       <button id="search-home" aria-label="Apri la home del motore di ricerca" title="Apri la home del motore di ricerca"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-6v-7H9v7H3z"/></svg></button>
       <button id="home-settings" aria-label="Impostazioni della home" aria-expanded="false" title="Impostazioni della home">⚙</button>
     </div>
-    <div class="webrtc-controls" role="group" aria-label="Protezione WebRTC">
-      <button type="button" data-webrtc-mode="default" aria-pressed="true" title="Impostazione standard di Chrome">Default</button>
-      <button type="button" data-webrtc-mode="medium" aria-pressed="false" title="Blocca UDP WebRTC non instradato tramite proxy">Medium</button>
-      <button type="button" data-webrtc-mode="full" aria-pressed="false" title="Blocca WebRTC nelle pagine; chiamate e servizi peer-to-peer potrebbero non funzionare">Full</button>
-    </div>
-    <p id="webrtc-status" role="status" hidden></p>
     <form id="home-form" hidden>
       <label for="home-url">Indirizzo della home</label>
       <input id="home-url" type="url" required spellcheck="false" autocomplete="off">
@@ -25,5 +19,14 @@
     <p id="tor-status" role="status" hidden></p>
     <p id="public-ip" role="status">IP pubblico: verifica…</p>
     <p id="public-ip-details"></p>
+  </section>
+  <section class="webrtc-settings" aria-labelledby="webrtc-heading">
+    <h2 id="webrtc-heading">Impostazioni WebRTC</h2>
+    <div class="webrtc-controls" role="group" aria-label="Protezione WebRTC">
+      <button type="button" data-webrtc-mode="default" aria-pressed="true" title="Impostazione standard di Chrome">Default</button>
+      <button type="button" data-webrtc-mode="medium" aria-pressed="false" title="Blocca UDP WebRTC non instradato tramite proxy">Medium</button>
+      <button type="button" data-webrtc-mode="full" aria-pressed="false" title="Blocca WebRTC nelle pagine; chiamate e servizi peer-to-peer potrebbero non funzionare">Full</button>
+    </div>
+    <p id="webrtc-status" role="status" hidden></p>
   </section>
 </main><script src="popup.js"></script></body></html>
