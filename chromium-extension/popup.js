@@ -20,6 +20,9 @@ function render(data) {
   if (data.torError) {
     torStatusEl.hidden = false;
     torStatusEl.textContent = data.torError;
+  } else if (!data.tor?.active && data.torRecovery) {
+    torStatusEl.hidden = false;
+    torStatusEl.textContent = `Riconnessione Tor automatica in corso · tentativo ${Math.min(data.torRecovery.attempts + 1, 3)} di 3.`;
   }
 }
 

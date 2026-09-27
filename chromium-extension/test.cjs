@@ -16,6 +16,7 @@ const session = {};
 const rules = new Set(['ads_basic']);
 let alarmActive = false;
 let torAlarmActive = false;
+let torReconnectAlarmActive = false;
 let panelOpensOnActionClick = false;
 let proxyConfig = { mode: 'system' };
 let proxyControls = false;
@@ -33,6 +34,7 @@ const chrome = {
     async remove(key) { delete session[key]; }
   } },
   proxy: { settings: {
+    onChange: event(),
     async get() { return { value: proxyConfig, levelOfControl: proxyControls ? 'controlled_by_this_extension' : 'controllable_by_this_extension' }; },
     async set({ value }) { proxyConfig = value; proxyControls = true; },
     async clear() { proxyConfig = { mode: 'system' }; proxyControls = false; }
@@ -52,8 +54,16 @@ const chrome = {
     onUpdated: { addListener(fn) { listeners.updated = fn; } }
   },
   alarms: {
-    async create(name) { if (name === 'filum-turbo') alarmActive = true; if (name === 'filum-tor-check') torAlarmActive = true; },
-    async clear(name) { if (name === 'filum-turbo') alarmActive = false; if (name === 'filum-tor-check') torAlarmActive = false; },
+    async create(name) {
+      if (name === 'filum-turbo') alarmActive = true;
+      if (name === 'filum-tor-check') torAlarmActive = true;
+      if (name === 'filum-tor-reconnect') torReconnectAlarmActive = true;
+    },
+    async clear(name) {
+      if (name === 'filum-turbo') alarmActive = false;
+      if (name === 'filum-tor-check') torAlarmActive = false;
+      if (name === 'filum-tor-reconnect') torReconnectAlarmActive = false;
+    },
     onAlarm: { addListener(fn) { listeners.alarm = fn; } }
   },
   runtime: {
@@ -121,7 +131,26 @@ function message(request) {
   result = await message({ type: 'tor-refresh' });
   assert.equal(result.data.tor.active, true, 'panel refresh must preserve proxy on temporary failure');
   assert.match(result.data.torError, /non confermata/);
+  assert.equal(torReconnectAlarmActive, true, 'repeated failed checks must schedule recovery');
   torCheckValid = true;
+  listeners.alarm({ name: 'filum-tor-reconnect' });
+  result = await message({ type: 'status' });
+  assert.equal(result.data.tor.active, true, 'automatic recovery must reapply the proxy');
+  assert.equal(result.data.tor.verified, true, 'automatic recovery must verify Tor before success');
+  assert.equal(torConfigRequests, 2, 'automatic recovery must request fresh proxy credentials');
+  assert.equal(torReconnectAlarmActive, false);
+  proxyConfig = { mode: 'system' };
+  proxyControls = false;
+  chrome.proxy.settings.onChange.listener({});
+  result = await message({ type: 'status' });
+  assert.equal(result.data.tor.active, false, 'external proxy loss must be reflected in status');
+  assert.equal(result.data.torRecovery.pending, true, 'external proxy loss must schedule automatic recovery');
+  assert.equal(torReconnectAlarmActive, true);
+  listeners.alarm({ name: 'filum-tor-reconnect' });
+  result = await message({ type: 'status' });
+  assert.equal(result.data.tor.active, true, 'proxy setting change must trigger automatic reconnection');
+  assert.equal(result.data.tor.verified, true);
+  assert.equal(torConfigRequests, 3);
   result = await message({ type: 'tor-connect' });
   assert.equal(result.data.tor.verified, true);
   torCheckValid = false;
