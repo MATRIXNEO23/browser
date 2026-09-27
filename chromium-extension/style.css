@@ -8,12 +8,20 @@ button:hover,button.active { background:#185273; border-color:#54ddf4 }
 #status { line-height:1.5; border:1px solid #24475b; padding:10px; border-radius:8px; min-height:42px }
 .note { color:#9db6c0; font-size:11px; line-height:1.5 }
 .network { border-top:1px solid #24475b; margin-top:18px; padding-top:12px; font-size:12px; line-height:1.5 }
-.network #tor-toggle { width:100%; font-weight:600; border-width:2px; transition:border-color .15s,box-shadow .15s }
+.network-buttons { display:flex; gap:8px }
+.network-buttons #tor-toggle { flex:0 0 30%; font-weight:600; border-width:2px; transition:border-color .15s,box-shadow .15s; padding:9px 5px }
+.network-buttons #search-home { flex:1 }
+.network-buttons #home-settings { flex:0 0 43px; font-size:18px; padding:6px }
 .network #tor-toggle.tor-on { border-color:#54ddf4; box-shadow:0 0 12px #54ddf488; background:#185273 }
 .network #tor-toggle.tor-off { border-color:#e79143; box-shadow:0 0 8px #e7914366; background:#3b2a23 }
 .network #tor-toggle:disabled { opacity:.65; cursor:wait }
 .network #tor-status { color:#e8faff; margin:8px 0 0 }
 .network #tor-status[hidden] { display:none }
+.network #home-form { margin-top:12px }
+.network #home-form[hidden] { display:none }
+.network #home-form label { display:block; margin-bottom:5px }
+.network #home-url { width:100%; padding:8px; border:1px solid #3989a0; border-radius:8px; background:#092333; color:#e8faff }
+.network #home-form .buttons { margin-top:8px }
 .newtab { min-height:100vh; background: radial-gradient(circle at 50% 34%,#123f57 0,#081b29 45%,#050d15 100%) }
 .newtab::before { content:""; position:fixed; inset:0; pointer-events:none; opacity:.26; background-image:linear-gradient(90deg,transparent 31px,#0e678b 32px,transparent 33px),linear-gradient(transparent 31px,#0e678b 32px,transparent 33px); background-size:128px 128px; mask-image:radial-gradient(ellipse at center,transparent 20%,black 100%) }
 .newtab main { min-height:100vh; display:flex; flex-direction:column }

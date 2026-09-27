@@ -21,6 +21,47 @@ function render(data) {
 
 const torStatusEl = document.getElementById('tor-status');
 const torToggleButton = document.getElementById('tor-toggle');
+const defaultSearchHome = 'https://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/';
+const searchHomeButton = document.getElementById('search-home');
+const homeSettingsButton = document.getElementById('home-settings');
+const homeForm = document.getElementById('home-form');
+const homeUrlInput = document.getElementById('home-url');
+function validHome(raw) {
+  const url = new URL(raw.trim());
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    throw new Error('Inserisci un indirizzo HTTP o HTTPS senza credenziali.');
+  }
+  return url.href;
+}
+async function savedHome() {
+  const { searchHomeUrl } = await chrome.storage.local.get('searchHomeUrl');
+  return searchHomeUrl || defaultSearchHome;
+}
+homeSettingsButton.addEventListener('click', async () => {
+  homeForm.hidden = !homeForm.hidden;
+  homeSettingsButton.setAttribute('aria-expanded', String(!homeForm.hidden));
+  if (!homeForm.hidden) {
+    homeUrlInput.value = await savedHome();
+    homeUrlInput.focus();
+  }
+});
+homeForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    await chrome.storage.local.set({ searchHomeUrl: validHome(homeUrlInput.value) });
+    homeForm.hidden = true;
+    homeSettingsButton.setAttribute('aria-expanded', 'false');
+    torStatusEl.hidden = true;
+  } catch (error) { torStatusEl.hidden = false; torStatusEl.textContent = error.message; }
+});
+document.getElementById('home-reset').addEventListener('click', async () => {
+  await chrome.storage.local.remove('searchHomeUrl');
+  homeUrlInput.value = defaultSearchHome;
+});
+searchHomeButton.addEventListener('click', async () => {
+  try { await chrome.tabs.create({ url: validHome(await savedHome()) }); }
+  catch (error) { torStatusEl.hidden = false; torStatusEl.textContent = `Home: ${error.message}`; }
+});
 function renderTor(tor) {
   const confirmed = tor?.active === true && tor?.verified === true;
   torToggleButton.textContent = confirmed ? 'Tor ON' : 'Tor OFF';

@@ -6,7 +6,16 @@
   <button id="ads">ADS</button><button id="enforce">Scarica schede inattive ora</button>
   <p id="status" role="status">Caricamento…</p>
   <section class="network">
-    <button id="tor-toggle" class="tor-off" aria-pressed="false" title="Attiva o disattiva Tor">Tor OFF</button>
+    <div class="network-buttons">
+      <button id="tor-toggle" class="tor-off" aria-pressed="false" title="Attiva o disattiva Tor">Tor OFF</button>
+      <button id="search-home" title="Apri la home del motore di ricerca">Home</button>
+      <button id="home-settings" aria-label="Impostazioni della home" aria-expanded="false" title="Impostazioni della home">⚙</button>
+    </div>
+    <form id="home-form" hidden>
+      <label for="home-url">Indirizzo della home</label>
+      <input id="home-url" type="url" required spellcheck="false" autocomplete="off">
+      <div class="buttons"><button type="submit">Salva</button><button type="button" id="home-reset">Predefinito</button></div>
+    </form>
     <p id="tor-status" role="status" hidden></p>
   </section>
 </main><script src="popup.js"></script></body></html>
