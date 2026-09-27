@@ -20,15 +20,15 @@ function render(data) {
 }
 
 const torStatusEl = document.getElementById('tor-status');
-const torConnectButton = document.getElementById('tor-connect');
-const torDisconnectButton = document.getElementById('tor-disconnect');
+const torToggleButton = document.getElementById('tor-toggle');
 function renderTor(tor) {
-  torConnectButton.disabled = tor?.active === true;
-  torDisconnectButton.disabled = tor?.active !== true;
-  torStatusEl.textContent = tor?.active
-    ? (tor.verified ? `Connesso · uscita Tor verificata (${tor.ip || 'IP non disponibile'}). Proxy esterno attivo.`
-      : 'Proxy attivo, uscita Tor non verificata di recente. Non presumere anonimato.')
-    : 'Proxy FILUM inattivo.';
+  const confirmed = tor?.active === true && tor?.verified === true;
+  torToggleButton.textContent = confirmed ? 'Tor ON' : 'Tor OFF';
+  torToggleButton.classList.toggle('tor-on', confirmed);
+  torToggleButton.classList.toggle('tor-off', !confirmed);
+  torToggleButton.setAttribute('aria-pressed', String(confirmed));
+  torStatusEl.hidden = !tor?.active || confirmed;
+  torStatusEl.textContent = tor?.active && !confirmed ? 'Uscita Tor non verificata. Premi il tasto per disconnettere.' : '';
 }
 
 async function act(type, fields) {
@@ -40,15 +40,17 @@ async function act(type, fields) {
 modeButtons.forEach(button => button.addEventListener('click', () => act('mode', { mode: button.dataset.mode })));
 adsButton.addEventListener('click', () => { if (current) act('ads', { enabled: !current.adsEnabled }); });
 document.getElementById('enforce').addEventListener('click', () => act('enforce'));
-torConnectButton.addEventListener('click', () => {
-  torStatusEl.textContent = 'Connessione e verifica in corso…';
-  command('tor-connect').then(render, async error => {
+torToggleButton.addEventListener('click', async () => {
+  if (!current || torToggleButton.disabled) return;
+  const type = current.tor?.active ? 'tor-disconnect' : 'tor-connect';
+  torToggleButton.disabled = true;
+  torStatusEl.hidden = false;
+  torStatusEl.textContent = type === 'tor-connect' ? 'Connessione e verifica in corso…' : 'Disconnessione…';
+  try { render(await command(type)); }
+  catch (error) {
     try { render(await command('status')); } catch (_) { /* preserve the original error */ }
+    torStatusEl.hidden = false;
     torStatusEl.textContent = `Tor: ${error.message}`;
-  });
-});
-torDisconnectButton.addEventListener('click', () => {
-  torStatusEl.textContent = 'Ripristino proxy…';
-  command('tor-disconnect').then(render, error => { torStatusEl.textContent = `Tor: ${error.message}`; });
+  } finally { torToggleButton.disabled = false; }
 });
 act('status');

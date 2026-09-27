@@ -1,10 +1,20 @@
 {
   "manifest_version": 3,
   "name": "FILUM for Chrome Windows (prototype)",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "FILUM offline home, Smart Search, side panel, ADS, TURBO and optional Tor-routed external proxy.",
-  "host_permissions": ["https://html.duckduckgo.com/*", "https://duckduckgo.com/*", "https://api.tavily.com/*", "https://goodextensions.mooo.com/*", "https://check.torproject.org/*", "<all_urls>"],
-  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "host_permissions": [
+    "https://html.duckduckgo.com/*",
+    "https://duckduckgo.com/*",
+    "https://api.tavily.com/*",
+    "https://goodextensions.mooo.com/*",
+    "https://check.torproject.org/*",
+    "<all_urls>"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
   "permissions": [
     "storage",
     "tabs",
@@ -28,7 +38,9 @@
       "128": "icon.png"
     }
   },
-  "side_panel": { "default_path": "popup.html" },
+  "side_panel": {
+    "default_path": "popup.html"
+  },
   "chrome_url_overrides": {
     "newtab": "newtab.html"
   },

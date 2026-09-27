@@ -7,10 +7,13 @@ button:hover,button.active { background:#185273; border-color:#54ddf4 }
 .buttons { display:flex; gap:8px } .buttons button { flex:1 } .popup #ads,.popup #enforce { width:100%; margin-top:8px }
 #status { line-height:1.5; border:1px solid #24475b; padding:10px; border-radius:8px; min-height:42px }
 .note { color:#9db6c0; font-size:11px; line-height:1.5 }
-.network { border-top:1px solid #24475b; margin-top:18px; padding-top:12px; color:#9db6c0; font-size:12px; line-height:1.5 }
-.network h2 { color:#e8faff; font-size:14px; margin:0 0 5px }.network p { margin:0 }
-.network .buttons { margin:12px 0 8px }.network button:disabled { opacity:.5; cursor:default }
-.network #tor-status { color:#e8faff; margin:8px 0; min-height:35px }
+.network { border-top:1px solid #24475b; margin-top:18px; padding-top:12px; font-size:12px; line-height:1.5 }
+.network #tor-toggle { width:100%; font-weight:600; border-width:2px; transition:border-color .15s,box-shadow .15s }
+.network #tor-toggle.tor-on { border-color:#54ddf4; box-shadow:0 0 12px #54ddf488; background:#185273 }
+.network #tor-toggle.tor-off { border-color:#e79143; box-shadow:0 0 8px #e7914366; background:#3b2a23 }
+.network #tor-toggle:disabled { opacity:.65; cursor:wait }
+.network #tor-status { color:#e8faff; margin:8px 0 0 }
+.network #tor-status[hidden] { display:none }
 .newtab { min-height:100vh; background: radial-gradient(circle at 50% 34%,#123f57 0,#081b29 45%,#050d15 100%) }
 .newtab::before { content:""; position:fixed; inset:0; pointer-events:none; opacity:.26; background-image:linear-gradient(90deg,transparent 31px,#0e678b 32px,transparent 33px),linear-gradient(transparent 31px,#0e678b 32px,transparent 33px); background-size:128px 128px; mask-image:radial-gradient(ellipse at center,transparent 20%,black 100%) }
 .newtab main { min-height:100vh; display:flex; flex-direction:column }
