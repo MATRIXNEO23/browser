@@ -14,6 +14,12 @@ button:hover,button.active { background:#185273; border-color:#54ddf4 }
 .network-buttons #search-home { flex:1 }
 .network-buttons #search-home svg { display:block; margin:auto }
 .network-buttons #home-settings { flex:0 0 43px; font-size:18px; padding:6px }
+.webrtc-controls { display:flex; gap:6px; margin-top:8px }
+.webrtc-controls button { flex:1; min-width:0; padding:6px 4px; font-size:11px; line-height:1.25 }
+.webrtc-controls button.active { background:#185273; border-color:#54ddf4; box-shadow:0 0 8px #54ddf455 }
+.webrtc-controls button:disabled { opacity:.65; cursor:wait }
+.network #webrtc-status { margin:5px 0 0; color:#9db6c0; font-size:11px; overflow-wrap:anywhere }
+.network #webrtc-status[hidden] { display:none }
 .network #tor-toggle.tor-on { border-color:#54ddf4; box-shadow:0 0 12px #54ddf488; background:#185273 }
 .network #tor-toggle.tor-off { border-color:#e79143; box-shadow:0 0 8px #e7914366; background:#3b2a23 }
 .network #tor-toggle.tor-on,.network #tor-toggle.tor-off { background:#78438c }

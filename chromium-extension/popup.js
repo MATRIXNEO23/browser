@@ -1,6 +1,8 @@
 const statusEl = document.getElementById('status');
 const adsButton = document.getElementById('ads');
 const modeButtons = [...document.querySelectorAll('[data-mode]')];
+const webRTCButtons = [...document.querySelectorAll('[data-webrtc-mode]')];
+const webRTCStatusEl = document.getElementById('webrtc-status');
 let current;
 
 async function command(type, fields = {}) {
@@ -12,6 +14,11 @@ async function command(type, fields = {}) {
 function render(data) {
   current = data;
   modeButtons.forEach(button => button.classList.toggle('active', button.dataset.mode === data.mode));
+  webRTCButtons.forEach(button => {
+    const selected = button.dataset.webrtcMode === data.webRTCMode;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
   adsButton.textContent = `ADS: ${data.adsEnabled ? 'ON' : 'OFF'}`;
   adsButton.classList.toggle('active', data.adsEnabled);
   statusEl.textContent = `${data.mode} · ${data.activeBackground} schede attive in background` +
@@ -145,6 +152,26 @@ async function act(type, fields) {
 }
 
 modeButtons.forEach(button => button.addEventListener('click', () => act('mode', { mode: button.dataset.mode })));
+webRTCButtons.forEach(button => button.addEventListener('click', async () => {
+  if (webRTCButtons.some(item => item.disabled)) return;
+  webRTCButtons.forEach(item => { item.disabled = true; });
+  webRTCStatusEl.hidden = false;
+  webRTCStatusEl.textContent = 'Applicazione WebRTC…';
+  try {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const data = await command('webrtc-mode', {
+      mode: button.dataset.webrtcMode, activeTabId: activeTab?.id
+    });
+    render(data);
+    const mode = button.dataset.webrtcMode;
+    webRTCStatusEl.textContent = data.activeTabReloaded
+      ? mode === 'full' ? 'Full attivo; la scheda corrente è stata ricaricata.' : `Modalità ${mode} attiva.`
+      : `Modalità ${mode} attiva; ricarica la scheda corrente per applicare la modifica.`;
+  } catch (error) {
+    webRTCStatusEl.hidden = false;
+    webRTCStatusEl.textContent = `WebRTC: ${error.message}`;
+  } finally { webRTCButtons.forEach(item => { item.disabled = false; }); }
+}));
 adsButton.addEventListener('click', () => { if (current) act('ads', { enabled: !current.adsEnabled }); });
 document.getElementById('enforce').addEventListener('click', () => act('enforce'));
 torToggleButton.addEventListener('click', async () => {

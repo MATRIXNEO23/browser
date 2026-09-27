@@ -3,6 +3,20 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const listeners = {};
+const popupMarkup = fs.readFileSync(__dirname + '/popup.html', 'utf8');
+const visibleWebRTCModes = [...popupMarkup.matchAll(/data-webrtc-mode="([^"]+)"/g)].map(match => match[1]);
+assert.deepEqual(visibleWebRTCModes, ['default', 'medium', 'full'], 'WebRTC controls must appear in the requested order');
+const fullBlockScript = fs.readFileSync(__dirname + '/webrtc-full-block.js', 'utf8');
+function NativePeerConnection() {}
+NativePeerConnection.prototype.createOffer = function () {};
+const fakePage = {
+  RTCPeerConnection: NativePeerConnection,
+  navigator: { mediaDevices: { getUserMedia() { return Promise.resolve(); } } }
+};
+fakePage.self = fakePage;
+vm.runInNewContext(fullBlockScript, fakePage);
+assert.throws(() => new fakePage.RTCPeerConnection(), /blocked by FILUM/);
+assert.throws(() => fakePage.RTCPeerConnection.prototype.createOffer(), /blocked by FILUM/);
 const tabs = [
   { id: 1, active: true, discarded: false, lastAccessed: 100 },
   { id: 2, active: false, discarded: false, pinned: true, lastAccessed: 10 },
@@ -22,6 +36,9 @@ let proxyConfig = { mode: 'system' };
 let proxyControls = false;
 let torCheckValid = true;
 let torConfigRequests = 0;
+let webRTCPolicy = { value: 'default', levelOfControl: 'controllable_by_this_extension' };
+let fullWebRTCBlockRegistered = false;
+let tabReloads = 0;
 const event = () => ({ addListener(fn) { this.listener = fn; } });
 const chrome = {
   sidePanel: { async setPanelBehavior(value) { panelOpensOnActionClick = value.openPanelOnActionClick; } },
@@ -39,6 +56,34 @@ const chrome = {
     async set({ value }) { proxyConfig = value; proxyControls = true; },
     async clear() { proxyConfig = { mode: 'system' }; proxyControls = false; }
   } },
+  privacy: { network: { webRTCIPHandlingPolicy: {
+    async get() { return { ...webRTCPolicy }; },
+    async set({ value }) {
+      if (webRTCPolicy.levelOfControl !== 'controlled_by_other_extensions' &&
+          webRTCPolicy.levelOfControl !== 'not_controllable') {
+        webRTCPolicy = { value, levelOfControl: 'controlled_by_this_extension' };
+      }
+    },
+    async clear() {
+      webRTCPolicy = { value: 'default', levelOfControl: 'controllable_by_this_extension' };
+    }
+  } } },
+  scripting: {
+    async getRegisteredContentScripts({ ids }) {
+      return fullWebRTCBlockRegistered && ids.includes('filum-webrtc-full-block')
+        ? [{ id: 'filum-webrtc-full-block' }] : [];
+    },
+    async registerContentScripts(scripts) {
+      assert.equal(scripts[0].world, 'MAIN');
+      assert.equal(scripts[0].matches.join(','), '<all_urls>');
+      assert.equal(scripts[0].allFrames, true);
+      assert.equal(scripts[0].js[0], 'webrtc-full-block.js');
+      fullWebRTCBlockRegistered = true;
+    },
+    async unregisterContentScripts({ ids }) {
+      if (ids.includes('filum-webrtc-full-block')) fullWebRTCBlockRegistered = false;
+    }
+  },
   webRequest: { onAuthRequired: event(), onCompleted: event(), onErrorOccurred: event() },
   declarativeNetRequest: {
     async getEnabledRulesets() { return [...rules]; },
@@ -50,6 +95,7 @@ const chrome = {
   tabs: {
     async query() { return tabs; },
     async discard(id) { const tab = tabs.find(t => t.id === id); tab.discarded = true; return tab; },
+    async reload(id) { assert.equal(id, 1); tabReloads++; },
     onActivated: { addListener(fn) { listeners.activated = fn; } },
     onUpdated: { addListener(fn) { listeners.updated = fn; } }
   },
@@ -92,8 +138,39 @@ function message(request) {
 (async () => {
   await Promise.resolve();
   assert.equal(panelOpensOnActionClick, true);
+  await assert.rejects(fakePage.navigator.mediaDevices.getUserMedia(), /blocked by FILUM/);
+  let result;
   assert.equal((await message({ type: 'status' })).data.mode, 'NORMAL');
-  let result = await message({ type: 'mode', mode: 'TURBO' });
+  assert.equal((await message({ type: 'status' })).data.webRTCMode, 'default');
+  result = await message({ type: 'webrtc-mode', mode: 'medium' });
+  assert.equal(result.ok, true);
+  assert.equal(result.data.webRTCMode, 'medium');
+  assert.equal(webRTCPolicy.value, 'disable_non_proxied_udp');
+  assert.equal(fullWebRTCBlockRegistered, false);
+  result = await message({ type: 'webrtc-mode', mode: 'full' });
+  assert.equal(result.ok, true);
+  assert.equal(result.data.webRTCMode, 'full');
+  assert.equal(fullWebRTCBlockRegistered, true);
+  assert.equal(webRTCPolicy.value, 'default');
+  fullWebRTCBlockRegistered = false; // Simulate a dynamic registration lost during extension reload.
+  listeners.startup();
+  result = await message({ type: 'status' });
+  assert.equal(result.data.webRTCMode, 'full');
+  assert.equal(fullWebRTCBlockRegistered, true, 'startup must restore persisted Full mode');
+  result = await message({ type: 'webrtc-mode', mode: 'default' });
+  assert.equal(result.ok, true);
+  assert.equal(result.data.webRTCMode, 'default');
+  assert.equal(fullWebRTCBlockRegistered, false);
+  assert.equal(webRTCPolicy.value, 'default');
+  assert.equal(tabReloads, 3, 'mode changes reload the active tab so full mode can take effect or be removed');
+  webRTCPolicy = { value: 'default_public_interface_only', levelOfControl: 'controlled_by_other_extensions' };
+  result = await message({ type: 'webrtc-mode', mode: 'medium' });
+  assert.equal(result.ok, false, 'Medium must report when another extension controls the privacy setting');
+  assert.equal(storage.filumWebRTCMode, 'default', 'failed control must not be saved as selected');
+  webRTCPolicy = { value: 'default', levelOfControl: 'controllable_by_this_extension' };
+  result = await message({ type: 'webrtc-mode', mode: 'off' });
+  assert.equal(result.ok, false, 'unsupported WebRTC mode must be rejected');
+  result = await message({ type: 'mode', mode: 'TURBO' });
   assert.equal(result.ok, true);
   assert.equal(alarmActive, true);
   assert.equal(tabs.find(t => t.id === 6).discarded, true);

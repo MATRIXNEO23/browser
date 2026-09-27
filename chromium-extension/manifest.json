@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "FILUM for Chrome Windows (prototype)",
-  "version": "0.6.8",
-  "description": "FILUM offline home, Smart Search, side panel, ADS, TURBO and optional Tor-routed external proxy.",
+  "version": "0.6.9",
+  "description": "FILUM offline home, Smart Search, side panel, ADS, TURBO, WebRTC controls and optional Tor-routed external proxy.",
   "host_permissions": [
     "https://html.duckduckgo.com/*",
     "https://duckduckgo.com/*",
@@ -24,6 +24,7 @@
     "search",
     "sidePanel",
     "scripting",
+    "privacy",
     "proxy",
     "webRequest",
     "webRequestAuthProvider"
