@@ -25,6 +25,43 @@ function render(data) {
 
 const torStatusEl = document.getElementById('tor-status');
 const torToggleButton = document.getElementById('tor-toggle');
+const publicIpEl = document.getElementById('public-ip');
+const PUBLIC_IP_ENDPOINT = 'https://codewithnodejs.com/api/ip-and-location/api.php';
+let ipRequest;
+function validPublicIp(value) {
+  const ip = String(value || '').trim();
+  const ipv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(ip) &&
+    ip.split('.').every(part => Number(part) <= 255);
+  let ipv6 = false;
+  if (ip.includes(':') && ip.length <= 45 && /^[0-9a-fA-F:.]+$/.test(ip)) {
+    try { ipv6 = new URL(`http://[${ip}]/`).hostname.length > 2; } catch (_) { /* invalid IPv6 */ }
+  }
+  if (!ipv4 && !ipv6) {
+    throw new Error('Risposta IP non valida.');
+  }
+  return ip;
+}
+async function refreshPublicIp() {
+  if (document.hidden) return;
+  if (ipRequest) ipRequest.abort();
+  const controller = new AbortController();
+  ipRequest = controller;
+  publicIpEl.textContent = 'IP pubblico: verifica…';
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(PUBLIC_IP_ENDPOINT, {
+      signal: controller.signal, cache: 'no-store', credentials: 'omit'
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (ipRequest === controller) publicIpEl.textContent = `IP pubblico: ${validPublicIp(data?.ip)}`;
+  } catch (error) {
+    if (ipRequest === controller) publicIpEl.textContent = 'IP pubblico: non disponibile';
+  } finally {
+    clearTimeout(timeout);
+    if (ipRequest === controller) ipRequest = null;
+  }
+}
 const defaultSearchHome = 'https://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/';
 const searchHomeButton = document.getElementById('search-home');
 const homeSettingsButton = document.getElementById('home-settings');
@@ -96,7 +133,7 @@ torToggleButton.addEventListener('click', async () => {
     try { render(await command('status')); } catch (_) { /* preserve the original error */ }
     torStatusEl.hidden = false;
     torStatusEl.textContent = `Tor: ${error.message}`;
-  } finally { torToggleButton.disabled = false; }
+  } finally { torToggleButton.disabled = false; refreshPublicIp(); }
 });
 let refreshingTor = false;
 async function refreshTor() {
@@ -111,6 +148,8 @@ async function refreshTor() {
   catch (error) { torStatusEl.hidden = false; torStatusEl.textContent = `Verifica Tor: ${error.message}`; }
   finally { refreshingTor = false; torToggleButton.disabled = false; }
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTor(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshTor(); refreshPublicIp(); } });
 setInterval(refreshTor, 30000);
+setInterval(refreshPublicIp, 20000);
 refreshTor();
+refreshPublicIp();

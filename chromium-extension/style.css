@@ -20,6 +20,7 @@ button:hover,button.active { background:#185273; border-color:#54ddf4 }
 .network #tor-toggle:disabled { opacity:.65; cursor:wait }
 .network #tor-status { color:#e8faff; margin:8px 0 0 }
 .network #tor-status[hidden] { display:none }
+.network #public-ip { margin:10px 0 0; color:#e8faff; overflow-wrap:anywhere }
 .network #home-form { margin-top:12px }
 .network #home-form[hidden] { display:none }
 .network #home-form label { display:block; margin-bottom:5px }
