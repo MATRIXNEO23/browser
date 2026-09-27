@@ -46,6 +46,8 @@ Tutti gli ZIP sopra erano presenti nello scratch al checkpoint; quelli dalla 0.3
 
 ## Verifica e prossime mosse
 
+**Primo CRX candidato (27 settembre 2026):** Alberto ha fornito `Browser Tor.crx` per integrare una estensione alla volta nella barra FILUM. L'analisi statica in `docs/FILUM_CHROMIUM_BROWSER_TOR_CRX_AUDIT_2026-09-27.md` mostra che il CRX usa un proxy HTTPS remoto configurato da `goodextensions.mooo.com`, senza Tor locale o prova di instradamento nella rete Tor. Non è stato incorporato nel prototipo; la scelta aperta è companion Tor locale gestito da FILUM oppure collegamento a un Tor locale già avviato. Nessun nuovo ZIP dell'add-on è stato prodotto da questa sola analisi.
+
 1. Verificare branch/HEAD e se questo checkpoint è sul remoto. Leggere `chromium-extension/README.md`, `manifest.json`, `smart-search.js`, `worker.js` e questo documento prima di modifiche.
 2. Se l'utente richiede “Chiedi a Tavily”, usare **una sola chiamata esplicita** Basic con `include_answer` e mostrare testo + fonti; confermare da documentazione attuale se tale parametro mantiene il costo di 1 credito. Preservare limiti locali e nessun consumo automatico. Considerare risposta vuota, query lunghe, errore API, costo visualizzato e chiave rimovibile. Non introdurre endpoint Research per errore.
 3. Prima di dichiarare la ricerca funzionante, fare uno smoke su Edge/Chrome Windows: apertura home offline, ricerca no-key, fallback dopo 403, filtri, Tavily con chiave volontaria, risultato e consumo effettivo. Se non disponibile, dichiarare la lacuna.
