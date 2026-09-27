@@ -2,6 +2,16 @@
 
 Questo documento riguarda **l'estensione separata per Chrome/Edge su Windows**. Il browser Windows basato su Firefox/Gecko ha stato, build, avvisi Defender e continuità propri in `docs/FILUM_WORK_CONTINUITY.md` e `releases/`. Non confondere i due prodotti e non applicare i privilegi del fork Firefox all'estensione Chromium.
 
+## Aggiornamento 27 settembre 2026 — 0.6.0 candidata
+
+Su richiesta di Alberto, l'integrazione avviene **un add-on alla volta**, adattato alla barra FILUM. Il primo CRX è `Browser Tor.crx` (SHA-256 e analisi in `docs/FILUM_CHROMIUM_BROWSER_TOR_CRX_AUDIT_2026-09-27.md`). Dopo aver distinto proxy remoto e Tor locale, Alberto ha confermato una prova di uscita Tor con il CRX originale e ha scelto di usare questo meccanismo nell'add-on FILUM.
+
+La versione 0.6.0 implementa nel worker una connessione volontaria al servizio GoodExtensions, un proxy HTTPS con credenziali temporanee, una verifica `IsTor` e rilascio tramite `chrome.proxy.settings.clear` alla disconnessione. Il pulsante è nella barra laterale. Non sono inclusi codice, pubblicità o telemetria del CRX. Il servizio remoto, la connessione effettiva su Windows, la disinstallazione e le superfici di perdita DNS/WebRTC **non sono ancora verificati sul PC di Alberto**; i test con mock non li sostituiscono. Non chiamare questa funzione Tor Browser o anonimato completo.
+
+ZIP candidato: [`releases/FILUM-Chrome-Edge-Windows-prototype-0.6.0.zip`](../releases/FILUM-Chrome-Edge-Windows-prototype-0.6.0.zip), SHA-256 `e94eeaec09f2d7efdbfb5dabe01701cae4002a4861e6945ba06af58b1b3aa8a7`, 37.307 byte. Include estensione, tema separato e mappa del codice. Non sostituisce lo ZIP verificato 0.5.2; la 0.6.0 richiede lo smoke Windows prima di essere considerata funzionante con il servizio reale.
+
+**Mappa obbligatoria per ogni modifica:** `docs/FILUM_CHROMIUM_CODE_MAP.md` descrive file/funzioni e contiene il registro versioni. Aggiornare la mappa nello stesso commit di ogni modifica funzionale. Il resto di questo documento fotografa lo stato storico 0.5.2 e va letto come tale.
+
 ## Ripartenza esatta
 
 - Repository: `MATRIXNEO23/browser`; ramo di lavoro `port/chrome-edge-windows-ui`.

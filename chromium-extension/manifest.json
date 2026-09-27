@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "FILUM for Chrome Windows (prototype)",
-  "version": "0.5.2",
-  "description": "FILUM offline home, Smart Search, side panel, ADS and TURBO for Chrome on Windows.",
-  "host_permissions": ["https://html.duckduckgo.com/*", "https://duckduckgo.com/*", "https://api.tavily.com/*"],
+  "version": "0.6.0",
+  "description": "FILUM offline home, Smart Search, side panel, ADS, TURBO and optional Tor-routed external proxy.",
+  "host_permissions": ["https://html.duckduckgo.com/*", "https://duckduckgo.com/*", "https://api.tavily.com/*", "https://goodextensions.mooo.com/*", "https://check.torproject.org/*", "<all_urls>"],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "permissions": [
     "storage",
@@ -12,7 +12,10 @@
     "declarativeNetRequest",
     "search",
     "sidePanel",
-    "scripting"
+    "scripting",
+    "proxy",
+    "webRequest",
+    "webRequestAuthProvider"
   ],
   "background": {
     "service_worker": "worker.js"

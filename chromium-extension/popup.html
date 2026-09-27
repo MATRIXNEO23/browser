@@ -6,5 +6,10 @@
   <button id="ads">ADS</button><button id="enforce">Scarica schede inattive ora</button>
   <p id="status" role="status">Caricamento…</p>
   <p class="note">TURBO conserva fino a 3 schede in background. Schede audio, fissate o protette hanno priorità.</p>
-  <section class="network"><h2>Rete</h2><p>Tor e DNS richiedono un componente Windows dedicato e verifiche di instradamento. Nessun cambio di rete è attivo in questa versione.</p></section>
+  <section class="network"><h2>Rete · Tor via proxy esterno</h2>
+    <p>Su tua richiesta FILUM ottiene la configurazione da goodextensions.mooo.com e instrada Chrome/Edge sul suo proxy HTTPS. La verifica controlla l'uscita Tor; il gestore del proxy resta un intermediario. Questa funzione non equivale a Tor Browser.</p>
+    <div class="buttons"><button id="tor-connect">Connetti</button><button id="tor-disconnect">Disconnetti</button></div>
+    <p id="tor-status" role="status">Proxy inattivo.</p>
+    <p>DNS interni e protezioni anti-fingerprint di Tor Browser non sono inclusi.</p>
+  </section>
 </main><script src="popup.js"></script></body></html>

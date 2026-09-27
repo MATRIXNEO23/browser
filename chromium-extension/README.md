@@ -1,4 +1,4 @@
-# FILUM for Chrome/Edge Windows — installable prototype 0.5.2
+# FILUM for Chrome/Edge Windows — installable prototype 0.6.0
 
 This is an isolated Chromium Manifest V3 extension. It does not replace the Firefox-based Windows FILUM release.
 
@@ -13,7 +13,9 @@ The bundled FILUM new-tab home opens without an Internet connection. The ordinar
 
 The extension also provides direct links to built-in bookmarks/history/extensions pages, a persistent side panel, ADS ruleset toggle with state readback, and NORMAL/TURBO tab management. TURBO retains up to three non-active tabs, protecting pinned, audible and non-discardable tabs where possible. Changing back to NORMAL stops future discards; discarded tabs reload when selected.
 
-The extension cannot reproduce the Firefox fork's privileged `browserControl` API, native toolbar, Tor process launcher, direct DNS settings, or whole-browser PRIVATE/GHOST semantics. Tor and DNS are shown as unavailable explanations, never as active controls. A verified Windows native companion would be needed for the Tor process; Chrome's proxy API alone does not launch Tor or prove DNS isolation. Chromium may also restrict new-tab overrides in incognito windows. No claim of feature parity or Tor anonymity is made. The optional theme changes supported frame colors, not tab geometry or Chrome's built-in controls.
+The network section now offers an explicit connection to the third-party GoodExtensions HTTPS proxy used by the user-supplied `Browser Tor.crx`. Its controls and connection state appear in the existing FILUM side panel; the CRX popup, advertisements and telemetry are not included. On click, FILUM requests a proxy configuration, applies it to Chrome/Edge, and checks whether Tor Project reports `IsTor=true` for a request. It checks again about once per minute and releases the proxy when the check fails; if a scheduled check is delayed, the UI expires the verified state after 90 seconds. On disconnect it releases its proxy control. This feature depends on a third-party service and has not been verified on the user's Windows installation. It does not bundle or launch Tor, prove that all traffic avoids leaks, or provide Tor Browser's privacy protections. Connection sends a stable random client ID to the service; transient proxy credentials are held in browser session storage. The added proxy and webRequest permissions can prompt broad access warnings. See `docs/FILUM_CHROMIUM_CODE_MAP.md` for file-by-file behavior and the required modification log.
+
+The extension still cannot reproduce the Firefox fork's privileged `browserControl` API, native toolbar, direct DNS settings, or whole-browser PRIVATE/GHOST semantics. Chromium may restrict new-tab overrides in incognito windows. The optional theme changes supported frame colors, not tab geometry or Chrome's built-in controls.
 
 No native binary is bundled. Load it only from this exact source directory and keep the original FILUM Windows build separate. The Firefox release's Defender alert is a separate unresolved investigation.
 

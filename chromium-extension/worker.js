@@ -85,6 +85,131 @@ async function searchTavilyExplicit(query) {
 
 
 const RULESET = 'ads_basic';
+// Tor-via-proxy integration: original FILUM implementation of the observed CRX protocol.
+// Keep this section and docs/FILUM_CHROMIUM_TOR_CODE_MAP.md in sync on every edit.
+const TOR_CONFIG_ENDPOINT = 'https://goodextensions.mooo.com/ext/tor-browser/torconfig.php';
+const TOR_CHECK_ENDPOINT = 'https://check.torproject.org/api/ip';
+const TOR_PAC_MARKER = 'FILUM_EXTERNAL_TOR_PROXY';
+const TOR_ALARM = 'filum-tor-check';
+const torAuthAttempts = new Set();
+
+async function torProxySetting() {
+  return chrome.proxy.settings.get({ incognito: false });
+}
+
+function isOurTorProxy(setting) {
+  return setting?.levelOfControl === 'controlled_by_this_extension' &&
+    setting.value?.mode === 'pac_script';
+}
+
+async function torStatus() {
+  const [setting, saved] = await Promise.all([
+    torProxySetting(), chrome.storage.session.get('filumTorSession')
+  ]);
+  const active = isOurTorProxy(setting) && saved.filumTorSession?.active === true;
+  const verified = active && saved.filumTorSession?.verified === true &&
+    Date.now() - saved.filumTorSession.lastVerifiedAt < 90000;
+  return { active, verified,
+    ip: verified ? saved.filumTorSession.ip : null,
+    lastVerifiedAt: active ? saved.filumTorSession.lastVerifiedAt || null : null };
+}
+
+async function getTorClientId() {
+  const saved = await chrome.storage.local.get('filumTorClientId');
+  if (saved.filumTorClientId) return saved.filumTorClientId;
+  const id = crypto.randomUUID();
+  await chrome.storage.local.set({ filumTorClientId: id });
+  return id;
+}
+
+async function limitedFetch(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try { return await fetch(url, { signal: controller.signal, cache: 'no-store', credentials: 'omit' }); }
+  finally { clearTimeout(timer); }
+}
+
+function validateTorConfig(data) {
+  const host = String(data?.url || '').trim().toLowerCase();
+  if (host.length > 253 || !/^[a-z0-9.-]+$/.test(host) ||
+      host.startsWith('.') || host.endsWith('.') || host.includes('..')) {
+    throw new Error('Host del proxy esterno non valido.');
+  }
+  const username = String(data?.aun || '');
+  const password = String(data?.aup || '');
+  if (!username || !password || username.length > 256 || password.length > 256) {
+    throw new Error('Credenziali proxy mancanti o non valide.');
+  }
+  return { host, username, password };
+}
+
+async function clearFilumTorProxy() {
+  await chrome.alarms.clear(TOR_ALARM);
+  const setting = await torProxySetting();
+  if (setting.levelOfControl === 'controlled_by_this_extension') {
+    await chrome.proxy.settings.clear({ scope: 'regular' });
+    if ((await torProxySetting()).levelOfControl === 'controlled_by_this_extension') {
+      throw new Error('Il browser non ha confermato il rilascio del proxy FILUM.');
+    }
+  }
+  await chrome.storage.session.remove('filumTorSession');
+  torAuthAttempts.clear();
+}
+
+async function verifyTorEgress() {
+  const check = await limitedFetch(TOR_CHECK_ENDPOINT, 12000);
+  if (!check.ok) throw new Error(`Verifica Tor: HTTP ${check.status}.`);
+  const result = await check.json();
+  if (result?.IsTor !== true) throw new Error('Uscita Tor non confermata.');
+  const { filumTorSession: saved } = await chrome.storage.session.get('filumTorSession');
+  if (!saved?.active || !isOurTorProxy(await torProxySetting())) throw new Error('Proxy FILUM non più attivo.');
+  await chrome.storage.session.set({ filumTorSession: {
+    ...saved, verified: true, lastVerifiedAt: Date.now(),
+    ip: typeof result.IP === 'string' ? result.IP.slice(0, 80) : null
+  } });
+}
+
+async function connectFilumTor() {
+  const current = await torProxySetting();
+  if (current.levelOfControl === 'controlled_by_other_extensions' ||
+      current.levelOfControl === 'not_controllable') {
+    throw new Error('Il proxy è controllato da un altro componente o criterio.');
+  }
+  if (current.levelOfControl === 'controlled_by_this_extension') await clearFilumTorProxy();
+  const clientId = await getTorClientId();
+  const response = await limitedFetch(`${TOR_CONFIG_ENDPOINT}?cid=${encodeURIComponent(clientId)}&nc=${Math.random()}`, 12000);
+  if (!response.ok) throw new Error(`Servizio proxy: HTTP ${response.status}.`);
+  const config = validateTorConfig(await response.json());
+  const pac = `function FindProxyForURL(url, host) { /* ${TOR_PAC_MARKER} */ return "HTTPS ${config.host}:443"; }`;
+  await chrome.storage.session.set({ filumTorSession: {
+    active: true, verified: false, host: config.host,
+    username: config.username, password: config.password
+  } });
+  try {
+    await chrome.proxy.settings.set({ value: { mode: 'pac_script', pacScript: { data: pac } }, scope: 'regular' });
+    if (!isOurTorProxy(await torProxySetting())) throw new Error('Proxy FILUM non confermato dal browser.');
+    await verifyTorEgress();
+    await chrome.alarms.create(TOR_ALARM, { periodInMinutes: 1 });
+    return status();
+  } catch (error) {
+    try { await clearFilumTorProxy(); }
+    catch (restoreError) { throw new Error(`${error.message} Ripristino proxy fallito: ${restoreError.message}`); }
+    throw error;
+  }
+}
+
+chrome.webRequest.onAuthRequired.addListener((details, callback) => {
+  if (!details.isProxy || torAuthAttempts.has(details.requestId)) { callback({}); return; }
+  chrome.storage.session.get('filumTorSession').then(({ filumTorSession: saved }) => {
+    if (!saved?.active || details.challenger?.host?.toLowerCase() !== saved.host) { callback({}); return; }
+    torAuthAttempts.add(details.requestId);
+    callback({ authCredentials: { username: saved.username, password: saved.password } });
+  }).catch(() => callback({}));
+}, { urls: ['<all_urls>'] }, ['asyncBlocking']);
+for (const event of [chrome.webRequest.onCompleted, chrome.webRequest.onErrorOccurred]) {
+  event.addListener(details => torAuthAttempts.delete(details.requestId), { urls: ['<all_urls>'] });
+}
+
 async function captureDuckResults(query) {
   const text = String(query || '').trim();
   if (!text || text.length > 300) throw new Error('Query non valida.');
@@ -173,6 +298,7 @@ async function status() {
   const tabs = await chrome.tabs.query({});
   return {
     ...current,
+    tor: await torStatus(),
     activeBackground: tabs.filter(tab => !tab.active && !tab.discarded).length,
     protectedBackground: tabs.filter(tab => !tab.active && !tab.discarded &&
       (tab.pinned || tab.audible || tab.autoDiscardable === false)).length
@@ -208,6 +334,8 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       case 'mode': return setMode(request.mode);
       case 'ads': return setAds(request.enabled === true);
       case 'enforce': return { ...(await status()), result: await enforceTurbo() };
+      case 'tor-connect': return connectFilumTor();
+      case 'tor-disconnect': await clearFilumTorProxy(); return status();
       case 'tavily-key-status': return tavilyKeyStatus();
       case 'tavily-key-save': {
         const key = String(request.key || '').trim();
@@ -234,11 +362,22 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === ALARM) serial(enforceTurbo).catch(console.warn);
+  if (alarm.name === TOR_ALARM) serial(async () => {
+    if (!(await torStatus()).active) { await chrome.alarms.clear(TOR_ALARM); return; }
+    try { await verifyTorEgress(); }
+    catch (error) {
+      console.warn('FILUM Tor verification lost; releasing proxy', error);
+      await clearFilumTorProxy();
+    }
+  }).catch(console.warn);
 });
 chrome.tabs.onActivated.addListener(() => serial(enforceTurbo).catch(console.warn));
 chrome.tabs.onUpdated.addListener((_id, change) => {
   if (change.status === 'complete') serial(enforceTurbo).catch(console.warn);
 });
 chrome.runtime.onStartup.addListener(() => serial(async () => {
+  // Session credentials vanish on restart; never leave a proxy active without authentication.
+  await clearFilumTorProxy();
   if ((await state()).mode === 'TURBO') await chrome.alarms.create(ALARM, { periodInMinutes: 1 });
 }).catch(console.warn));
+chrome.runtime.onInstalled.addListener(() => serial(clearFilumTorProxy).catch(console.warn));
