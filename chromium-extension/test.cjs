@@ -6,6 +6,10 @@ const listeners = {};
 const popupMarkup = fs.readFileSync(__dirname + '/popup.html', 'utf8');
 const visibleWebRTCModes = [...popupMarkup.matchAll(/data-webrtc-mode="([^"]+)"/g)].map(match => match[1]);
 assert.deepEqual(visibleWebRTCModes, ['default', 'medium', 'full'], 'WebRTC controls must appear in the requested order');
+const networkSectionIndex = popupMarkup.indexOf('<section class="network">');
+const webRTCSectionIndex = popupMarkup.indexOf('<section class="webrtc-settings"');
+assert.ok(networkSectionIndex >= 0 && webRTCSectionIndex > networkSectionIndex, 'WebRTC controls must be in a separate section after Tor/IP');
+assert.match(popupMarkup.slice(webRTCSectionIndex), /<h2 id="webrtc-heading">Impostazioni WebRTC<\/h2>[\s\S]*<div class="webrtc-controls"/);
 const fullBlockScript = fs.readFileSync(__dirname + '/webrtc-full-block.js', 'utf8');
 function NativePeerConnection() {}
 NativePeerConnection.prototype.createOffer = function () {};
