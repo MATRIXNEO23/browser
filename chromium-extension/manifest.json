@@ -1,0 +1,62 @@
+{
+  "manifest_version": 3,
+  "name": "FILUM for Chrome Windows (prototype)",
+  "version": "0.6.8",
+  "description": "FILUM offline home, Smart Search, side panel, ADS, TURBO and optional Tor-routed external proxy.",
+  "host_permissions": [
+    "https://html.duckduckgo.com/*",
+    "https://duckduckgo.com/*",
+    "https://api.tavily.com/*",
+    "https://goodextensions.mooo.com/*",
+    "https://check.torproject.org/*",
+    "https://ipwho.is/*",
+    "<all_urls>"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms",
+    "declarativeNetRequest",
+    "search",
+    "sidePanel",
+    "scripting",
+    "proxy",
+    "webRequest",
+    "webRequestAuthProvider"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {
+    "default_title": "Apri pannello FILUM",
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ads_basic",
+        "enabled": true,
+        "path": "rules/ads-basic.json"
+      }
+    ]
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

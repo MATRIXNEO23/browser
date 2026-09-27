@@ -1,0 +1,474 @@
+const TAVILY_DEFAULT_DAILY_LIMIT = 33;
+const TAVILY_MONTHLY_LIMIT = 1000;
+let tavilyRequestInFlight = false;
+
+function localUsageDay(now = new Date()) {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+async function tavilyKeyStatus() {
+  const saved = await chrome.storage.local.get([
+    'tavilyApiKey', 'tavilyUsage', 'tavilyMonthlyUsage', 'tavilyDailyLimit'
+  ]);
+  const day = localUsageDay();
+  const month = day.slice(0, 7);
+  return {
+    configured: !!saved.tavilyApiKey,
+    used: saved.tavilyUsage?.day === day ? saved.tavilyUsage.count : 0,
+    limit: saved.tavilyDailyLimit || TAVILY_DEFAULT_DAILY_LIMIT,
+    monthUsed: saved.tavilyMonthlyUsage?.month === month ? saved.tavilyMonthlyUsage.count : 0,
+    monthLimit: TAVILY_MONTHLY_LIMIT
+  };
+}
+
+async function searchTavilyExplicit(query) {
+  if (tavilyRequestInFlight) throw new Error('Una ricerca Tavily è già in corso.');
+  const q = String(query || '').trim();
+  if (!q || q.length > 300) throw new Error('Query Tavily non valida.');
+  tavilyRequestInFlight = true;
+  try {
+    const saved = await chrome.storage.local.get([
+      'tavilyApiKey', 'tavilyUsage', 'tavilyMonthlyUsage', 'tavilyDailyLimit'
+    ]);
+    if (!saved.tavilyApiKey) throw new Error('Inserisci prima la chiave Tavily.');
+    const day = localUsageDay();
+    const month = day.slice(0, 7);
+    const usage = saved.tavilyUsage?.day === day ? saved.tavilyUsage : { day, count: 0, at: 0 };
+    const monthly = saved.tavilyMonthlyUsage?.month === month
+      ? saved.tavilyMonthlyUsage : { month, count: 0 };
+    const dailyLimit = saved.tavilyDailyLimit || TAVILY_DEFAULT_DAILY_LIMIT;
+    if (usage.count >= dailyLimit) throw new Error(`Limite locale Tavily di ${dailyLimit} ricerche oggi raggiunto.`);
+    if (monthly.count >= TAVILY_MONTHLY_LIMIT) {
+      throw new Error('Limite locale Tavily di 1.000 ricerche nel mese raggiunto.');
+    }
+    if (Date.now() - usage.at < 3000) throw new Error('Attendi tre secondi prima di usare Tavily.');
+
+    // Count before sending so an uncertain network outcome cannot trigger an automatic duplicate.
+    await chrome.storage.local.set({
+      tavilyUsage: { day, count: usage.count + 1, at: Date.now() },
+      tavilyMonthlyUsage: { month, count: monthly.count + 1 }
+    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${saved.tavilyApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: q, topic: 'general', search_depth: 'basic',
+          auto_parameters: false, max_results: 10,
+          include_answer: false, include_raw_content: false
+        }),
+        signal: controller.signal,
+        cache: 'no-store',
+        credentials: 'omit'
+      });
+      if (!response.ok) throw new Error(`Tavily API: HTTP ${response.status}. Nessun retry automatico.`);
+      const data = await response.json();
+      return {
+        results: (data.results || []).slice(0, 10).map(item => ({
+          title: String(item.title || ''), url: String(item.url || ''),
+          snippet: String(item.content || '').slice(0, 500)
+        })),
+        usage: await tavilyKeyStatus()
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  } finally {
+    tavilyRequestInFlight = false;
+  }
+}
+
+
+const RULESET = 'ads_basic';
+// Tor-via-proxy integration: original FILUM implementation of the observed CRX protocol.
+// Keep this section and docs/FILUM_CHROMIUM_TOR_CODE_MAP.md in sync on every edit.
+const TOR_CONFIG_ENDPOINT = 'https://goodextensions.mooo.com/ext/tor-browser/torconfig.php';
+const TOR_CHECK_ENDPOINT = 'https://check.torproject.org/api/ip';
+const TOR_PAC_MARKER = 'FILUM_EXTERNAL_TOR_PROXY';
+const TOR_ALARM = 'filum-tor-check';
+const TOR_RECONNECT_ALARM = 'filum-tor-reconnect';
+const TOR_MAX_AUTO_RECONNECTS = 3;
+const torAuthAttempts = new Set();
+let recoveringTor = false;
+
+async function torProxySetting() {
+  return chrome.proxy.settings.get({ incognito: false });
+}
+
+function isOurTorProxy(setting) {
+  return setting?.levelOfControl === 'controlled_by_this_extension' &&
+    setting.value?.mode === 'pac_script' &&
+    setting.value?.pacScript?.data?.includes(TOR_PAC_MARKER) === true;
+}
+
+async function torStatus() {
+  const [setting, saved] = await Promise.all([
+    torProxySetting(), chrome.storage.session.get('filumTorSession')
+  ]);
+  const active = isOurTorProxy(setting) && saved.filumTorSession?.active === true;
+  const verified = active && saved.filumTorSession?.verified === true &&
+    Date.now() - saved.filumTorSession.lastVerifiedAt < 90000;
+  return { active, verified,
+    ip: verified ? saved.filumTorSession.ip : null,
+    lastVerifiedAt: active ? saved.filumTorSession.lastVerifiedAt || null : null };
+}
+
+async function getTorClientId() {
+  const saved = await chrome.storage.local.get('filumTorClientId');
+  if (saved.filumTorClientId) return saved.filumTorClientId;
+  const id = crypto.randomUUID();
+  await chrome.storage.local.set({ filumTorClientId: id });
+  return id;
+}
+
+async function limitedFetch(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try { return await fetch(url, { signal: controller.signal, cache: 'no-store', credentials: 'omit' }); }
+  finally { clearTimeout(timer); }
+}
+
+function validateTorConfig(data) {
+  const host = String(data?.url || '').trim().toLowerCase();
+  if (host.length > 253 || !/^[a-z0-9.-]+$/.test(host) ||
+      host.startsWith('.') || host.endsWith('.') || host.includes('..')) {
+    throw new Error('Host del proxy esterno non valido.');
+  }
+  const username = String(data?.aun || '');
+  const password = String(data?.aup || '');
+  if (!username || !password || username.length > 256 || password.length > 256) {
+    throw new Error('Credenziali proxy mancanti o non valide.');
+  }
+  return { host, username, password };
+}
+
+async function clearFilumTorProxy({ preserveRecovery = false } = {}) {
+  await chrome.alarms.clear(TOR_ALARM);
+  if (!preserveRecovery) await chrome.alarms.clear(TOR_RECONNECT_ALARM);
+  const setting = await torProxySetting();
+  if (setting.levelOfControl === 'controlled_by_this_extension') {
+    await chrome.proxy.settings.clear({ scope: 'regular' });
+    if ((await torProxySetting()).levelOfControl === 'controlled_by_this_extension') {
+      throw new Error('Il browser non ha confermato il rilascio del proxy FILUM.');
+    }
+  }
+  await chrome.storage.session.remove('filumTorSession');
+  if (!preserveRecovery) await chrome.storage.session.remove('filumTorRecovery');
+  torAuthAttempts.clear();
+}
+
+async function verifyTorEgress() {
+  const check = await limitedFetch(TOR_CHECK_ENDPOINT, 12000);
+  if (!check.ok) throw new Error(`Verifica Tor: HTTP ${check.status}.`);
+  const result = await check.json();
+  if (result?.IsTor !== true) throw new Error('Uscita Tor non confermata.');
+  const { filumTorSession: saved } = await chrome.storage.session.get('filumTorSession');
+  if (!saved?.active || !isOurTorProxy(await torProxySetting())) throw new Error('Proxy FILUM non più attivo.');
+  await chrome.storage.session.set({ filumTorSession: {
+    ...saved, verified: true, lastVerifiedAt: Date.now(),
+    ip: typeof result.IP === 'string' ? result.IP.slice(0, 80) : null,
+    failedChecks: 0
+  } });
+}
+
+async function markTorUnverified() {
+  const { filumTorSession: saved } = await chrome.storage.session.get('filumTorSession');
+  if (!saved?.active) return 0;
+  const failedChecks = (saved.failedChecks || 0) + 1;
+  await chrome.storage.session.set({ filumTorSession: {
+    ...saved, verified: false, lastVerifiedAt: 0, ip: null, failedChecks
+  } });
+  return failedChecks;
+}
+
+async function scheduleTorRecovery(reason) {
+  const { filumTorRecovery: recovery } = await chrome.storage.session.get('filumTorRecovery');
+  if (!recovery?.enabled || recovery.pending || recoveringTor) return;
+  if ((recovery.attempts || 0) >= TOR_MAX_AUTO_RECONNECTS) {
+    await chrome.storage.session.remove('filumTorRecovery');
+    return;
+  }
+  await chrome.storage.session.set({ filumTorRecovery: { ...recovery, reason, pending: true } });
+  await chrome.alarms.create(TOR_RECONNECT_ALARM, { delayInMinutes: 0.5 });
+}
+
+async function handleTorCheckFailure(error) {
+  const failedChecks = await markTorUnverified();
+  console.warn('FILUM Tor check failed; keeping proxy and retrying', error);
+  if (failedChecks >= 2) await scheduleTorRecovery('repeated-verification-failure');
+}
+
+async function autoReconnectTor() {
+  const { filumTorRecovery: recovery } = await chrome.storage.session.get('filumTorRecovery');
+  if (!recovery?.enabled) return;
+  const attempts = (recovery.attempts || 0) + 1;
+  if (attempts > TOR_MAX_AUTO_RECONNECTS) {
+    await chrome.storage.session.remove('filumTorRecovery');
+    return;
+  }
+  await chrome.storage.session.set({ filumTorRecovery: { ...recovery, attempts, pending: false } });
+  recoveringTor = true;
+  try {
+    await connectFilumTor({ automatic: true });
+    await chrome.alarms.clear(TOR_RECONNECT_ALARM);
+  } catch (error) {
+    console.warn(`FILUM automatic Tor reconnect ${attempts}/${TOR_MAX_AUTO_RECONNECTS} failed`, error);
+    const latest = (await chrome.storage.session.get('filumTorRecovery')).filumTorRecovery;
+    if (latest?.enabled && attempts < TOR_MAX_AUTO_RECONNECTS) {
+      await chrome.storage.session.set({ filumTorRecovery: { ...latest, pending: true } });
+      await chrome.alarms.create(TOR_RECONNECT_ALARM, { delayInMinutes: 1 });
+    } else {
+      await chrome.storage.session.remove('filumTorRecovery');
+    }
+  } finally { recoveringTor = false; }
+}
+
+async function refreshTorStatus() {
+  if (!(await torStatus()).active) {
+    await scheduleTorRecovery('proxy-missing');
+    return status();
+  }
+  try { await verifyTorEgress(); }
+  catch (error) {
+    await handleTorCheckFailure(error);
+    return { ...(await status()), torError: `Uscita Tor non confermata: ${error.message}` };
+  }
+  return status();
+}
+
+async function connectFilumTor({ automatic = false } = {}) {
+  const current = await torProxySetting();
+  if (current.levelOfControl === 'controlled_by_other_extensions' ||
+      current.levelOfControl === 'not_controllable') {
+    throw new Error('Il proxy è controllato da un altro componente o criterio.');
+  }
+  if (current.levelOfControl === 'controlled_by_this_extension') {
+    await clearFilumTorProxy({ preserveRecovery: automatic });
+  }
+  const clientId = await getTorClientId();
+  const response = await limitedFetch(`${TOR_CONFIG_ENDPOINT}?cid=${encodeURIComponent(clientId)}&nc=${Math.random()}`, 12000);
+  if (!response.ok) throw new Error(`Servizio proxy: HTTP ${response.status}.`);
+  const config = validateTorConfig(await response.json());
+  const pac = `function FindProxyForURL(url, host) { /* ${TOR_PAC_MARKER} */ return "HTTPS ${config.host}:443"; }`;
+  await chrome.storage.session.set({ filumTorSession: {
+    active: true, verified: false, host: config.host,
+    username: config.username, password: config.password
+  } });
+  try {
+    await chrome.proxy.settings.set({ value: { mode: 'pac_script', pacScript: { data: pac } }, scope: 'regular' });
+    if (!isOurTorProxy(await torProxySetting())) throw new Error('Proxy FILUM non confermato dal browser.');
+    await verifyTorEgress();
+    await chrome.alarms.create(TOR_ALARM, { periodInMinutes: 1 });
+    await chrome.storage.session.set({ filumTorRecovery: { enabled: true, attempts: 0, pending: false } });
+    return status();
+  } catch (error) {
+    try { await clearFilumTorProxy({ preserveRecovery: automatic }); }
+    catch (restoreError) { throw new Error(`${error.message} Ripristino proxy fallito: ${restoreError.message}`); }
+    throw error;
+  }
+}
+
+chrome.webRequest.onAuthRequired.addListener((details, callback) => {
+  if (!details.isProxy || torAuthAttempts.has(details.requestId)) { callback({}); return; }
+  chrome.storage.session.get('filumTorSession').then(({ filumTorSession: saved }) => {
+    if (!saved?.active || details.challenger?.host?.toLowerCase() !== saved.host) { callback({}); return; }
+    torAuthAttempts.add(details.requestId);
+    callback({ authCredentials: { username: saved.username, password: saved.password } });
+  }).catch(() => callback({}));
+}, { urls: ['<all_urls>'] }, ['asyncBlocking']);
+for (const event of [chrome.webRequest.onCompleted, chrome.webRequest.onErrorOccurred]) {
+  event.addListener(details => torAuthAttempts.delete(details.requestId), { urls: ['<all_urls>'] });
+}
+
+async function captureDuckResults(query) {
+  const text = String(query || '').trim();
+  if (!text || text.length > 300) throw new Error('Query non valida.');
+  const tab = await chrome.tabs.create({ url: 'https://duckduckgo.com/?q=' + encodeURIComponent(text), active: false });
+  const tabId = tab.id;
+  try {
+    await chrome.tabs.update(tabId, { autoDiscardable: false });
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => { cleanup(); reject(new Error('DuckDuckGo non ha caricato la pagina in tempo.')); }, 15000);
+      function cleanup() { clearTimeout(timeout); chrome.tabs.onUpdated.removeListener(updated); chrome.tabs.onRemoved.removeListener(removed); }
+      function removed(id) { if (id === tabId) { cleanup(); reject(new Error('Scheda di ricerca chiusa.')); } }
+      function updated(id, info, updatedTab) {
+        if (id !== tabId || info.status !== 'complete') return;
+        cleanup();
+        if (!updatedTab.url?.startsWith('https://duckduckgo.com/')) reject(new Error('DuckDuckGo ha reindirizzato la scheda.'));
+        else resolve();
+      }
+      chrome.tabs.onUpdated.addListener(updated);
+      chrome.tabs.onRemoved.addListener(removed);
+      chrome.tabs.get(tabId).then(current => {
+        if (current.status === 'complete') updated(tabId, { status: 'complete' }, current);
+      }).catch(() => {});
+    });
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func: () => {
+      const out = [], seen = new Set();
+      let excludedAds = 0;
+      const nodes = document.querySelectorAll('article[data-testid="result"], .result, [data-testid="result"]');
+      for (const node of nodes) {
+        const anchor = node.querySelector('a[data-testid="result-title-a"], a.result__a, h2 a, h3 a');
+        if (!anchor) continue;
+        if (node.matches('[data-testid*="ad"], .result--ad') || node.querySelector('[data-testid="ad"], .result__ad, .result__badge--ad')) { excludedAds++; continue; }
+        let address;
+        try {
+          const link = new URL(anchor.href, location.href);
+          address = link.searchParams.get('uddg') || link.href;
+          const parsed = new URL(address);
+          if (!['http:', 'https:'].includes(parsed.protocol) || parsed.hostname.endsWith('duckduckgo.com') || seen.has(parsed.href)) continue;
+          address = parsed.href;
+        } catch { continue; }
+        seen.add(address);
+        out.push({ title: anchor.textContent.trim().slice(0, 250), url: address, snippet: (node.querySelector('[data-result="snippet"], [data-testid="result-snippet"], .result__snippet')?.textContent || '').trim().slice(0, 600) });
+        if (out.length >= 50) break;
+      }
+      return { results: out, excludedAds };
+    } });
+    if (!result?.results?.length) throw new Error('La pagina di DuckDuckGo non contiene risultati leggibili.');
+    return result;
+  } finally { await chrome.tabs.remove(tabId).catch(() => {}); }
+}
+const ALARM = 'filum-turbo';
+const MODES = new Set(['NORMAL', 'TURBO']);
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.warn);
+let transition = Promise.resolve();
+
+function serial(action) {
+  const next = transition.then(action);
+  transition = next.catch(() => {});
+  return next;
+}
+
+async function state() {
+  const stored = await chrome.storage.local.get({ mode: 'NORMAL' });
+  const enabled = await chrome.declarativeNetRequest.getEnabledRulesets();
+  return { mode: MODES.has(stored.mode) ? stored.mode : 'NORMAL', adsEnabled: enabled.includes(RULESET) };
+}
+
+async function enforceTurbo() {
+  const { mode } = await state();
+  if (mode !== 'TURBO') return { discarded: 0, protected: 0, activeBackground: 0 };
+  const tabs = await chrome.tabs.query({});
+  const active = tabs.filter(tab => !tab.discarded && !tab.active);
+  const protectedTabs = active.filter(tab => tab.pinned || tab.audible || tab.autoDiscardable === false);
+  const candidates = active.filter(tab => !tab.pinned && !tab.audible && tab.autoDiscardable !== false)
+    .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+  const keep = Math.max(0, 3 - protectedTabs.length);
+  let discarded = 0;
+  for (const tab of candidates.slice(keep)) {
+    try { await chrome.tabs.discard(tab.id); discarded++; } catch (_) { /* tab changed or is protected */ }
+  }
+  return { discarded, protected: protectedTabs.length, activeBackground: Math.max(0, active.length - discarded) };
+}
+
+async function status() {
+  const current = await state();
+  const [tabs, saved] = await Promise.all([
+    chrome.tabs.query({}), chrome.storage.session.get('filumTorRecovery')
+  ]);
+  return {
+    ...current,
+    tor: await torStatus(),
+    torRecovery: saved.filumTorRecovery?.enabled ? {
+      pending: saved.filumTorRecovery.pending === true,
+      attempts: saved.filumTorRecovery.attempts || 0
+    } : null,
+    activeBackground: tabs.filter(tab => !tab.active && !tab.discarded).length,
+    protectedBackground: tabs.filter(tab => !tab.active && !tab.discarded &&
+      (tab.pinned || tab.audible || tab.autoDiscardable === false)).length
+  };
+}
+
+async function setMode(mode) {
+  if (!MODES.has(mode)) throw new Error('Modalità non disponibile in Chromium.');
+  await chrome.storage.local.set({ mode });
+  if (mode === 'TURBO') {
+    await chrome.alarms.create(ALARM, { periodInMinutes: 1 });
+    await enforceTurbo();
+  } else {
+    await chrome.alarms.clear(ALARM);
+  }
+  return status();
+}
+
+async function setAds(enabled) {
+  await chrome.declarativeNetRequest.updateEnabledRulesets({
+    enableRulesetIds: enabled ? [RULESET] : [],
+    disableRulesetIds: enabled ? [] : [RULESET]
+  });
+  const result = await status();
+  if (result.adsEnabled !== enabled) throw new Error('ADS: stato non confermato dal browser.');
+  return result;
+}
+
+chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  serial(async () => {
+    switch (request?.type) {
+      case 'status': return status();
+      case 'tor-refresh': return refreshTorStatus();
+      case 'mode': return setMode(request.mode);
+      case 'ads': return setAds(request.enabled === true);
+      case 'enforce': return { ...(await status()), result: await enforceTurbo() };
+      case 'tor-connect': return connectFilumTor();
+      case 'tor-disconnect': await clearFilumTorProxy(); return status();
+      case 'tavily-key-status': return tavilyKeyStatus();
+      case 'tavily-key-save': {
+        const key = String(request.key || '').trim();
+        if (!/^tvly-[^\s]{12,250}$/.test(key)) throw new Error('Formato chiave Tavily non valido.');
+        await chrome.storage.local.set({ tavilyApiKey: key });
+        return tavilyKeyStatus();
+      }
+      case 'tavily-key-remove':
+        await chrome.storage.local.remove('tavilyApiKey');
+        return tavilyKeyStatus();
+      case 'tavily-limit-save': {
+        const limit = Number(request.limit);
+        if (!Number.isInteger(limit) || limit < 1 || limit > TAVILY_MONTHLY_LIMIT) throw new Error('Il limite giornaliero deve essere tra 1 e 1000.');
+        await chrome.storage.local.set({ tavilyDailyLimit: limit });
+        return tavilyKeyStatus();
+      }
+      case 'tavily-search-explicit': return searchTavilyExplicit(request.query);
+      case 'duck-search-tab': return captureDuckResults(request.query);
+      default: throw new Error('Comando FILUM sconosciuto.');
+    }
+  }).then(data => sendResponse({ ok: true, data }), error => sendResponse({ ok: false, error: String(error.message || error) }));
+  return true;
+});
+
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === ALARM) serial(enforceTurbo).catch(console.warn);
+  if (alarm.name === TOR_RECONNECT_ALARM) serial(autoReconnectTor).catch(console.warn);
+  if (alarm.name === TOR_ALARM) serial(async () => {
+    if (!(await torStatus()).active) {
+      await chrome.alarms.clear(TOR_ALARM);
+      await scheduleTorRecovery('proxy-missing');
+      return;
+    }
+    try { await verifyTorEgress(); }
+    catch (error) { await handleTorCheckFailure(error); }
+  }).catch(console.warn);
+});
+chrome.proxy.settings.onChange.addListener(() => serial(async () => {
+  if (recoveringTor) return;
+  const { filumTorRecovery: recovery } = await chrome.storage.session.get('filumTorRecovery');
+  if (!recovery?.enabled || isOurTorProxy(await torProxySetting())) return;
+  await markTorUnverified();
+  await scheduleTorRecovery('proxy-setting-changed');
+}).catch(console.warn));
+chrome.tabs.onActivated.addListener(() => serial(enforceTurbo).catch(console.warn));
+chrome.tabs.onUpdated.addListener((_id, change) => {
+  if (change.status === 'complete') serial(enforceTurbo).catch(console.warn);
+});
+chrome.runtime.onStartup.addListener(() => serial(async () => {
+  // Session credentials vanish on restart; never leave a proxy active without authentication.
+  await clearFilumTorProxy();
+  if ((await state()).mode === 'TURBO') await chrome.alarms.create(ALARM, { periodInMinutes: 1 });
+}).catch(console.warn));
+chrome.runtime.onInstalled.addListener(() => serial(clearFilumTorProxy).catch(console.warn));
