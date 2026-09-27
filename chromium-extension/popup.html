@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FILUM</title><link rel="stylesheet" href="style.css"></head>
+<body class="popup"><main>
+  <h1>FILUM</h1>
+  <div class="buttons"><button data-mode="NORMAL">NORMAL</button><button data-mode="TURBO">TURBO</button></div>
+  <button id="ads">ADS</button><button id="enforce">Scarica schede inattive ora</button>
+  <p id="status" role="status">Caricamento…</p>
+  <section class="network">
+    <div class="network-buttons">
+      <button id="tor-toggle" class="tor-off" aria-label="Tor disattivato" aria-pressed="false" title="Attiva o disattiva Tor"><img src="tor-symbol.jfif" alt=""></button>
+      <button id="search-home" aria-label="Apri la home del motore di ricerca" title="Apri la home del motore di ricerca"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-6v-7H9v7H3z"/></svg></button>
+      <button id="home-settings" aria-label="Impostazioni della home" aria-expanded="false" title="Impostazioni della home">⚙</button>
+    </div>
+    <div class="webrtc-controls" role="group" aria-label="Protezione WebRTC">
+      <button type="button" data-webrtc-mode="default" aria-pressed="true" title="Impostazione standard di Chrome">Default</button>
+      <button type="button" data-webrtc-mode="medium" aria-pressed="false" title="Blocca UDP WebRTC non instradato tramite proxy">Medium</button>
+      <button type="button" data-webrtc-mode="full" aria-pressed="false" title="Blocca WebRTC nelle pagine; chiamate e servizi peer-to-peer potrebbero non funzionare">Full</button>
+    </div>
+    <p id="webrtc-status" role="status" hidden></p>
+    <form id="home-form" hidden>
+      <label for="home-url">Indirizzo della home</label>
+      <input id="home-url" type="url" required spellcheck="false" autocomplete="off">
+      <div class="buttons"><button type="submit">Salva</button><button type="button" id="home-reset">Predefinito</button></div>
+    </form>
+    <p id="tor-status" role="status" hidden></p>
+    <p id="public-ip" role="status">IP pubblico: verifica…</p>
+    <p id="public-ip-details"></p>
+  </section>
+</main><script src="popup.js"></script></body></html>

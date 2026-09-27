@@ -85,6 +85,9 @@ async function searchTavilyExplicit(query) {
 
 
 const RULESET = 'ads_basic';
+const WEBRTC_MODE_KEY = 'filumWebRTCMode';
+const WEBRTC_FULL_BLOCK_ID = 'filum-webrtc-full-block';
+const WEBRTC_MODES = new Set(['default', 'medium', 'full']);
 // Tor-via-proxy integration: original FILUM implementation of the observed CRX protocol.
 // Keep this section and docs/FILUM_CHROMIUM_TOR_CODE_MAP.md in sync on every edit.
 const TOR_CONFIG_ENDPOINT = 'https://goodextensions.mooo.com/ext/tor-browser/torconfig.php';
@@ -352,6 +355,75 @@ async function state() {
   return { mode: MODES.has(stored.mode) ? stored.mode : 'NORMAL', adsEnabled: enabled.includes(RULESET) };
 }
 
+async function webRTCMode() {
+  const saved = await chrome.storage.local.get({ [WEBRTC_MODE_KEY]: 'default' });
+  return WEBRTC_MODES.has(saved[WEBRTC_MODE_KEY]) ? saved[WEBRTC_MODE_KEY] : 'default';
+}
+
+async function unregisterFullWebRTCBlock() {
+  const registered = await chrome.scripting.getRegisteredContentScripts({ ids: [WEBRTC_FULL_BLOCK_ID] });
+  if (registered.some(script => script.id === WEBRTC_FULL_BLOCK_ID)) {
+    await chrome.scripting.unregisterContentScripts({ ids: [WEBRTC_FULL_BLOCK_ID] });
+  }
+}
+
+async function registerFullWebRTCBlock() {
+  const registered = await chrome.scripting.getRegisteredContentScripts({ ids: [WEBRTC_FULL_BLOCK_ID] });
+  if (registered.some(script => script.id === WEBRTC_FULL_BLOCK_ID)) return;
+  await chrome.scripting.registerContentScripts([{
+    id: WEBRTC_FULL_BLOCK_ID,
+    matches: ['<all_urls>'],
+    js: ['webrtc-full-block.js'],
+    allFrames: true,
+    runAt: 'document_start',
+    world: 'MAIN'
+  }]);
+}
+
+async function applyWebRTCMode(mode, { reloadActive = true, activeTabId = null } = {}) {
+  if (!WEBRTC_MODES.has(mode)) throw new Error('Modalità WebRTC non disponibile.');
+  const policy = chrome.privacy?.network?.webRTCIPHandlingPolicy;
+  if (!policy) throw new Error('Il browser non espone il controllo privacy WebRTC.');
+
+  if (mode === 'full') {
+    await registerFullWebRTCBlock();
+    try { await policy.clear({ scope: 'regular' }); }
+    catch (error) {
+      await unregisterFullWebRTCBlock().catch(() => {});
+      throw error;
+    }
+  } else if (mode === 'medium') {
+    await policy.set({ value: 'disable_non_proxied_udp', scope: 'regular' });
+    const current = await policy.get({ incognito: false });
+    if (current.value !== 'disable_non_proxied_udp' ||
+        current.levelOfControl !== 'controlled_by_this_extension') {
+      throw new Error('Chrome non ha confermato la modalità WebRTC Medium; un criterio o un’altra estensione potrebbe controllarla.');
+    }
+    await unregisterFullWebRTCBlock();
+  } else {
+    await policy.clear({ scope: 'regular' });
+    await unregisterFullWebRTCBlock();
+  }
+
+  await chrome.storage.local.set({ [WEBRTC_MODE_KEY]: mode });
+  let activeTabReloaded = false;
+  if (reloadActive) {
+    if (activeTabId == null) {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      activeTabId = tab?.id;
+    }
+    if (activeTabId != null) {
+      try { await chrome.tabs.reload(activeTabId); activeTabReloaded = true; }
+      catch (_) { /* Some browser-owned pages cannot be reloaded by an extension. */ }
+    }
+  }
+  return { ...(await status()), activeTabReloaded };
+}
+
+async function restoreWebRTCMode() {
+  return applyWebRTCMode(await webRTCMode(), { reloadActive: false });
+}
+
 async function enforceTurbo() {
   const { mode } = await state();
   if (mode !== 'TURBO') return { discarded: 0, protected: 0, activeBackground: 0 };
@@ -370,11 +442,12 @@ async function enforceTurbo() {
 
 async function status() {
   const current = await state();
-  const [tabs, saved] = await Promise.all([
-    chrome.tabs.query({}), chrome.storage.session.get('filumTorRecovery')
+  const [tabs, saved, savedWebRTCMode] = await Promise.all([
+    chrome.tabs.query({}), chrome.storage.session.get('filumTorRecovery'), webRTCMode()
   ]);
   return {
     ...current,
+    webRTCMode: savedWebRTCMode,
     tor: await torStatus(),
     torRecovery: saved.filumTorRecovery?.enabled ? {
       pending: saved.filumTorRecovery.pending === true,
@@ -414,6 +487,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       case 'status': return status();
       case 'tor-refresh': return refreshTorStatus();
       case 'mode': return setMode(request.mode);
+      case 'webrtc-mode': return applyWebRTCMode(request.mode, { activeTabId: request.activeTabId });
       case 'ads': return setAds(request.enabled === true);
       case 'enforce': return { ...(await status()), result: await enforceTurbo() };
       case 'tor-connect': return connectFilumTor();
@@ -469,6 +543,10 @@ chrome.tabs.onUpdated.addListener((_id, change) => {
 chrome.runtime.onStartup.addListener(() => serial(async () => {
   // Session credentials vanish on restart; never leave a proxy active without authentication.
   await clearFilumTorProxy();
+  try { await restoreWebRTCMode(); } catch (error) { console.warn('FILUM could not restore WebRTC mode', error); }
   if ((await state()).mode === 'TURBO') await chrome.alarms.create(ALARM, { periodInMinutes: 1 });
 }).catch(console.warn));
-chrome.runtime.onInstalled.addListener(() => serial(clearFilumTorProxy).catch(console.warn));
+chrome.runtime.onInstalled.addListener(() => serial(async () => {
+  await clearFilumTorProxy();
+  try { await restoreWebRTCMode(); } catch (error) { console.warn('FILUM could not restore WebRTC mode', error); }
+}).catch(console.warn));
