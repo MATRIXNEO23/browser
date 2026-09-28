@@ -504,6 +504,124 @@ async function endGhostSession() {
 }
 
 
+let socksAuthListener = null;
+let torAuthSuspended = false;
+
+function removeSocksAuthHandler() {
+  if (socksAuthListener) {
+    browser.proxy.onRequest.removeListener(socksAuthListener);
+    socksAuthListener = null;
+  }
+}
+
+function validSocksAuthProfile(profile) {
+  return !!profile && typeof profile.host === 'string' && profile.host.trim() &&
+    Number.isInteger(profile.port) && profile.port >= 1 && profile.port <= 65535 &&
+    typeof profile.user === 'string' && profile.user.length > 0 &&
+    typeof profile.pass === 'string' && profile.pass.length > 0;
+}
+
+async function restoreSocksAuthProfile() {
+  const saved = await browser.storage.local.get(['torEnabled', 'socks_auth_profile']);
+  if (torAuthSuspended || torStarting || saved.torEnabled) {
+    removeSocksAuthHandler();
+    return false;
+  }
+
+  const profile = saved.socks_auth_profile;
+  if (!validSocksAuthProfile(profile)) {
+    removeSocksAuthHandler();
+    return false;
+  }
+
+  const current = (await browser.proxy.settings.get({})).value || {};
+  if (current.proxyType !== 'manual' || current.socks !== profile.host + ':' + profile.port ||
+      current.socksVersion !== 5) {
+    removeSocksAuthHandler();
+    return false;
+  }
+
+  removeSocksAuthHandler();
+  socksAuthListener = async () => {
+    const state = await browser.storage.local.get(['torEnabled', 'socks_auth_profile']);
+    if (torAuthSuspended || torStarting || state.torEnabled) return null;
+    const active = state.socks_auth_profile;
+    if (!validSocksAuthProfile(active)) return null;
+
+    const proxy = (await browser.proxy.settings.get({})).value || {};
+    if (proxy.proxyType !== 'manual' || proxy.socks !== active.host + ':' + active.port ||
+        proxy.socksVersion !== 5) return null;
+
+    return {
+      type: 'socks',
+      host: active.host,
+      port: active.port,
+      username: active.user,
+      password: active.pass,
+      proxyDNS: true
+    };
+  };
+  browser.proxy.onRequest.addListener(socksAuthListener, { urls: ['<all_urls>'] });
+  return true;
+}
+
+async function setNetworkProxy(config) {
+  if (!config || !['direct', 'system'].includes(config.mode)) {
+    throw new Error('Modalità proxy non valida.');
+  }
+  const state = await browser.storage.local.get('torEnabled');
+  if (torAuthSuspended || torStarting || state.torEnabled) throw new Error('La rete è gestita da TOR.');
+
+  removeSocksAuthHandler();
+  const value = config.mode === 'direct'
+    ? { proxyType: 'none' }
+    : { proxyType: 'system' };
+  try {
+    await browser.proxy.settings.set({ value });
+    const applied = (await browser.proxy.settings.get({})).value || {};
+    if (!matchesRestoredProxy(applied, value)) throw new Error('Impostazione proxy non confermata.');
+  } catch (error) {
+    await restoreSocksAuthProfile();
+    throw error;
+  }
+  await browser.storage.local.remove('socks_auth_profile');
+  return { success: true };
+}
+
+async function setSocksAuthProxy(config) {
+  const { host, port, user = '', pass = '' } = config || {};
+  if (typeof host !== 'string' || !host.trim() || !Number.isInteger(port) ||
+      port < 1 || port > 65535) throw new Error('SOCKS5: host o porta non validi.');
+  if (typeof user !== 'string' || typeof pass !== 'string') throw new Error('Credenziali SOCKS5 non valide.');
+  if (!!user !== !!pass) throw new Error('SOCKS5: inserisci username e password insieme.');
+  const state = await browser.storage.local.get('torEnabled');
+  if (torAuthSuspended || torStarting || state.torEnabled) throw new Error('La rete è gestita da TOR.');
+
+  removeSocksAuthHandler();
+  const value = {
+    proxyType: 'manual',
+    socks: host.trim() + ':' + port,
+    socksVersion: 5,
+    proxyDNS: true,
+    passthrough: 'localhost, 127.0.0.1'
+  };
+  await browser.proxy.settings.set({ value });
+  const applied = (await browser.proxy.settings.get({})).value || {};
+  if (!matchesRestoredProxy(applied, value)) {
+    await restoreSocksAuthProfile();
+    throw new Error('Impostazione proxy SOCKS5 non confermata.');
+  }
+
+  if (user) {
+    const profile = { host: host.trim(), port, user, pass };
+    await browser.storage.local.set({ socks_auth_profile: profile });
+    await restoreSocksAuthProfile();
+  } else {
+    await browser.storage.local.remove('socks_auth_profile');
+  }
+  return { success: true, authenticated: !!user };
+}
+
 async function restoreStaleTorState() {
   const saved = await browser.storage.local.get([
     'torEnabled',
@@ -514,6 +632,8 @@ async function restoreStaleTorState() {
 
   if (!saved.torEnabled) return;
 
+  torAuthSuspended = true;
+  removeSocksAuthHandler();
   const restored = await restoreTorNetwork(saved.torPreviousProxy || { proxyType: 'system' },
     saved.torPreviousSecureDns || 'off', saved.torPreviousSecureDnsUri || '');
 
@@ -526,10 +646,13 @@ async function restoreStaleTorState() {
     await browser.storage.local.remove([
       'torPreviousProxy', 'torPreviousSecureDns', 'torPreviousSecureDnsUri'
     ]);
+    torAuthSuspended = false;
   }
 }
 
-async function setTorEnabled(enabled) {
+async function setTorEnabled(enabled, keepAuthSuspended = false) {
+  torAuthSuspended = true;
+  removeSocksAuthHandler();
   const saved = await browser.storage.local.get([
     'torEnabled',
     'torPreviousProxy',
@@ -548,14 +671,18 @@ async function setTorEnabled(enabled) {
         dns.secureDns === 'off') {
       return { enabled: true, process };
     }
-    await setTorEnabled(false);
-    return setTorEnabled(true);
+    await setTorEnabled(false, true);
+    return setTorEnabled(true, true);
   }
 
   if (!enabled && !saved.torEnabled) {
     try {
       await browser.browserControl.stopTor();
     } catch (_) {}
+    if (!keepAuthSuspended) {
+      torAuthSuspended = false;
+      await restoreSocksAuthProfile();
+    }
     return { enabled: false, process: { running: false, bootstrapped: false } };
   }
 
@@ -612,6 +739,10 @@ async function setTorEnabled(enabled) {
           'torPreviousProxy', 'torPreviousSecureDns', 'torPreviousSecureDnsUri'
         ]);
         await applyRuntimePrivacy(await getMode());
+        if (!keepAuthSuspended) {
+          torAuthSuspended = false;
+          await restoreSocksAuthProfile();
+        }
       }
 
       throw error;
@@ -633,6 +764,10 @@ async function setTorEnabled(enabled) {
   ]);
 
   await applyRuntimePrivacy(await getMode());
+  if (!keepAuthSuspended) {
+    torAuthSuspended = false;
+    await restoreSocksAuthProfile();
+  }
   return { enabled: false, process: { running: false } };
 }
 
@@ -642,6 +777,8 @@ async function initialize() {
   } catch (_) {}
 
   await restoreStaleTorState();
+  try { await restoreSocksAuthProfile(); }
+  catch (error) { console.warn('Unable to restore SOCKS5 auth profile', error); }
   try { await applyDarkTheme(); }
   catch (error) { console.warn('Unable to apply browser theme', error); }
   const mode = await getMode();
@@ -768,6 +905,14 @@ browser.runtime.onMessage.addListener(async (message) => {
 
   if (message?.type === 'set-tor' && typeof message.enabled === 'boolean') {
     return queueControlTransition(() => setTorEnabled(message.enabled));
+  }
+
+  if (message?.type === 'set-network-proxy') {
+    return queueControlTransition(() => setNetworkProxy(message.config));
+  }
+
+  if (message?.type === 'set-proxy-auth') {
+    return queueControlTransition(() => setSocksAuthProxy(message.config));
   }
 
   if (message?.type === 'set-ads' && typeof message.enabled === 'boolean') {

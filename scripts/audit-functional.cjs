@@ -29,11 +29,17 @@ async function main() {
         throw new Error("Firefox does not support clearing localStorage with 'since'.");
       }
     } },
-    proxy: { settings: { async get() { return { value: currentProxy }; }, async set(value) {
-      calls.push({ proxy: value });
-      if (value.value.proxyType === 'system' && failProxy) throw new Error('proxy locked');
-      currentProxy = value.value;
-    } } },
+    proxy: {
+      settings: { async get() { return { value: currentProxy }; }, async set({ value }) {
+        calls.push({ proxy: { value } });
+        if (value.proxyType === 'system' && failProxy) throw new Error('proxy locked');
+        currentProxy = value;
+      } },
+      onRequest: {
+        addListener(listener) { proxyListeners.add(listener); },
+        removeListener(listener) { proxyListeners.delete(listener); }
+      }
+    },
     browserControl: {
       async setSecureDns(level) { calls.push({ dns: level }); currentDns = level; },
       async getSettings() { return { secureDns: currentDns }; },
@@ -42,6 +48,7 @@ async function main() {
     }
   };
   let failProxy = true;
+  const proxyListeners = new Set();
   let currentProxy = { proxyType: 'manual', socks: '127.0.0.1:19050', socksVersion: 5, proxyDNS: true };
   let currentDns = 'off';
   const context = vm.createContext({ URL, browser, ghostRecordQueue: Promise.resolve(), console: { warn() {} } });
@@ -168,6 +175,37 @@ async function main() {
   rejectProxyRestore = false;
   await vm.runInContext('setTorEnabled(false)', context);
   assert.equal(data.torEnabled, false);
+
+  await assert.rejects(
+    vm.runInContext("setSocksAuthProxy({host:'127.0.0.1',port:1080,user:'test',pass:''})", context),
+    /inserisci username e password insieme/
+  );
+  await vm.runInContext("setSocksAuthProxy({host:'127.0.0.1',port:1080,user:'test',pass:'pass'})", context);
+  assert.equal(data.socks_auth_profile.user, 'test', 'SOCKS credentials must persist for Tor restoration');
+  assert.equal(proxyListeners.size, 1, 'authenticated SOCKS must register its proxy listener');
+  const authProxy = await [...proxyListeners][0]({ url: 'https://example.org/' });
+  assert.equal(authProxy.type, 'socks');
+  assert.equal(authProxy.host, '127.0.0.1');
+  assert.equal(authProxy.port, 1080);
+  assert.equal(authProxy.username, 'test');
+  assert.equal(authProxy.password, 'pass');
+
+  await vm.runInContext('setTorEnabled(true)', context);
+  assert.equal(proxyListeners.size, 0, 'Tor must deregister the SOCKS auth listener');
+  assert.equal(data.socks_auth_profile.user, 'test', 'Tor must preserve the auth profile for restoration');
+  currentDns = 'strict';
+  await vm.runInContext('setTorEnabled(true)', context);
+  assert.equal(proxyListeners.size, 0, 'Tor repair must keep the auth listener suspended');
+  assert.equal(data.socks_auth_profile.user, 'test', 'Tor repair must preserve the auth profile');
+  await vm.runInContext('setTorEnabled(false)', context);
+  assert.equal(proxyListeners.size, 1, 'stopping Tor must restore the auth listener');
+  const restoredAuthProxy = await [...proxyListeners][0]({ url: 'https://example.org/' });
+  assert.equal(restoredAuthProxy.username, 'test');
+  assert.equal(currentProxy.socks, '127.0.0.1:1080');
+
+  await vm.runInContext("setNetworkProxy({mode:'system'})", context);
+  assert.equal(proxyListeners.size, 0, 'non-SOCKS modes must remove the auth listener');
+  assert.equal(data.socks_auth_profile, undefined, 'non-SOCKS modes must clear stale SOCKS credentials');
 
   vm.runInContext(section('function localUsageDay(', 'async function tavilyKeyStatus('), context);
   assert.equal(vm.runInContext("localUsageDay(new Date(2026, 8, 25, 0, 30))", context), '2026-09-25');
@@ -534,7 +572,11 @@ async function main() {
   assert.match(copied[0], /Bootstrap: 100%/);
   assert.equal(diagnosticContext.copyButton.textContent, 'Diagnostica copiata');
 
-  process.stdout.write('GHOST/Tor/modes/theme/URLhaus ruleset independence, search race, Tavily quota, transitions and sidebar states: PASS\n');
+  assert.match(fs.readFileSync(path.join(__dirname, '../extension/sidebar.html'), 'utf8'), /id="socks-user"/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../extension/sidebar.html'), 'utf8'), /id="socks-pass"/);
+  assert.match(sidebar, /type: 'set-proxy-auth'/);
+  assert.match(sidebar, /type: 'set-network-proxy'/);
+  process.stdout.write('GHOST/Tor/SOCKS5 auth coordination/modes/theme/URLhaus ruleset independence, search race, Tavily quota, transitions and sidebar states: PASS\n');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });

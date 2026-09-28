@@ -575,6 +575,8 @@ const networkMode = document.getElementById('network-mode');
 const socksFields = document.getElementById('socks-fields');
 const socksHost = document.getElementById('socks-host');
 const socksPort = document.getElementById('socks-port');
+const socksUser = document.getElementById('socks-user');
+const socksPass = document.getElementById('socks-pass');
 
 function updateSocksVisibility() {
   socksFields.style.display =
@@ -582,6 +584,8 @@ function updateSocksVisibility() {
   networkMode.disabled = torEnabled || torStarting;
   socksHost.disabled = torEnabled || torStarting;
   socksPort.disabled = torEnabled || torStarting;
+  socksUser.disabled = torEnabled || torStarting;
+  socksPass.disabled = torEnabled || torStarting;
   applyNetworkButton.disabled = torEnabled || torStarting;
 }
 
@@ -589,6 +593,9 @@ async function loadNetworkSettings() {
   try {
     const current = await browser.proxy.settings.get({});
     const value = current?.value || {};
+    const auth = await browser.storage.local.get(['socks_auth_profile']);
+    socksUser.value = auth.socks_auth_profile?.user || '';
+    socksPass.value = auth.socks_auth_profile?.pass || '';
 
     if (value.proxyType === 'manual' && value.socks) {
       networkMode.value = 'socks';
@@ -614,28 +621,36 @@ networkMode.addEventListener('change', updateSocksVisibility);
 
 applyNetworkButton.addEventListener('click', async () => {
   try {
+    let result;
     if (networkMode.value === 'direct') {
-      await browser.proxy.settings.set({ value: { proxyType: 'none' } });
+      result = await browser.runtime.sendMessage({
+        type: 'set-network-proxy',
+        config: { mode: 'direct' }
+      });
     } else if (networkMode.value === 'system') {
-      await browser.proxy.settings.set({ value: { proxyType: 'system' } });
+      result = await browser.runtime.sendMessage({
+        type: 'set-network-proxy',
+        config: { mode: 'system' }
+      });
     } else {
       const host = socksHost.value.trim();
       const port = Number(socksPort.value);
+      const user = socksUser.value;
+      const pass = socksPass.value;
 
       if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
         throw new Error('SOCKS5: host o porta non validi.');
       }
+      if (!!user !== !!pass) {
+        throw new Error('SOCKS5: inserisci sia username sia password, oppure lascia vuoti entrambi.');
+      }
 
-      await browser.proxy.settings.set({
-        value: {
-          proxyType: 'manual',
-          socks: host + ':' + port,
-          socksVersion: 5,
-          proxyDNS: true,
-          passthrough: 'localhost, 127.0.0.1'
-        }
+      result = await browser.runtime.sendMessage({
+        type: 'set-proxy-auth',
+        config: { host, port, user, pass }
       });
     }
+    if (!result?.success) throw new Error('Il core non ha confermato l’applicazione del proxy.');
 
     await loadNetworkSettings();
     setPanelStatus('Rete applicata: ' + networkMode.value.toUpperCase());
