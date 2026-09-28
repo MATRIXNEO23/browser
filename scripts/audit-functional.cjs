@@ -216,11 +216,13 @@ async function main() {
   assert.ok(calls.some(call => call.https === true));
 
   const modePrivacySetting = { async set() {} };
+  const modeFingerprintWrites = [];
   const modeWebRtcWrites = [];
   browser.privacy = {
     websites: {
       trackingProtectionMode: modePrivacySetting, cookieConfig: modePrivacySetting,
-      resistFingerprinting: modePrivacySetting, hyperlinkAuditingEnabled: modePrivacySetting,
+      resistFingerprinting: { async set({ value }) { modeFingerprintWrites.push(value); } },
+      hyperlinkAuditingEnabled: modePrivacySetting,
       referrersEnabled: modePrivacySetting
     },
     network: {
@@ -232,10 +234,20 @@ async function main() {
   vm.runInContext(section('async function applyRuntimePrivacy(mode)', 'async function getModeHealth('), context);
   for (const mode of ['NORMAL', 'TURBO', 'PRIVATE', 'GHOST']) {
     const previousWrites = modeWebRtcWrites.length;
+    const previousFingerprintWrites = modeFingerprintWrites.length;
     await vm.runInContext(`applyRuntimePrivacy('${mode}')`, context);
     assert.equal(modeWebRtcWrites.length, previousWrites + 1, `${mode} must write the WebRTC setting`);
     assert.equal(modeWebRtcWrites[modeWebRtcWrites.length - 1], false, `${mode} must disable WebRTC`);
+    assert.equal(modeFingerprintWrites.length, previousFingerprintWrites + 1, `${mode} must write the fingerprint resistance setting`);
+    const expectedRfp = mode === 'PRIVATE' || mode === 'GHOST';
+    assert.equal(modeFingerprintWrites[modeFingerprintWrites.length - 1], expectedRfp,
+      `${mode} RFP should be ${expectedRfp}`);
   }
+
+  const launcher = fs.readFileSync(path.join(__dirname, 'launch.ps1'), 'utf8');
+  const privateLauncherMode = launcher.match(/'PRIVATE'\s*\{([\s\S]*?)\n\s*\}/)?.[1] || '';
+  assert.match(privateLauncherMode, /user_pref\("privacy\.resistFingerprinting", true\);/,
+    'PRIVATE launcher profile must enable fingerprint resistance');
 
     const modeCode = section("  if (message?.type === 'set-mode'", "  if (message?.type === 'set-tor'");
   data.mode = 'NORMAL';
