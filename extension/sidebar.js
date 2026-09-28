@@ -676,6 +676,7 @@ async function runControlSelfTest() {
 
       const applied = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
       const privacy = await browser.privacy.websites.resistFingerprinting.get({});
+      const webRtc = await browser.privacy.network.peerConnectionEnabled.get({});
       const health = (await getStatus()).modeHealth;
       const protectedMode = mode === 'PRIVATE' || mode === 'GHOST';
       const expectedAutoplay = mode === 'TURBO' || mode === 'GHOST' ? 5 : 1;
@@ -687,9 +688,10 @@ async function runControlSelfTest() {
           applied.httpsOnly === protectedMode &&
           applied.fingerprintResistance === protectedMode &&
           applied.autoplay === expectedAutoplay &&
-          privacy.value === protectedMode && health?.ok,
+          privacy.value === protectedMode &&
+          webRtc.value === false && health?.ok,
         JSON.stringify({ selected: mode, applied, fingerprintPrivacy: privacy.value,
-          issues: health?.issues || [] })
+          webRTCEnabled: webRtc.value, issues: health?.issues || [] })
       );
     }
 
