@@ -144,3 +144,14 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Verifiche: `node --check scripts/audit-functional.cjs` PASS; `node scripts/audit-functional.cjs` PASS, inclusi i test esistenti e i nuovi assert RFP. L'audit verifica staticamente la configurazione PRIVATE in `launch.ps1`; `pwsh` non è disponibile nell'ambiente, quindi la generazione reale di `user.js` non è stata eseguita.
 - Prossimo step: Step 4 — Fix Libera RAM. Nessun codice Step 4 è stato modificato o proposto in questa consegna; attendere la definizione e approvazione del piano chirurgico.
 - Comando di checkpoint equivalente in una checkout locale: `git add scripts/launch.ps1 scripts/audit-functional.cjs CONTEXT_RECOVERY.md && git commit -m "test: align launcher RFP with extension logic and add audit coverage"`. Il commit sorgente è già registrato allo SHA sopra; l'aggiornamento recovery è un commit documentale successivo.
+
+
+## Step 4 — Fix Libera RAM e cleanup TURBO (2026-09-28)
+
+- Baseline: `fix/tor-first-bootstrap` at `3e5f49b1c684ccf5c0296aff9ab34a45e1d6e7dd`.
+- Source inspection found `browsingData` already present in `extension/manifest.json`; no manifest change is needed. `enforceBackgroundLimit()` is preserved and writes `status.discardedNow` to `browser.storage.local`, but returns no value.
+- Manual `enforce-now` now awaits `browser.browsingData.removeCache({ since: 0 })`, runs the existing tab enforcement, then returns its `status.discardedNow` as `discarded`. The sidebar reports `Cache svuotata + X schede scartate` through its existing panel status.
+- On a `set-mode` transition, cache clearing is gated by `message.mode === 'TURBO' && previousMode !== 'TURBO'` and is placed before the existing `enforceBackgroundLimit()` call. The existing queue, rollback, and tab-discard logic remain in place. Tor, proxy, DNS, and header code were not changed.
+- Verification run in an isolated staging tree from this branch: `node --check extension/background.js`, `node --check extension/sidebar.js`, `node --check scripts/audit-functional.cjs`, and `node scripts/audit-functional.cjs` PASS. The functional audit does not directly exercise `enforce-now` or cache clearing; no Gecko/Windows runtime test was run.
+- Cache clearing is not a measurement of physical RAM. The numeric feedback is the existing `status.discardedNow` value persisted by the awaited tab-enforcement function.
+- Next: verify the browser UI and cache/TURBO behavior in a Windows build. Source checkpoint: follow the Step 4 commit on this branch.

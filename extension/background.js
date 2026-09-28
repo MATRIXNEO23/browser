@@ -873,6 +873,9 @@ browser.runtime.onMessage.addListener(async (message) => {
           await applyHttpsOverride();
         }
         await browser.storage.local.set({ mode: message.mode });
+        if (message.mode === 'TURBO' && previousMode !== 'TURBO') {
+          await browser.browsingData.removeCache({ since: 0 });
+        }
         await enforceBackgroundLimit();
         await browser.storage.local.remove('ghostSessionRestartedAt');
       } catch (error) {
@@ -991,8 +994,10 @@ browser.runtime.onMessage.addListener(async (message) => {
   }
 
   if (message?.type === 'enforce-now') {
+    await browser.browsingData.removeCache({ since: 0 });
     await enforceBackgroundLimit();
-    return { ok: true };
+    const { status } = await browser.storage.local.get('status');
+    return { ok: true, discarded: status?.discardedNow || 0 };
   }
 
   if (message?.type === 'open-addons-installed') {

@@ -368,7 +368,7 @@ document.getElementById('enforce').addEventListener('click', async () => {
   try {
     const result = await browser.runtime.sendMessage({ type: 'enforce-now' });
     if (!result?.ok) throw new Error('Comando RAM non confermato.');
-    setPanelStatus('Controllo RAM eseguito.');
+    setPanelStatus(`Cache svuotata + ${result.discarded} schede scartate`);
     await refresh();
   } catch (error) {
     setPanelStatus('RAM: ' + errorText(error), true);
