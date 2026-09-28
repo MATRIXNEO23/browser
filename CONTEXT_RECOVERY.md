@@ -163,4 +163,5 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Aggiunto in `scripts/audit-functional.cjs` un test isolato VM con spy su `browser.browsingData.removeCache` e stub di `enforceBackgroundLimit()`. Nessuna API browsingData reale viene invocata.
 - Il test verifica l'ordine cache → enforcement e il conteggio restituito per `enforce-now`; verifica cleanup soltanto all'ingresso TURBO, non quando TURBO è già attivo e non nelle altre transizioni. Ripristina lo spy e lo stub in `finally`.
 - Verifiche locali in staging: `node --check scripts/audit-functional.cjs` e `node scripts/audit-functional.cjs` PASS. Verifica runtime browser/Windows ancora pendente; attendere un trigger CI manuale, senza modificare `main` o il workflow.
+- Checkpoint test: `e69ed872353e1ee49612b154988c1d2b9609e1e2`; comando equivalente: `git add scripts/audit-functional.cjs CONTEXT_RECOVERY.md && git commit -m "test: add removeCache invocation verification for Step 4"`.
 - Prossimo step: attendere il trigger CI manuale per il test runtime Step 4.
