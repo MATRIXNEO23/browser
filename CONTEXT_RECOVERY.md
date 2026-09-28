@@ -156,3 +156,11 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Cache clearing is not a measurement of physical RAM. The numeric feedback is the existing `status.discardedNow` value persisted by the awaited tab-enforcement function.
 - Next: verify the browser UI and cache/TURBO behavior in a Windows build. Source checkpoint: `6aee776f0e09c71f5fef1a2dc92923f0698b76ba`.
 - Equivalent local checkpoint command: `git add extension/background.js extension/sidebar.js CONTEXT_RECOVERY.md && git commit -m "fix: clear browser cache during RAM enforcement and TURBO entry"`.
+
+
+## Step 4.1 — audit removeCache (2026-09-28)
+
+- Aggiunto in `scripts/audit-functional.cjs` un test isolato VM con spy su `browser.browsingData.removeCache` e stub di `enforceBackgroundLimit()`. Nessuna API browsingData reale viene invocata.
+- Il test verifica l'ordine cache → enforcement e il conteggio restituito per `enforce-now`; verifica cleanup soltanto all'ingresso TURBO, non quando TURBO è già attivo e non nelle altre transizioni. Ripristina lo spy e lo stub in `finally`.
+- Verifiche locali in staging: `node --check scripts/audit-functional.cjs` e `node scripts/audit-functional.cjs` PASS. Verifica runtime browser/Windows ancora pendente; attendere un trigger CI manuale, senza modificare `main` o il workflow.
+- Prossimo step: attendere il trigger CI manuale per il test runtime Step 4.

@@ -273,6 +273,52 @@ async function main() {
   await assert.rejects(vm.runInContext("handleMode({type:'set-mode',mode:'NORMAL'})", context), /tab enforcement failed/);
   assert.equal(data.mode, 'PRIVATE', 'failure after mode persistence must restore previous selection');
 
+  const enforceNowCode = section("  if (message?.type === 'enforce-now')", "  if (message?.type === 'open-addons-installed'");
+  const removeCacheCalls = [];
+  const cleanupOrder = [];
+  const originalRemoveCache = browser.browsingData.removeCache;
+  const originalEnforceBackgroundLimit = context.enforceBackgroundLimit;
+  browser.browsingData.removeCache = async options => {
+    removeCacheCalls.push(options);
+    cleanupOrder.push('removeCache');
+  };
+  context.enforceBackgroundLimit = async () => {
+    cleanupOrder.push('enforceBackgroundLimit');
+    data.status = { discardedNow: 2 };
+  };
+  context.MODE_LIMITS = { NORMAL: 3, PRIVATE: 3, TURBO: 3 };
+  vm.runInContext(`async function handleEnforce(message) { ${enforceNowCode} }`, context);
+  try {
+    const enforceResult = await vm.runInContext("handleEnforce({type:'enforce-now'})", context);
+    assert.equal(enforceResult.ok, true, 'enforce-now must report success after cache and tab cleanup');
+    assert.equal(enforceResult.discarded, 2, 'enforce-now must return the discarded tab count');
+    assert.equal(removeCacheCalls.length, 1, 'enforce-now must clear cache once');
+    assert.equal(removeCacheCalls[0].since, 0, 'enforce-now must clear the full cache');
+    assert.deepEqual(cleanupOrder, ['removeCache', 'enforceBackgroundLimit'],
+      'enforce-now must clear cache before enforcing the tab limit');
+
+    removeCacheCalls.length = 0;
+    cleanupOrder.length = 0;
+    data.mode = 'NORMAL';
+    await vm.runInContext("handleMode({type:'set-mode',mode:'TURBO'})", context);
+    assert.equal(removeCacheCalls.length, 1, 'entering TURBO must clear cache once');
+    assert.equal(removeCacheCalls[0].since, 0, 'TURBO entry must clear the full cache');
+    assert.deepEqual(cleanupOrder, ['removeCache', 'enforceBackgroundLimit'],
+      'TURBO entry must clear cache before enforcing the tab limit');
+
+    removeCacheCalls.length = 0;
+    cleanupOrder.length = 0;
+    await vm.runInContext("handleMode({type:'set-mode',mode:'TURBO'})", context);
+    assert.equal(removeCacheCalls.length, 0, 'reapplying TURBO must not clear cache');
+
+    await vm.runInContext("handleMode({type:'set-mode',mode:'PRIVATE'})", context);
+    assert.equal(removeCacheCalls.length, 0, 'non-TURBO transitions must not clear cache');
+  } finally {
+    if (originalRemoveCache === undefined) delete browser.browsingData.removeCache;
+    else browser.browsingData.removeCache = originalRemoveCache;
+    context.enforceBackgroundLimit = originalEnforceBackgroundLimit;
+  }
+
   data.torEnabled = true;
   data.mode = 'NORMAL';
   let webRtc = null;
