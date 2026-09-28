@@ -177,7 +177,29 @@ async function main() {
   await vm.runInContext('applyHttpsOverride()', context);
   assert.ok(calls.some(call => call.https === true));
 
-  const modeCode = section("  if (message?.type === 'set-mode'", "  if (message?.type === 'set-tor'");
+  const modePrivacySetting = { async set() {} };
+  const modeWebRtcWrites = [];
+  browser.privacy = {
+    websites: {
+      trackingProtectionMode: modePrivacySetting, cookieConfig: modePrivacySetting,
+      resistFingerprinting: modePrivacySetting, hyperlinkAuditingEnabled: modePrivacySetting,
+      referrersEnabled: modePrivacySetting
+    },
+    network: {
+      networkPredictionEnabled: modePrivacySetting,
+      peerConnectionEnabled: { async set({ value }) { modeWebRtcWrites.push(value); } },
+      webRTCIPHandlingPolicy: modePrivacySetting
+    }
+  };
+  vm.runInContext(section('async function applyRuntimePrivacy(mode)', 'async function getModeHealth('), context);
+  for (const mode of ['NORMAL', 'TURBO', 'PRIVATE', 'GHOST']) {
+    const previousWrites = modeWebRtcWrites.length;
+    await vm.runInContext(`applyRuntimePrivacy('${mode}')`, context);
+    assert.equal(modeWebRtcWrites.length, previousWrites + 1, `${mode} must write the WebRTC setting`);
+    assert.equal(modeWebRtcWrites[modeWebRtcWrites.length - 1], false, `${mode} must disable WebRTC`);
+  }
+
+    const modeCode = section("  if (message?.type === 'set-mode'", "  if (message?.type === 'set-tor'");
   data.mode = 'NORMAL';
   let failMode = true;
   browser.browserControl.applyMode = async mode => {
