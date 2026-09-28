@@ -301,7 +301,7 @@ async function applyRuntimePrivacy(mode) {
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
     await safeSet(browser.privacy.websites.referrersEnabled, true);
     await safeSet(browser.privacy.network.networkPredictionEnabled, false);
-    await safeSet(browser.privacy.network.peerConnectionEnabled, true);
+    await safeSet(browser.privacy.network.peerConnectionEnabled, false);
     await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'default_public_interface_only');
     return;
   }
@@ -315,7 +315,7 @@ async function applyRuntimePrivacy(mode) {
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
     await safeSet(browser.privacy.websites.referrersEnabled, true);
     await safeSet(browser.privacy.network.networkPredictionEnabled, false);
-    await safeSet(browser.privacy.network.peerConnectionEnabled, true);
+    await safeSet(browser.privacy.network.peerConnectionEnabled, false);
     await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'default_public_interface_only');
     return;
   }
@@ -329,7 +329,7 @@ async function applyRuntimePrivacy(mode) {
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
     await safeSet(browser.privacy.websites.referrersEnabled, true);
     await safeSet(browser.privacy.network.networkPredictionEnabled, false);
-    await safeSet(browser.privacy.network.peerConnectionEnabled, true);
+    await safeSet(browser.privacy.network.peerConnectionEnabled, false);
     await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'disable_non_proxied_udp');
     return;
   }
@@ -385,7 +385,7 @@ async function getModeHealth(mode, torEnabled) {
     if (cookies !== undefined) {
       expect('Protezione cookie', cookies?.behavior, 'reject_trackers_and_partition_foreign');
     }
-    if (webRtc !== undefined) expect('WebRTC', webRtc, !torEnabled && mode !== 'GHOST');
+    if (webRtc !== undefined) expect('WebRTC', webRtc, false);
     if (referrers !== undefined) expect('Referrer', referrers, mode !== 'GHOST');
     if (webRtcPolicy !== undefined) expect('Policy WebRTC', webRtcPolicy,
       mode === 'PRIVATE' || mode === 'GHOST'
