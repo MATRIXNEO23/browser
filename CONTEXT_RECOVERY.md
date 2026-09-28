@@ -165,3 +165,15 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Verifiche locali in staging: `node --check scripts/audit-functional.cjs` e `node scripts/audit-functional.cjs` PASS. Verifica runtime browser/Windows ancora pendente; attendere un trigger CI manuale, senza modificare `main` o il workflow.
 - Checkpoint test: `e69ed872353e1ee49612b154988c1d2b9609e1e2`; comando equivalente: `git add scripts/audit-functional.cjs CONTEXT_RECOVERY.md && git commit -m "test: add removeCache invocation verification for Step 4"`.
 - Prossimo step: attendere il trigger CI manuale per il test runtime Step 4.
+
+
+## Step 5 — Registro locale azioni di sicurezza (2026-09-29)
+
+- Implementato in `extension/background.js` un logger FIFO con chiave `security_audit_log`, massimo 200 eventi e scrittura fire-and-forget serializzata.
+- Il logger accetta solo `TOR_ENABLE`, `TOR_DISABLE`, `CACHE_CLEAR`, `MODE_CHANGE`; limita esito a `SUCCESS`/`ERROR`, modalità a NORMAL/TURBO/PRIVATE/GHOST e metadati a `discarded` intero non negativo. Non registra URL, credenziali, host proxy o fingerprint. Modalità omessa per gli eventi Tor e `enforce-now`, perché non disponibile senza letture aggiuntive bloccanti.
+- Tor è registrato attorno al comando esistente `set-tor` dentro `queueControlTransition`, senza modificare il lifecycle interno o i retry. Errori originali vengono rilanciati.
+- `enforce-now` registra l’esito e il conteggio reale `status.discardedNow`; nel catch registra ERROR e rilancia l’errore originale.
+- `set-mode` registra MODE_CHANGE solo se la verifica finale `modeHealth.ok` è true. L’ingresso effettivo in TURBO registra anche CACHE_CLEAR; la lettura del conteggio è fire-and-forget e non influenza il cambio modalità.
+- Verifiche: `node --check extension/background.js` PASS; test VM ad hoc su rotazione FIFO (201 eventi, cap 200), whitelist, omissione mode invalido, metadata e isolamento errore storage PASS. Nessuna modifica a `scripts/audit-functional.cjs`: audit logger rimandato alla conferma successiva. Verifica runtime Windows dello Step 4 ancora pendente per trigger CI manuale.
+- Baseline branch prima dello Step 5: `e87eae3ebc74edc5bc66868d3e228a46f5bdc37a`.
+- Checkpoint sorgente: `abae0032cacd5810347a7698e5571920c814c857`. Il recovery viene aggiornato nel commit documentale successivo.
