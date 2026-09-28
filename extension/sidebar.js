@@ -26,7 +26,9 @@ let previousCpuSample = null;
 const DNS_PROVIDERS = Object.freeze({
   cloudflare: 'https://cloudflare-dns.com/dns-query',
   google: 'https://dns.google/dns-query',
-  quad9: 'https://dns.quad9.net/dns-query'
+  quad9: 'https://dns.quad9.net/dns-query',
+  opendns: 'https://doh.opendns.com/dns-query',
+  adguard: 'https://dns.adguard-dns.com/dns-query'
 });
 
 function providerFor(level, uri) {
