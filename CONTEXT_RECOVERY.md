@@ -174,7 +174,16 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Tor è registrato attorno al comando esistente `set-tor` dentro `queueControlTransition`, senza modificare il lifecycle interno o i retry. Errori originali vengono rilanciati.
 - `enforce-now` registra l’esito e il conteggio reale `status.discardedNow`; nel catch registra ERROR e rilancia l’errore originale.
 - `set-mode` registra MODE_CHANGE solo se la verifica finale `modeHealth.ok` è true. L’ingresso effettivo in TURBO registra anche CACHE_CLEAR; la lettura del conteggio è fire-and-forget e non influenza il cambio modalità.
-- Stato corrente: Step 5 implementato, audit logger pendente. Verifica runtime Windows dello Step 4 in attesa del trigger CI manuale.
-- Verifiche: `node --check extension/background.js` PASS; test VM ad hoc su rotazione FIFO (201 eventi, cap 200), whitelist, omissione mode invalido, metadata e isolamento errore storage PASS. Nessuna modifica a `scripts/audit-functional.cjs`: test audit logger non ancora autorizzato.
+- Stato corrente: Step 5 implementato e coperto da audit Node/VM deterministico. Verifica runtime Windows dello Step 4 in attesa del trigger CI manuale.
+- Verifiche logger: `node --check extension/background.js` PASS; test VM ad hoc su FIFO, rotazione, whitelist e isolamento errori PASS. L’audit permanente è stato aggiunto nel checkpoint Step 5.1 `6f7b9d1c21d0b61117b62d28f0f3c7111e688043`; `node --check scripts/audit-functional.cjs` e `node scripts/audit-functional.cjs` PASS in staging isolato.
 - Baseline branch prima dello Step 5: `e87eae3ebc74edc5bc66868d3e228a46f5bdc37a`.
 - Checkpoint sorgente: `abae0032cacd5810347a7698e5571920c814c857`. Il recovery viene aggiornato nel commit documentale successivo.
+
+
+## Step 5.1 — audit logger deterministico (2026-09-29)
+
+- Checkpoint test audit: `6f7b9d1c21d0b61117b62d28f0f3c7111e688043` (`test: add deterministic audit coverage for security logger`).
+- Aggiunti in `scripts/audit-functional.cjs` test VM isolati che caricano il segmento reale del logger da `extension/background.js`, con storage mockato e scritture controllate da Promise differite, senza timer o storage reale.
+- Copertura: eventi e risultati fuori whitelist scartati; modalità e metadata non validi omessi; 205 scritture serializzate con FIFO cap a 200; errore storage su B tra A riuscito e C riuscito senza bloccare la coda; assert statico che nessun trigger attenda `logSecurityEvent`.
+- Nessun file runtime modificato. I test non verificano persistenza Gecko dopo riavvio né permessi/policy runtime.
+- La verifica runtime Windows dello Step 4 resta pendente, in attesa del trigger CI manuale. Nessuna modifica a `main` o al workflow.
