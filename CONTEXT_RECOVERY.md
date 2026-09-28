@@ -174,6 +174,7 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Tor è registrato attorno al comando esistente `set-tor` dentro `queueControlTransition`, senza modificare il lifecycle interno o i retry. Errori originali vengono rilanciati.
 - `enforce-now` registra l’esito e il conteggio reale `status.discardedNow`; nel catch registra ERROR e rilancia l’errore originale.
 - `set-mode` registra MODE_CHANGE solo se la verifica finale `modeHealth.ok` è true. L’ingresso effettivo in TURBO registra anche CACHE_CLEAR; la lettura del conteggio è fire-and-forget e non influenza il cambio modalità.
-- Verifiche: `node --check extension/background.js` PASS; test VM ad hoc su rotazione FIFO (201 eventi, cap 200), whitelist, omissione mode invalido, metadata e isolamento errore storage PASS. Nessuna modifica a `scripts/audit-functional.cjs`: audit logger rimandato alla conferma successiva. Verifica runtime Windows dello Step 4 ancora pendente per trigger CI manuale.
+- Stato corrente: Step 5 implementato, audit logger pendente. Verifica runtime Windows dello Step 4 in attesa del trigger CI manuale.
+- Verifiche: `node --check extension/background.js` PASS; test VM ad hoc su rotazione FIFO (201 eventi, cap 200), whitelist, omissione mode invalido, metadata e isolamento errore storage PASS. Nessuna modifica a `scripts/audit-functional.cjs`: test audit logger non ancora autorizzato.
 - Baseline branch prima dello Step 5: `e87eae3ebc74edc5bc66868d3e228a46f5bdc37a`.
 - Checkpoint sorgente: `abae0032cacd5810347a7698e5571920c814c857`. Il recovery viene aggiornato nel commit documentale successivo.
