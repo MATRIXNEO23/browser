@@ -681,7 +681,7 @@ async function main() {
     : new Promise(resolve => writeWaiters.push(resolve));
   const finishLoggerWrite = async (gate, shouldSucceed = true) => {
     if (shouldSucceed) gate.resolve();
-    else gate.resolve();
+    else gate.reject(new Error('storage unavailable'));
     if (shouldSucceed) await gate.completion;
     else await assert.rejects(gate.completion, /storage unavailable/);
   };
