@@ -97,7 +97,7 @@ async function verify() {
     check('DNS prefetch disabilitato', prefs.dnsPrefetch, true);
     check('Resistenza fingerprint (API privacy)', fingerprinting, privateMode);
     check('Protezione tracciamento', tracking, 'always');
-    check('WebRTC abilitato', webRtc, mode !== 'GHOST' && !status.torEnabled);
+    check('WebRTC abilitato', webRtc, false);
     check('Referrer abilitati', referrers, mode !== 'GHOST');
     row(modeEl, 'Schede background attive / limite',
       `${status.status?.activeBackground ?? '—'} / ${status.status?.limit ?? '—'}`);
