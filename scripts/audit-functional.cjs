@@ -408,22 +408,23 @@ async function main() {
   const element = () => ({ hidden: false, disabled: false, textContent: '',
     classList: { toggle() {} }, setAttribute() {} });
   const ui = Object.fromEntries([
-    'modeWarning', 'adsButton', 'torButton', 'dnsProvider', 'secureDns',
+    'modeWarning', 'adsButton', 'urlhausMalwareButton', 'torButton', 'dnsProvider', 'secureDns',
     'dnsEndpoint', 'applyDns', 'torStatus', 'dnsStatus'
   ].map(name => [name, element()]));
   const uiContext = vm.createContext({ ...ui,
-    torEnabled: false, torStarting: false, adsEnabled: true,
+    torEnabled: false, torStarting: false, adsEnabled: true, urlhausMalwareEnabled: false,
     setModeVisual() {}, renderResources() {}, updateSocksVisibility() {}, setPanelStatus() {}
   });
   vm.runInContext(sidebar.slice(sidebar.indexOf('function render(data)'),
     sidebar.indexOf('async function getStatus()')), uiContext);
-  vm.runInContext("render({mode:'NORMAL', adsEnabled:true, modeHealth:{ok:true}, torStarting:true, torProcess:{running:true,bootstrapped:false}})", uiContext);
+  vm.runInContext("render({mode:'NORMAL', adsEnabled:true, urlhausMalwareEnabled:true, modeHealth:{ok:true}, torStarting:true, torProcess:{running:true,bootstrapped:false}})", uiContext);
   assert.equal(ui.torButton.textContent, 'TOR: AVVIO');
+  assert.equal(ui.urlhausMalwareButton.textContent, 'URLHAUS: ON');
   assert.equal(ui.modeWarning.hidden, true);
-  vm.runInContext("render({mode:'NORMAL', modeHealth:{ok:true}, torEnabled:true, torRouted:false, torProcess:{running:false,bootstrapped:false}})", uiContext);
+  vm.runInContext("render({mode:'NORMAL', urlhausMalwareEnabled:false, modeHealth:{ok:true}, torEnabled:true, torRouted:false, torProcess:{running:false,bootstrapped:false}})", uiContext);
   assert.equal(ui.torButton.textContent, 'TOR: ERRORE');
   assert.equal(ui.modeWarning.hidden, false);
-  vm.runInContext("render({mode:'NORMAL', adsEnabled:null, modeHealth:{ok:true}, torProcess:{running:false,bootstrapped:false}})", uiContext);
+  vm.runInContext("render({mode:'NORMAL', adsEnabled:null, urlhausMalwareEnabled:false, modeHealth:{ok:true}, torProcess:{running:false,bootstrapped:false}})", uiContext);
   assert.equal(ui.adsButton.textContent, 'ADS: ERRORE');
   assert.equal(ui.modeWarning.hidden, false);
 
@@ -459,16 +460,57 @@ async function main() {
   assert.match(sidebar, /value\.websiteAppearance === requestedAppearance/);
 
   let rulesets = [];
+  let allowRulesetUpdates = false;
   browser.declarativeNetRequest = {
     async getEnabledRulesets() { return rulesets; },
-    async updateEnabledRulesets() {}
+    async updateEnabledRulesets({ enableRulesetIds = [], disableRulesetIds = [] }) {
+      if (!allowRulesetUpdates) return;
+      rulesets = rulesets.filter(id => !disableRulesetIds.includes(id));
+      rulesets.push(...enableRulesetIds.filter(id => !rulesets.includes(id)));
+    }
   };
-  vm.runInContext("const ADS_RULESET_ID = 'ads_basic';", context);
+  vm.runInContext(
+    "const ADS_RULESET_ID = 'ads_basic'; const URLHAUS_MALWARE_RULESET_ID = 'urlhaus_malware_basic';",
+    context
+  );
   vm.runInContext(section('async function getAdsEnabled()', 'async function applyDarkTheme('), context);
   await assert.rejects(vm.runInContext('setAdsEnabled(true)', context), /ADS non confermato/);
-  rulesets = ['ads_basic'];
+  await assert.rejects(
+    vm.runInContext('setUrlhausMalwareEnabled(true)', context),
+    /URLhaus non confermato/
+  );
+  allowRulesetUpdates = true;
+  await vm.runInContext('setUrlhausMalwareEnabled(true)', context);
+  assert.deepEqual(rulesets, ['urlhaus_malware_basic']);
   await vm.runInContext('setAdsEnabled(true)', context);
+  assert.deepEqual(new Set(rulesets), new Set(['urlhaus_malware_basic', 'ads_basic']));
+  await vm.runInContext('setUrlhausMalwareEnabled(false)', context);
+  assert.deepEqual(rulesets, ['ads_basic']);
   assert.equal(data.adsEnabled, true);
+  assert.equal(data.urlhausMalwareEnabled, false);
+
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../extension/manifest.json'), 'utf8'));
+  const malwareRuleset = manifest.declarative_net_request.rule_resources.find(
+    ruleset => ruleset.id === 'urlhaus_malware_basic'
+  );
+  assert.deepEqual(malwareRuleset, {
+    id: 'urlhaus_malware_basic',
+    enabled: false,
+    path: 'rules/urlhaus-malware.json'
+  });
+  const malwareRules = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '../extension/rules/urlhaus-malware.json'),
+    'utf8'
+  ));
+  assert.equal(malwareRules.length, 5);
+  assert.equal(new Set(malwareRules.map(rule => rule.id)).size, 5);
+  for (const rule of malwareRules) {
+    assert.equal(rule.action.type, 'block');
+    assert.match(rule.condition.urlFilter, /^\|http:\/\/\d+\.\d+\.\d+\.\d+:\d+\/[^*]+\^$/);
+    assert.doesNotMatch(rule.condition.urlFilter, /example|placeholder/i);
+  }
+  assert.match(fs.readFileSync(path.join(__dirname, '../extension/sidebar.html'), 'utf8'), /id="urlhaus-malware" class="pill-toggle"/);
+  assert.match(sidebar, /type: 'set-urlhaus-malware'/);
 
   const diagnostics = fs.readFileSync(path.join(__dirname, '../extension/diagnostics.js'), 'utf8');
   const copied = [];
@@ -492,7 +534,7 @@ async function main() {
   assert.match(copied[0], /Bootstrap: 100%/);
   assert.equal(diagnosticContext.copyButton.textContent, 'Diagnostica copiata');
 
-  process.stdout.write('GHOST/Tor/modes/theme/site blocklist, search race, Tavily quota, transitions and sidebar states: PASS\n');
+  process.stdout.write('GHOST/Tor/modes/theme/URLhaus ruleset independence, search race, Tavily quota, transitions and sidebar states: PASS\n');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });

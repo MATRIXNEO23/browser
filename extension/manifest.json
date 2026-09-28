@@ -30,6 +30,11 @@
         "id": "ads_basic",
         "enabled": true,
         "path": "rules/ads-basic.json"
+      },
+      {
+        "id": "urlhaus_malware_basic",
+        "enabled": false,
+        "path": "rules/urlhaus-malware.json"
       }
     ]
   },

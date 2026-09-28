@@ -1,6 +1,7 @@
 const MODE_LIMITS = { NORMAL: 3, TURBO: 3, PRIVATE: 3, GHOST: 3 };
 const DEFAULT_MODE = 'NORMAL';
 const ADS_RULESET_ID = 'ads_basic';
+const URLHAUS_MALWARE_RULESET_ID = 'urlhaus_malware_basic';
 const TAVILY_DEFAULT_DAILY_LIMIT = 33;
 const TAVILY_MONTHLY_LIMIT = 1000;
 let tavilyRequestInFlight = false;
@@ -186,6 +187,22 @@ async function setAdsEnabled(enabled) {
   });
   if (await getAdsEnabled() !== enabled) throw new Error('ADS non confermato dal browser.');
   await browser.storage.local.set({ adsEnabled: enabled });
+}
+
+async function getUrlhausMalwareEnabled() {
+  const enabled = await browser.declarativeNetRequest.getEnabledRulesets();
+  return enabled.includes(URLHAUS_MALWARE_RULESET_ID);
+}
+
+async function setUrlhausMalwareEnabled(enabled) {
+  await browser.declarativeNetRequest.updateEnabledRulesets({
+    enableRulesetIds: enabled ? [URLHAUS_MALWARE_RULESET_ID] : [],
+    disableRulesetIds: enabled ? [] : [URLHAUS_MALWARE_RULESET_ID]
+  });
+  if (await getUrlhausMalwareEnabled() !== enabled) {
+    throw new Error('URLhaus non confermato dal browser.');
+  }
+  await browser.storage.local.set({ urlhausMalwareEnabled: enabled });
 }
 
 async function applyDarkTheme(mode) {
@@ -758,6 +775,11 @@ browser.runtime.onMessage.addListener(async (message) => {
     return { ok: true, adsEnabled: message.enabled };
   }
 
+  if (message?.type === 'set-urlhaus-malware' && typeof message.enabled === 'boolean') {
+    await setUrlhausMalwareEnabled(message.enabled);
+    return { ok: true, urlhausMalwareEnabled: message.enabled };
+  }
+
   if (message?.type === 'get-status') {
     const data = await browser.storage.local.get(['mode', 'status', 'torEnabled', 'ghostSessionRestartedAt']);
     let processStats = null;
@@ -790,6 +812,11 @@ browser.runtime.onMessage.addListener(async (message) => {
       adsEnabled = await getAdsEnabled();
     } catch (error) { console.warn('Unable to read ADS ruleset', error); }
 
+    let urlhausMalwareEnabled = null;
+    try {
+      urlhausMalwareEnabled = await getUrlhausMalwareEnabled();
+    } catch (error) { console.warn('Unable to read URLhaus ruleset', error); }
+
     let torRouted = false;
     if (data.torEnabled && torProcess.bootstrapped) {
       try {
@@ -808,6 +835,7 @@ browser.runtime.onMessage.addListener(async (message) => {
       ghostSessionRestartedAt: data.ghostSessionRestartedAt || null,
       modeHealth: await getModeHealth(data.mode || DEFAULT_MODE, !!data.torEnabled),
       adsEnabled,
+      urlhausMalwareEnabled,
       status: data.status || null,
       processStats,
       torEnabled: !!data.torEnabled,

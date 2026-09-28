@@ -2,6 +2,7 @@ const statusEl = document.getElementById('status');
 const modeWarning = document.getElementById('mode-warning');
 const resourceEl = document.getElementById('resource-stats');
 const adsButton = document.getElementById('ads');
+const urlhausMalwareButton = document.getElementById('urlhaus-malware');
 const modeButtons = [...document.querySelectorAll('[data-mode]')];
 const browserTheme = document.getElementById('browser-theme');
 const websiteAppearance = document.getElementById('website-appearance');
@@ -19,6 +20,7 @@ const applyNetworkButton = document.getElementById('apply-network');
 const diagnosticsButton = document.getElementById('diagnostics');
 
 let adsEnabled = null;
+let urlhausMalwareEnabled = null;
 let torEnabled = false;
 let torStarting = false;
 let torActionError = '';
@@ -96,6 +98,8 @@ function renderResources(stats) {
 function render(data) {
   const mode = data?.mode || 'NORMAL';
   adsEnabled = typeof data?.adsEnabled === 'boolean' ? data.adsEnabled : null;
+  urlhausMalwareEnabled = typeof data?.urlhausMalwareEnabled === 'boolean'
+    ? data.urlhausMalwareEnabled : null;
   torEnabled = !!data?.torEnabled;
   torStarting = !!data?.torStarting;
 
@@ -103,6 +107,7 @@ function render(data) {
   const health = data?.modeHealth;
   const warnings = [];
   if (adsEnabled === null) warnings.push('ADS: stato non verificabile.');
+  if (urlhausMalwareEnabled === null) warnings.push('URLhaus: stato non verificabile.');
   if (!health?.ok) warnings.push(
     `${mode}: applicazione incompleta o interrotta. ${health?.issues?.join(' · ') || 'Stato non verificabile.'}`
   );
@@ -121,6 +126,11 @@ function render(data) {
   adsButton.textContent = adsEnabled === null ? 'ADS: ERRORE' : adsEnabled ? 'ADS: ON' : 'ADS: OFF';
   adsButton.classList.toggle('active', adsEnabled);
   adsButton.setAttribute('aria-pressed', String(adsEnabled));
+
+  urlhausMalwareButton.textContent = urlhausMalwareEnabled === null
+    ? 'URLHAUS: ERRORE' : urlhausMalwareEnabled ? 'URLHAUS: ON' : 'URLHAUS: OFF';
+  urlhausMalwareButton.classList.toggle('active', urlhausMalwareEnabled);
+  urlhausMalwareButton.setAttribute('aria-pressed', String(urlhausMalwareEnabled));
 
   const torReady = !!data?.torProcess?.bootstrapped;
   const torRouted = torEnabled && torReady && data?.torRouted;
@@ -295,6 +305,29 @@ adsButton.addEventListener('click', async () => {
     await refresh();
   } catch (error) {
     setPanelStatus('ADS: ' + errorText(error), true);
+    await refresh().catch(() => {});
+  }
+});
+
+urlhausMalwareButton.addEventListener('click', async () => {
+  if (urlhausMalwareEnabled === null) { await refresh(); return; }
+  const requested = !urlhausMalwareEnabled;
+  urlhausMalwareButton.classList.toggle('active', requested);
+  urlhausMalwareButton.textContent = requested ? 'URLHAUS: ON' : 'URLHAUS: OFF';
+
+  try {
+    const result = await browser.runtime.sendMessage({
+      type: 'set-urlhaus-malware',
+      enabled: requested
+    });
+
+    if (result?.urlhausMalwareEnabled !== requested) {
+      throw new Error('Stato URLhaus non confermato.');
+    }
+
+    await refresh();
+  } catch (error) {
+    setPanelStatus('URLhaus: ' + errorText(error), true);
     await refresh().catch(() => {});
   }
 });
