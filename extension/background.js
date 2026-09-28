@@ -4,6 +4,58 @@ const ADS_RULESET_ID = 'ads_basic';
 const URLHAUS_MALWARE_RULESET_ID = 'urlhaus_malware_basic';
 const TAVILY_DEFAULT_DAILY_LIMIT = 33;
 const TAVILY_MONTHLY_LIMIT = 1000;
+
+const SECURITY_LOG_KEY = 'security_audit_log';
+const MAX_LOG_ENTRIES = 200;
+const SECURITY_LOG_MODES = ['NORMAL', 'TURBO', 'PRIVATE', 'GHOST'];
+const SECURITY_LOG_RESULTS = ['SUCCESS', 'ERROR'];
+const SECURITY_LOG_EVENTS = ['TOR_ENABLE', 'TOR_DISABLE', 'CACHE_CLEAR', 'MODE_CHANGE'];
+
+let securityLogQueue = [];
+let securityLogWriting = false;
+
+function logSecurityEvent(eventType, modeValue, result, metadata) {
+  if (!SECURITY_LOG_EVENTS.includes(eventType) ||
+      !SECURITY_LOG_RESULTS.includes(result)) return;
+
+  const event = {
+    timestamp: new Date().toISOString(),
+    event_type: eventType,
+    result
+  };
+  if (SECURITY_LOG_MODES.includes(modeValue)) event.mode = modeValue;
+
+  if (metadata && Number.isSafeInteger(metadata.discarded) && metadata.discarded >= 0) {
+    event.metadata = { discarded: metadata.discarded };
+  }
+
+  securityLogQueue.push(event);
+  if (!securityLogWriting) void processSecurityLogQueue();
+}
+
+async function processSecurityLogQueue() {
+  if (securityLogWriting) return;
+  securityLogWriting = true;
+  try {
+    while (securityLogQueue.length) {
+      const event = securityLogQueue.shift();
+      try {
+        const stored = await browser.storage.local.get(SECURITY_LOG_KEY);
+        const previous = Array.isArray(stored[SECURITY_LOG_KEY])
+          ? stored[SECURITY_LOG_KEY] : [];
+        await browser.storage.local.set({
+          [SECURITY_LOG_KEY]: [...previous, event].slice(-MAX_LOG_ENTRIES)
+        });
+      } catch (error) {
+        console.warn('Security log write failed:', error?.message || error);
+      }
+    }
+  } finally {
+    securityLogWriting = false;
+    if (securityLogQueue.length) void processSecurityLogQueue();
+  }
+}
+
 let tavilyRequestInFlight = false;
 let torStarting = false;
 let controlTransition = Promise.resolve();
@@ -873,10 +925,20 @@ browser.runtime.onMessage.addListener(async (message) => {
           await applyHttpsOverride();
         }
         await browser.storage.local.set({ mode: message.mode });
+        let turboCacheCleared = false;
         if (message.mode === 'TURBO' && previousMode !== 'TURBO') {
           await browser.browsingData.removeCache({ since: 0 });
+          turboCacheCleared = true;
         }
         await enforceBackgroundLimit();
+        if (turboCacheCleared) {
+          void Promise.resolve()
+            .then(() => browser.storage.local.get('status'))
+            .then(({ status }) => logSecurityEvent('CACHE_CLEAR', message.mode, 'SUCCESS', {
+              discarded: status?.discardedNow
+            }))
+            .catch(() => logSecurityEvent('CACHE_CLEAR', message.mode, 'SUCCESS'));
+        }
         await browser.storage.local.remove('ghostSessionRestartedAt');
       } catch (error) {
         await browser.storage.local.set({ mode: previousMode }).catch(() => {});
@@ -902,12 +964,23 @@ browser.runtime.onMessage.addListener(async (message) => {
       }
       const modeHealth = await getModeHealth(message.mode,
         !!(await browser.storage.local.get('torEnabled')).torEnabled);
+      if (modeHealth.ok) logSecurityEvent('MODE_CHANGE', message.mode, 'SUCCESS');
       return { ok: modeHealth.ok, mode: message.mode, modeHealth };
     });
   }
 
   if (message?.type === 'set-tor' && typeof message.enabled === 'boolean') {
-    return queueControlTransition(() => setTorEnabled(message.enabled));
+    const eventType = message.enabled ? 'TOR_ENABLE' : 'TOR_DISABLE';
+    return queueControlTransition(async () => {
+      try {
+        const result = await setTorEnabled(message.enabled);
+        logSecurityEvent(eventType, undefined, 'SUCCESS');
+        return result;
+      } catch (error) {
+        logSecurityEvent(eventType, undefined, 'ERROR');
+        throw error;
+      }
+    });
   }
 
   if (message?.type === 'set-network-proxy') {
@@ -994,10 +1067,18 @@ browser.runtime.onMessage.addListener(async (message) => {
   }
 
   if (message?.type === 'enforce-now') {
-    await browser.browsingData.removeCache({ since: 0 });
-    await enforceBackgroundLimit();
-    const { status } = await browser.storage.local.get('status');
-    return { ok: true, discarded: status?.discardedNow || 0 };
+    try {
+      await browser.browsingData.removeCache({ since: 0 });
+      await enforceBackgroundLimit();
+      const { status } = await browser.storage.local.get('status');
+      logSecurityEvent('CACHE_CLEAR', undefined, 'SUCCESS', {
+        discarded: status?.discardedNow
+      });
+      return { ok: true, discarded: status?.discardedNow || 0 };
+    } catch (error) {
+      logSecurityEvent('CACHE_CLEAR', undefined, 'ERROR');
+      throw error;
+    }
   }
 
   if (message?.type === 'open-addons-installed') {
