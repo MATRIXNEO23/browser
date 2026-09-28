@@ -51,7 +51,7 @@ async function main() {
   const proxyListeners = new Set();
   let currentProxy = { proxyType: 'manual', socks: '127.0.0.1:19050', socksVersion: 5, proxyDNS: true };
   let currentDns = 'off';
-  const context = vm.createContext({ URL, browser, ghostRecordQueue: Promise.resolve(), console: { warn() {} } });
+  const context = vm.createContext({ URL, browser, ghostRecordQueue: Promise.resolve(), logSecurityEvent() {}, console: { warn() {} } });
   vm.runInContext(section('function matchesRestoredProxy(', 'function localUsageDay('), context);
   vm.runInContext(section('async function endGhostSession()', 'async function setTorEnabled('), context);
   await assert.rejects(vm.runInContext('endGhostSession()', context), /cleanup failed/);
@@ -473,6 +473,7 @@ async function main() {
   let maxTorOperations = 0;
   const queueContext = vm.createContext({
     controlTransition: Promise.resolve(),
+    logSecurityEvent() {},
     async setTorEnabled(enabled) {
       activeTorOperations += 1;
       maxTorOperations = Math.max(maxTorOperations, activeTorOperations);
@@ -634,6 +635,127 @@ async function main() {
   assert.match(fs.readFileSync(path.join(__dirname, '../extension/sidebar.html'), 'utf8'), /id="socks-pass"/);
   assert.match(sidebar, /type: 'set-proxy-auth'/);
   assert.match(sidebar, /type: 'set-network-proxy'/);
+
+  const loggerSource = section('const SECURITY_LOG_KEY', 'let tavilyRequestInFlight');
+  const loggerLogs = [];
+  const loggerWarnings = [];
+  const queuedWrites = [];
+  const writeWaiters = [];
+  let failNextLoggerWrite = false;
+  let activeLoggerWrites = 0;
+  let maxActiveLoggerWrites = 0;
+  const loggerContext = vm.createContext({
+    Date,
+    console: { warn(...args) { loggerWarnings.push(args); } },
+    browser: { storage: { local: {
+      async get(key) { return { [key]: loggerLogs }; },
+      set(update) {
+        const gate = { update: JSON.parse(JSON.stringify(update)), fail: failNextLoggerWrite };
+        failNextLoggerWrite = false;
+        activeLoggerWrites += 1;
+        maxActiveLoggerWrites = Math.max(maxActiveLoggerWrites, activeLoggerWrites);
+        let resolveWrite;
+        let rejectWrite;
+        const controlled = new Promise((resolve, reject) => {
+          resolveWrite = resolve;
+          rejectWrite = reject;
+        });
+        gate.resolve = resolveWrite;
+        gate.reject = rejectWrite;
+        gate.completion = controlled.then(() => {
+          if (gate.fail) throw new Error('storage unavailable');
+          const [key, value] = Object.entries(gate.update)[0];
+          loggerLogs.splice(0, loggerLogs.length, ...JSON.parse(JSON.stringify(value)));
+        }).finally(() => { activeLoggerWrites -= 1; });
+        gate.completion.catch(() => {});
+        const waiter = writeWaiters.shift();
+        if (waiter) waiter(gate);
+        else queuedWrites.push(gate);
+        return gate.completion;
+      }
+    } } }
+  });
+  vm.runInContext(loggerSource, loggerContext);
+  const nextLoggerWrite = () => queuedWrites.length
+    ? Promise.resolve(queuedWrites.shift())
+    : new Promise(resolve => writeWaiters.push(resolve));
+  const finishLoggerWrite = async (gate, shouldSucceed = true) => {
+    if (shouldSucceed) gate.resolve();
+    else gate.resolve();
+    if (shouldSucceed) await gate.completion;
+    else await assert.rejects(gate.completion, /storage unavailable/);
+  };
+  const waitForLoggerIdle = async () => {
+    for (let attempt = 0; attempt < 20 && vm.runInContext('securityLogWriting', loggerContext); attempt += 1) {
+      await Promise.resolve();
+    }
+    assert.equal(vm.runInContext('securityLogWriting', loggerContext), false,
+      'logger queue must become idle after controlled writes finish');
+  };
+
+  vm.runInContext("logSecurityEvent('CACHE_CLEAR', 'NORMAL', 'INVALID')", loggerContext);
+  vm.runInContext("logSecurityEvent('UNKNOWN_EVENT', 'NORMAL', 'SUCCESS')", loggerContext);
+  assert.equal(queuedWrites.length, 0, 'invalid result and event type must be discarded');
+  vm.runInContext("logSecurityEvent('CACHE_CLEAR', 'UNKNOWN', 'SUCCESS', {discarded: 1})", loggerContext);
+  vm.runInContext("logSecurityEvent('CACHE_CLEAR', 'NORMAL', 'SUCCESS', {discarded: -1})", loggerContext);
+  const invalidModeWrite = await nextLoggerWrite();
+  await finishLoggerWrite(invalidModeWrite);
+  const invalidMetadataWrite = await nextLoggerWrite();
+  await finishLoggerWrite(invalidMetadataWrite);
+  await waitForLoggerIdle();
+  assert.equal(loggerLogs.length, 2, 'invalid optional fields must not discard otherwise valid events');
+  assert.equal('mode' in loggerLogs[0], false, 'invalid mode must be omitted');
+  assert.deepEqual(loggerLogs[0].metadata, { discarded: 1 });
+  assert.equal(loggerLogs[1].mode, 'NORMAL');
+  assert.equal('metadata' in loggerLogs[1], false, 'invalid metadata must be omitted');
+  assert.ok(loggerLogs.every(event => Object.keys(event)
+    .every(key => ['timestamp', 'event_type', 'result', 'mode', 'metadata'].includes(key))),
+  'logger events must contain only approved fields');
+
+  loggerLogs.length = 0;
+  maxActiveLoggerWrites = 0;
+  for (let i = 0; i < 205; i += 1) {
+    vm.runInContext(`logSecurityEvent('CACHE_CLEAR', 'NORMAL', 'SUCCESS', {discarded: ${i}})`, loggerContext);
+  }
+  for (let i = 0; i < 205; i += 1) {
+    const gate = await nextLoggerWrite();
+    assert.equal(activeLoggerWrites, 1, 'logger storage writes must be serialized');
+    await finishLoggerWrite(gate);
+  }
+  await waitForLoggerIdle();
+  assert.equal(loggerLogs.length, 200, 'logger must retain only the newest 200 entries');
+  assert.equal(loggerLogs[0].metadata.discarded, 5, 'FIFO rotation must remove the oldest five entries');
+  assert.equal(loggerLogs[199].metadata.discarded, 204, 'FIFO rotation must preserve the newest entry');
+  assert.equal(maxActiveLoggerWrites, 1, 'logger must never overlap storage writes');
+
+  loggerLogs.length = 0;
+  loggerWarnings.length = 0;
+  vm.runInContext("logSecurityEvent('TOR_ENABLE', 'NORMAL', 'SUCCESS')", loggerContext);
+  const eventA = await nextLoggerWrite();
+  await finishLoggerWrite(eventA);
+  await waitForLoggerIdle();
+
+  failNextLoggerWrite = true;
+  vm.runInContext("logSecurityEvent('TOR_DISABLE', 'NORMAL', 'SUCCESS')", loggerContext);
+  const eventB = await nextLoggerWrite();
+  assert.equal(eventB.fail, true, 'configured storage failure must affect event B');
+  await finishLoggerWrite(eventB, false);
+  await waitForLoggerIdle();
+
+  vm.runInContext("logSecurityEvent('MODE_CHANGE', 'PRIVATE', 'SUCCESS')", loggerContext);
+  const eventC = await nextLoggerWrite();
+  await finishLoggerWrite(eventC);
+  await waitForLoggerIdle();
+  assert.deepEqual(loggerLogs.map(event => event.event_type), ['TOR_ENABLE', 'MODE_CHANGE'],
+    'failed event B must be absent while following event C is stored');
+  assert.equal(loggerWarnings.length, 1, 'storage failure must be caught and warned once');
+  assert.match(String(loggerWarnings[0][0]), /Security log write failed/);
+
+  assert.doesNotMatch(source, /\bawait\s+logSecurityEvent\s*\(/,
+    'security logger trigger calls must remain fire-and-forget');
+  assert.equal(vm.runInContext('securityLogQueue.length', loggerContext), 0);
+  assert.equal(vm.runInContext('securityLogWriting', loggerContext), false);
+
   process.stdout.write('GHOST/Tor/SOCKS5 auth coordination/modes/theme/URLhaus ruleset independence, search race, Tavily quota, transitions and sidebar states: PASS\n');
 }
 
