@@ -187,24 +187,45 @@ async function switchToWindow(client, handle) {
 async function waitForExtensionPage(client) {
   const deadline = Date.now() + 15000;
   let seenWindowCount = 0;
+  const observedWindows = new Map();
   while (Date.now() < deadline) {
     const handles = await client.command('WebDriver:GetWindowHandles');
     seenWindowCount = handles.length;
     for (const handle of handles) {
       try {
         await switchToWindow(client, handle);
-        const url = await client.command('WebDriver:GetCurrentURL');
-        if (!url.startsWith('moz-extension:')) continue;
+      } catch (error) {
+        observedWindows.set(handle, `switch failed: ${error.message}`);
+        continue;
+      }
+
+      let url;
+      try {
+        url = await client.command('WebDriver:GetCurrentURL');
+      } catch (error) {
+        observedWindows.set(handle, `URL lookup failed: ${error.message}`);
+        continue;
+      }
+      if (!url.startsWith('moz-extension:')) {
+        observedWindows.set(handle, url);
+        continue;
+      }
+
+      try {
         const ready = await client.execute(`
           const page = window.wrappedJSObject || window;
           return Boolean(page.browser && page.browser.runtime && page.browser.storage);
         `);
         if (ready) return { handle, url };
-      } catch (_) {}
+        observedWindows.set(handle, `${url} (extension APIs unavailable)`);
+      } catch (error) {
+        observedWindows.set(handle, `${url} (API probe failed: ${error.message})`);
+      }
     }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  throw new Error(`FILUM extension page with browser APIs was not found in ${seenWindowCount} WebDriver window(s).`);
+  throw new Error(`FILUM extension page with browser APIs was not found in ${seenWindowCount} WebDriver window(s). ` +
+    `Observed windows: ${JSON.stringify([...observedWindows.entries()])}`);
 }
 
 function listen(server) {
