@@ -369,7 +369,7 @@ async function applyRuntimePrivacy(mode) {
     await safeSet(browser.privacy.websites.cookieConfig, {
       behavior: 'reject_trackers_and_partition_foreign'
     });
-    await safeSet(browser.privacy.websites.resistFingerprinting, false);
+    await updateRFPState(mode);
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
     await safeSet(browser.privacy.websites.referrersEnabled, true);
     await safeSet(browser.privacy.network.networkPredictionEnabled, false);
@@ -383,7 +383,7 @@ async function applyRuntimePrivacy(mode) {
     await safeSet(browser.privacy.websites.cookieConfig, {
       behavior: 'reject_trackers_and_partition_foreign'
     });
-    await safeSet(browser.privacy.websites.resistFingerprinting, false);
+    await updateRFPState(mode);
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
     await safeSet(browser.privacy.websites.referrersEnabled, true);
     await safeSet(browser.privacy.network.networkPredictionEnabled, false);
@@ -397,7 +397,7 @@ async function applyRuntimePrivacy(mode) {
     await safeSet(browser.privacy.websites.cookieConfig, {
       behavior: 'reject_trackers_and_partition_foreign'
     });
-    await safeSet(browser.privacy.websites.resistFingerprinting, true);
+    await updateRFPState(mode);
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
     await safeSet(browser.privacy.websites.referrersEnabled, true);
     await safeSet(browser.privacy.network.networkPredictionEnabled, false);
@@ -411,13 +411,21 @@ async function applyRuntimePrivacy(mode) {
     await safeSet(browser.privacy.websites.cookieConfig, {
       behavior: 'reject_trackers_and_partition_foreign'
     });
-    await safeSet(browser.privacy.websites.resistFingerprinting, true);
+    await updateRFPState(mode);
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
     await safeSet(browser.privacy.websites.referrersEnabled, false);
     await safeSet(browser.privacy.network.networkPredictionEnabled, false);
     await safeSet(browser.privacy.network.peerConnectionEnabled, false);
     await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'disable_non_proxied_udp');
   }
+}
+
+async function updateRFPState(mode, isTorActive) {
+  const storedTorActive = !!(await browser.storage.local.get('torEnabled')).torEnabled;
+  const torActive = isTorActive === true || torStarting || storedTorActive;
+  const shouldEnableRFP = mode === 'PRIVATE' || mode === 'GHOST' || torActive;
+  await browser.privacy.websites.resistFingerprinting.set({ value: shouldEnableRFP });
+  return shouldEnableRFP;
 }
 
 async function getModeHealth(mode, torEnabled) {
@@ -436,8 +444,9 @@ async function getModeHealth(mode, torEnabled) {
   try {
     const prefs = await browser.browserControl.getModeDiagnostics();
     const protectedMode = mode === 'PRIVATE' || mode === 'GHOST';
+    const expectedRFP = protectedMode || torEnabled;
     expect('Autoplay', prefs.autoplay, mode === 'TURBO' || mode === 'GHOST' ? 5 : 1);
-    expect('Fingerprint (preferenza)', prefs.fingerprintResistance, protectedMode);
+    expect('Fingerprint (preferenza)', prefs.fingerprintResistance, expectedRFP);
     expect('Prefetch', prefs.prefetch, false);
     expect('DNS prefetch', prefs.dnsPrefetch, true);
     expect('Cookie senza archiviazione persistente', prefs.cookieNoPersistentStorage, mode === 'GHOST');
@@ -452,7 +461,7 @@ async function getModeHealth(mode, torEnabled) {
       read('Predizione rete', browser.privacy.network.networkPredictionEnabled),
       read('Hyperlink auditing', browser.privacy.websites.hyperlinkAuditingEnabled)
     ]);
-    if (fingerprint !== undefined) expect('Fingerprint', fingerprint, protectedMode);
+    if (fingerprint !== undefined) expect('Fingerprint', fingerprint, expectedRFP);
     if (tracking !== undefined) expect('Protezione tracciamento', tracking, 'always');
     if (cookies !== undefined) {
       expect('Protezione cookie', cookies?.behavior, 'reject_trackers_and_partition_foreign');
@@ -716,14 +725,19 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
   ]);
 
   if (enabled && saved.torEnabled) {
+    await applyRuntimePrivacy(await getMode(), true);
     const process = await browser.browserControl.getTorStatus();
 
     const proxy = (await browser.proxy.settings.get({})).value;
     const [webRtc, dns] = await Promise.all([
-      browser.privacy.network.peerConnectionEnabled.get({}), browser.browserControl.getSettings()
+      browser.privacy.network.peerConnectionEnabled.get({}),
+      browser.browserControl.getSettings()
     ]);
+    const fingerprintSetting = browser.privacy.websites?.resistFingerprinting;
+    const fingerprintOk = !fingerprintSetting ||
+      (await fingerprintSetting.get({})).value === true;
     if (process?.bootstrapped && hasTorProxy(proxy) && webRtc?.value === false &&
-        dns.secureDns === 'off') {
+        dns.secureDns === 'off' && fingerprintOk) {
       return { enabled: true, process };
     }
     await setTorEnabled(false, true);
@@ -734,6 +748,7 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
     try {
       await browser.browserControl.stopTor();
     } catch (_) {}
+    await applyRuntimePrivacy(await getMode(), false);
     if (!keepAuthSuspended) {
       torAuthSuspended = false;
       await restoreSocksAuthProfile();
@@ -753,6 +768,8 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
 
     torStarting = true;
     try {
+      // Raise RFP before Tor starts, so the transition never sends proxied traffic with RFP off.
+      await applyRuntimePrivacy(await getMode());
       const process = await browser.browserControl.startTor();
 
       await browser.proxy.settings.set({
@@ -773,9 +790,12 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
         browser.privacy.network.peerConnectionEnabled.get({}),
         browser.browserControl.getSettings()
       ]);
+      const fingerprintSetting = browser.privacy.websites?.resistFingerprinting;
+      const fingerprintOk = !fingerprintSetting ||
+        (await fingerprintSetting.get({})).value === true;
       if (!hasTorProxy(appliedProxy?.value) || webRtc?.value !== false ||
-          appliedDns.secureDns !== 'off') {
-        throw new Error('TOR non confermato: proxy, DNS o WebRTC non corrispondono.');
+          appliedDns.secureDns !== 'off' || !fingerprintOk) {
+        throw new Error('TOR non confermato: proxy, DNS, WebRTC o RFP non corrispondono.');
       }
 
       await browser.storage.local.set({ torEnabled: true });
@@ -790,6 +810,7 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
 
       await browser.storage.local.set({ torEnabled: !restored });
       if (restored) {
+        torStarting = false;
         await browser.storage.local.remove([
           'torPreviousProxy', 'torPreviousSecureDns', 'torPreviousSecureDnsUri'
         ]);

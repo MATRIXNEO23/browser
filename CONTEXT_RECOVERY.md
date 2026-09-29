@@ -310,3 +310,10 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Update System.
 - Android Porting Study.
 - Advanced Fingerprinting Script-Level.
+
+## RFP coordinato con Tor — checkpoint CI #138
+
+- Il fix aggiorna `privacy.resistFingerprinting` in base alla modalità e allo stato Tor; RFP resta attivo per PRIVATE/GHOST e mentre Tor è attivo o in avvio. Il controllo modalità confronta il valore effettivo con la stessa regola combinata.
+- In avvio Tor il profilo privacy viene applicato prima del bootstrap; dopo lo stop confermato viene ripristinato il valore previsto dalla modalità corrente. Restano invariati proxy, DNS, WebRTC e UI.
+- Verifiche locali sul checkout: `node --check extension/background.js`, `node scripts/audit-functional.cjs`, `python scripts/validate-product.py` e controllo diff whitespace: PASS.
+- La build Windows è stata predisposta dal marker `build/RELEASE_TRIGGER`; la verifica runtime Gecko è in attesa dell'esito CI sul commit che include questo checkpoint.
