@@ -165,8 +165,25 @@ function extensionAsyncScript(body) {
     const input = arguments[0];
     (async () => {
       const page = window.wrappedJSObject || window;
-      const rawApi = typeof browser !== 'undefined' ? browser : page.browser;
-      if (!rawApi || !rawApi.runtime || !rawApi.storage) throw new Error('FILUM extension page APIs are unavailable.');
+      const candidates = [
+        ['global.browser', () => typeof browser !== 'undefined' ? browser : null],
+        ['page.browser', () => page.browser],
+        ['window.browser', () => window.browser],
+        ['wrappedWindow.browser', () => window.wrappedJSObject?.browser]
+      ];
+      let rawApi = null;
+      const availability = [];
+      for (const [name, read] of candidates) {
+        try {
+          const candidate = read();
+          const ready = Boolean(candidate && candidate.runtime && candidate.storage);
+          availability.push({ name, ready });
+          if (ready) { rawApi = candidate; break; }
+        } catch (_) {
+          availability.push({ name, ready: false });
+        }
+      }
+      if (!rawApi) throw new Error('FILUM extension page APIs are unavailable: ' + JSON.stringify(availability));
       const cloneForPage = value => page.JSON.parse(JSON.stringify(value));
       const cloneFromPage = async value => {
         const resolved = await value;
@@ -238,13 +255,26 @@ async function waitForExtensionPage(client) {
 
       try {
         const probe = await client.execute(`
-          const page = window.wrappedJSObject || window;
-          const api = typeof browser !== 'undefined' ? browser : page.browser;
+          const candidates = [
+            ['global.browser', () => typeof browser !== 'undefined' ? browser : null],
+            ['window.browser', () => window.browser],
+            ['wrappedWindow.browser', () => window.wrappedJSObject?.browser]
+          ];
+          let api = null;
+          const availability = [];
+          for (const [name, read] of candidates) {
+            try {
+              const candidate = read();
+              const ready = Boolean(candidate && candidate.runtime && candidate.storage);
+              availability.push({ name, ready });
+              if (ready) { api = candidate; break; }
+            } catch (_) {
+              availability.push({ name, ready: false });
+            }
+          }
           return {
             ready: Boolean(api && api.runtime && api.storage),
-            globalBrowserType: typeof browser,
-            windowBrowserType: typeof window.browser,
-            wrappedBrowserType: typeof window.wrappedJSObject?.browser
+            availability
           };
         `, [], false, 30000, 'system');
         if (probe?.ready) return { handle, url };
