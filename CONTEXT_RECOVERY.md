@@ -263,3 +263,11 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Limite di copertura: il controllo Proxy Auth dimostra profilo sintetico configurato e listener registrato, non un handshake SOCKS5 accettato/rifiutato. Il controllo Logger valida la presenza di eventi recenti e schema minimo con 23 eventi, non la rotazione FIFO nel runtime Gecko. I test Node/VM coprono separatamente la rotazione.
 - Stato: runtime self-test Windows/Gecko PASS per i controlli sopra; non dichiarare verificati gli handshake SOCKS5 validi/invalidi né la FIFO Gecko. `main` e release non sono stati modificati.
 - Prossimo passo: nessun nuovo trigger necessario per questa verifica. Conservare i riferimenti del run #136 e, prima di dichiarare Proxy Auth end-to-end convalidato, aggiungere un test runtime che esegua davvero uno scambio SOCKS5 autenticato; mantenere separata la verifica FIFO VM già passata. Non lanciare run da `main`.
+
+## Valutazione pre-merge CI #136 — 2026-09-29
+
+- Alberto accetta l'esito CI #136 come PASS per la build Windows, lo smoke test e i controlli runtime effettivamente eseguiti: configurazione Proxy Auth con listener registrato, Security Logger con eventi recenti validi, egress Tor e ripristino proxy dopo Tor.
+- Limiti residui esplicitamente accettati per la Release: il self-test non esegue un handshake SOCKS5 con credenziali valide e non valide; la rotazione FIFO del logger è verificata dall'audit Node/VM, non in Gecko runtime. Gli avvisi CI su Node e sulla migrazione `ubuntu-latest` non bloccano questa valutazione.
+- Stato del branch `ci/runtime-marionette-47690`: **Ready for Merge to Main**, in base all'accettazione esplicita dei limiti sopra. Il merge non è ancora stato eseguito e richiede la conferma finale di Alberto.
+- Nessun tag di release è stato creato. Dopo l'eventuale merge, identificare e preparare i metadati del prossimo tag di release; non pubblicare né taggare senza autorizzazione esplicita.
+- `main` e la release restano invariati in questa fase.
