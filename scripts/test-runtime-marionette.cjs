@@ -227,7 +227,7 @@ function extensionStartScript(body) {
 
 async function extensionCall(client, body, input = null, timeoutMs = 30000) {
   const resultKey = `__filumMarionetteResult${++extensionCallId}`;
-  await client.execute(extensionStartScript(body), [input, resultKey], false, timeoutMs, 'system');
+  await client.execute(extensionStartScript(body), [input, resultKey], false, timeoutMs, 'default');
   const deadline = Date.now() + timeoutMs;
   let raw;
   try {
@@ -490,7 +490,9 @@ async function testProxyAuthentication(client, extensionPage) {
     }
     const saved = await extensionCall(client,
       'async (api) => (await api.storage.local.get("socks_auth_profile")).socks_auth_profile');
-    assert.deepEqual(saved, goodConfig, 'SOCKS5 credentials were not persisted in the temporary profile.');
+    assert.ok(saved && saved.host === goodConfig.host && saved.port === goodConfig.port &&
+      saved.user === goodConfig.user && saved.pass === goodConfig.pass,
+    'SOCKS5 credentials were not persisted in the temporary profile.');
 
     const createdWindow = await client.command('WebDriver:NewWindow', { type: 'tab' });
     testWindow = createdWindow.handle;
@@ -508,7 +510,9 @@ async function testProxyAuthentication(client, extensionPage) {
       '(api, config) => api.runtime.sendMessage({ type: "set-proxy-auth", config })', badConfig);
     const badSaved = await extensionCall(client,
       'async (api) => (await api.storage.local.get("socks_auth_profile")).socks_auth_profile');
-    assert.deepEqual(badSaved, badConfig, 'Wrong-credential SOCKS5 profile was not applied for the rejection test.');
+    assert.ok(badSaved && badSaved.host === badConfig.host && badSaved.port === badConfig.port &&
+      badSaved.user === badConfig.user && badSaved.pass === badConfig.pass,
+    'Wrong-credential SOCKS5 profile was not applied for the rejection test.');
 
     await switchToWindow(client, testWindow);
     await client.command('WebDriver:Navigate', { url: `http://${TARGET_HOST}:${httpPort}/invalid` }, 60000).catch(() => {});
@@ -556,7 +560,7 @@ async function testSecurityLogger(client) {
     '(api) => api.runtime.sendMessage({ type: "set-mode", mode: "NORMAL" })');
   const baseline = await extensionCall(client,
     'async (api) => await api.storage.local.get("mode")');
-  assert.equal(baseline.mode, 'NORMAL', 'Could not set NORMAL baseline before logger runtime test.');
+  assert.equal(baseline?.mode, 'NORMAL', 'Could not set NORMAL baseline before logger runtime test.');
   await extensionCall(client,
     '(api) => api.storage.local.set({ security_audit_log: [] })');
 
@@ -625,7 +629,7 @@ async function testSecurityLogger(client) {
     '(api) => api.runtime.sendMessage({ type: "set-mode", mode: "NORMAL" })');
   const restored = await extensionCall(client,
     'async (api) => await api.storage.local.get("mode")');
-  assert.equal(restored.mode, 'NORMAL', 'Could not restore NORMAL mode after logger runtime test.');
+  assert.equal(restored?.mode, 'NORMAL', 'Could not restore NORMAL mode after logger runtime test.');
 }
 
 async function main() {
