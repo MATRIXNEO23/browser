@@ -201,7 +201,11 @@ async function waitForExtensionPage(client) {
 
       let url;
       try {
-        url = await client.command('WebDriver:GetCurrentURL');
+        const currentUrl = await client.command('WebDriver:GetCurrentURL');
+        url = typeof currentUrl === 'string' ? currentUrl : currentUrl?.value;
+        if (typeof url !== 'string') {
+          throw new Error(`Unexpected current URL response: ${JSON.stringify(currentUrl)}`);
+        }
       } catch (error) {
         observedWindows.set(handle, `URL lookup failed: ${error.message}`);
         continue;
