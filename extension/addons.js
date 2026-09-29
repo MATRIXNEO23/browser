@@ -8,7 +8,14 @@ function showError(error) {
 function button(label, action) {
   const el = document.createElement('button');
   el.textContent = label;
-  el.addEventListener('click', action);
+  el.addEventListener('click', async () => {
+    el.disabled = true;
+    try {
+      await action();
+    } finally {
+      if (el.isConnected) el.disabled = false;
+    }
+  });
   return el;
 }
 
@@ -48,7 +55,11 @@ function makeAddonRow(addon, selfId) {
     if (addon.mayDisable !== false) {
       actions.appendChild(button(addon.enabled ? 'Disattiva' : 'Attiva', async () => {
         try {
-          await browser.management.setEnabled(addon.id, !addon.enabled);
+          const requested = !addon.enabled;
+          const result = await browser.browserControl.setAddonEnabled(addon.id, requested);
+          if (result?.enabled !== requested) {
+            throw new Error('Stato addon non confermato dal browser.');
+          }
           await render();
         } catch (error) { showError(error); }
       }));
@@ -56,7 +67,12 @@ function makeAddonRow(addon, selfId) {
 
     actions.appendChild(button('Rimuovi', async () => {
       try {
-        await browser.management.uninstall(addon.id, { showConfirmDialog: true });
+        const confirmed = window.confirm(`Rimuovere definitivamente “${addon.name || addon.id}”?`);
+        if (!confirmed) return;
+        const result = await browser.browserControl.uninstallAddon(addon.id);
+        if (result?.installed !== false) {
+          throw new Error('Rimozione addon non confermata dal browser.');
+        }
         await render();
       } catch (error) { showError(error); }
     }));
@@ -98,3 +114,12 @@ document.getElementById('store').addEventListener('click', () => {
 });
 
 render().catch(showError);
+
+for (const event of [
+  browser.management.onInstalled,
+  browser.management.onUninstalled,
+  browser.management.onEnabled,
+  browser.management.onDisabled
+]) {
+  event?.addListener(() => render().catch(showError));
+}

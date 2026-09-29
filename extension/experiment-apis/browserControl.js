@@ -8,6 +8,9 @@ const { Subprocess } = ChromeUtils.importESModule(
 const { setTimeout, clearTimeout } = ChromeUtils.importESModule(
   "resource://gre/modules/Timer.sys.mjs"
 );
+const { AddonManager } = ChromeUtils.importESModule(
+  "resource://gre/modules/AddonManager.sys.mjs"
+);
 
 const Ci = Components.interfaces;
 const TOR_BOOTSTRAP_TIMEOUT_MS = 180000;
@@ -371,6 +374,49 @@ this.browserControl = class extends ExtensionAPI {
           const value = mode === "dark" ? 0 : mode === "light" ? 1 : 2;
           setInt("layout.css.prefers-color-scheme.content-override", value);
           return { mode, value };
+        },
+
+        async setAddonEnabled(id, enabled) {
+          const addon = await AddonManager.getAddonByID(String(id));
+          if (!addon) throw new Error("Addon non trovato.");
+          if (addon.id === "resource-controller@matrixneo23.browser") {
+            throw new Error("Il componente FILUM integrato non può essere disattivato.");
+          }
+          const requiredPermission = enabled
+            ? AddonManager.PERM_CAN_ENABLE
+            : AddonManager.PERM_CAN_DISABLE;
+          if (!addon.permissions || !(addon.permissions & requiredPermission)) {
+            throw new Error(enabled
+              ? "Questo addon è gestito dal browser e non può essere attivato."
+              : "Questo addon è gestito dal browser e non può essere disattivato.");
+          }
+
+          if (enabled) await addon.enable();
+          else await addon.disable();
+
+          const updated = await AddonManager.getAddonByID(addon.id);
+          if (!updated || Boolean(updated.isActive) !== Boolean(enabled)) {
+            throw new Error(enabled
+              ? "Attivazione dell'addon non confermata dal browser."
+              : "Disattivazione dell'addon non confermata dal browser.");
+          }
+          return { id: addon.id, enabled: Boolean(updated.isActive) };
+        },
+
+        async uninstallAddon(id) {
+          const addon = await AddonManager.getAddonByID(String(id));
+          if (!addon) return { id: String(id), installed: false };
+          if (addon.id === "resource-controller@matrixneo23.browser") {
+            throw new Error("Il componente FILUM integrato non può essere rimosso.");
+          }
+          if (!addon.permissions || !(addon.permissions & AddonManager.PERM_CAN_UNINSTALL)) {
+            throw new Error("Questo addon è gestito dal browser e non può essere rimosso.");
+          }
+
+          await addon.uninstall();
+          const remaining = await AddonManager.getAddonByID(addon.id);
+          if (remaining) throw new Error("Rimozione dell'addon non confermata dal browser.");
+          return { id: addon.id, installed: false };
         },
 
         async getSettings() {

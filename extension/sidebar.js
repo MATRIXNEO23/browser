@@ -2,6 +2,7 @@ const statusEl = document.getElementById('status');
 const modeWarning = document.getElementById('mode-warning');
 const resourceEl = document.getElementById('resource-stats');
 const adsButton = document.getElementById('ads');
+const urlhausMalwareButton = document.getElementById('urlhaus-malware');
 const modeButtons = [...document.querySelectorAll('[data-mode]')];
 const browserTheme = document.getElementById('browser-theme');
 const websiteAppearance = document.getElementById('website-appearance');
@@ -19,6 +20,7 @@ const applyNetworkButton = document.getElementById('apply-network');
 const diagnosticsButton = document.getElementById('diagnostics');
 
 let adsEnabled = null;
+let urlhausMalwareEnabled = null;
 let torEnabled = false;
 let torStarting = false;
 let torActionError = '';
@@ -26,7 +28,9 @@ let previousCpuSample = null;
 const DNS_PROVIDERS = Object.freeze({
   cloudflare: 'https://cloudflare-dns.com/dns-query',
   google: 'https://dns.google/dns-query',
-  quad9: 'https://dns.quad9.net/dns-query'
+  quad9: 'https://dns.quad9.net/dns-query',
+  opendns: 'https://doh.opendns.com/dns-query',
+  adguard: 'https://dns.adguard-dns.com/dns-query'
 });
 
 function providerFor(level, uri) {
@@ -94,6 +98,8 @@ function renderResources(stats) {
 function render(data) {
   const mode = data?.mode || 'NORMAL';
   adsEnabled = typeof data?.adsEnabled === 'boolean' ? data.adsEnabled : null;
+  urlhausMalwareEnabled = typeof data?.urlhausMalwareEnabled === 'boolean'
+    ? data.urlhausMalwareEnabled : null;
   torEnabled = !!data?.torEnabled;
   torStarting = !!data?.torStarting;
 
@@ -101,6 +107,7 @@ function render(data) {
   const health = data?.modeHealth;
   const warnings = [];
   if (adsEnabled === null) warnings.push('ADS: stato non verificabile.');
+  if (urlhausMalwareEnabled === null) warnings.push('URLhaus: stato non verificabile.');
   if (!health?.ok) warnings.push(
     `${mode}: applicazione incompleta o interrotta. ${health?.issues?.join(' · ') || 'Stato non verificabile.'}`
   );
@@ -119,6 +126,11 @@ function render(data) {
   adsButton.textContent = adsEnabled === null ? 'ADS: ERRORE' : adsEnabled ? 'ADS: ON' : 'ADS: OFF';
   adsButton.classList.toggle('active', adsEnabled);
   adsButton.setAttribute('aria-pressed', String(adsEnabled));
+
+  urlhausMalwareButton.textContent = urlhausMalwareEnabled === null
+    ? 'URLHAUS: ERRORE' : urlhausMalwareEnabled ? 'URLHAUS: ON' : 'URLHAUS: OFF';
+  urlhausMalwareButton.classList.toggle('active', urlhausMalwareEnabled);
+  urlhausMalwareButton.setAttribute('aria-pressed', String(urlhausMalwareEnabled));
 
   const torReady = !!data?.torProcess?.bootstrapped;
   const torRouted = torEnabled && torReady && data?.torRouted;
@@ -297,6 +309,29 @@ adsButton.addEventListener('click', async () => {
   }
 });
 
+urlhausMalwareButton.addEventListener('click', async () => {
+  if (urlhausMalwareEnabled === null) { await refresh(); return; }
+  const requested = !urlhausMalwareEnabled;
+  urlhausMalwareButton.classList.toggle('active', requested);
+  urlhausMalwareButton.textContent = requested ? 'URLHAUS: ON' : 'URLHAUS: OFF';
+
+  try {
+    const result = await browser.runtime.sendMessage({
+      type: 'set-urlhaus-malware',
+      enabled: requested
+    });
+
+    if (result?.urlhausMalwareEnabled !== requested) {
+      throw new Error('Stato URLhaus non confermato.');
+    }
+
+    await refresh();
+  } catch (error) {
+    setPanelStatus('URLhaus: ' + errorText(error), true);
+    await refresh().catch(() => {});
+  }
+});
+
 torButton.addEventListener('click', async () => {
   torButton.disabled = true;
   torActionError = '';
@@ -333,7 +368,7 @@ document.getElementById('enforce').addEventListener('click', async () => {
   try {
     const result = await browser.runtime.sendMessage({ type: 'enforce-now' });
     if (!result?.ok) throw new Error('Comando RAM non confermato.');
-    setPanelStatus('Controllo RAM eseguito.');
+    setPanelStatus(`Cache svuotata + ${result.discarded} schede scartate`);
     await refresh();
   } catch (error) {
     setPanelStatus('RAM: ' + errorText(error), true);
@@ -341,26 +376,28 @@ document.getElementById('enforce').addEventListener('click', async () => {
 });
 
 browserTheme.addEventListener('change', async () => {
+  const requested = browserTheme.value;
   try {
     await browser.runtime.sendMessage({
       type: 'set-browser-theme',
-      mode: browserTheme.value
+      mode: requested
     });
-    setPanelStatus('Interfaccia: ' + browserTheme.value.toUpperCase());
+    setPanelStatus('Interfaccia: ' + requested.toUpperCase());
   } catch (error) {
     setPanelStatus('Interfaccia: ' + errorText(error), true);
   }
 });
 
 websiteAppearance.addEventListener('change', async () => {
+  const requested = websiteAppearance.value;
   try {
     await browser.runtime.sendMessage({
       type: 'set-website-appearance',
-      mode: websiteAppearance.value
+      mode: requested
     });
     await loadAdvancedSettings();
     setPanelStatus(
-      'Aspetto siti: ' + websiteAppearance.value.toUpperCase()
+      'Aspetto siti: ' + requested.toUpperCase()
     );
   } catch (error) {
     setPanelStatus('Aspetto siti: ' + errorText(error), true);
@@ -538,6 +575,8 @@ const networkMode = document.getElementById('network-mode');
 const socksFields = document.getElementById('socks-fields');
 const socksHost = document.getElementById('socks-host');
 const socksPort = document.getElementById('socks-port');
+const socksUser = document.getElementById('socks-user');
+const socksPass = document.getElementById('socks-pass');
 
 function updateSocksVisibility() {
   socksFields.style.display =
@@ -545,6 +584,8 @@ function updateSocksVisibility() {
   networkMode.disabled = torEnabled || torStarting;
   socksHost.disabled = torEnabled || torStarting;
   socksPort.disabled = torEnabled || torStarting;
+  socksUser.disabled = torEnabled || torStarting;
+  socksPass.disabled = torEnabled || torStarting;
   applyNetworkButton.disabled = torEnabled || torStarting;
 }
 
@@ -552,6 +593,9 @@ async function loadNetworkSettings() {
   try {
     const current = await browser.proxy.settings.get({});
     const value = current?.value || {};
+    const auth = await browser.storage.local.get(['socks_auth_profile']);
+    socksUser.value = auth.socks_auth_profile?.user || '';
+    socksPass.value = auth.socks_auth_profile?.pass || '';
 
     if (value.proxyType === 'manual' && value.socks) {
       networkMode.value = 'socks';
@@ -577,28 +621,36 @@ networkMode.addEventListener('change', updateSocksVisibility);
 
 applyNetworkButton.addEventListener('click', async () => {
   try {
+    let result;
     if (networkMode.value === 'direct') {
-      await browser.proxy.settings.set({ value: { proxyType: 'none' } });
+      result = await browser.runtime.sendMessage({
+        type: 'set-network-proxy',
+        config: { mode: 'direct' }
+      });
     } else if (networkMode.value === 'system') {
-      await browser.proxy.settings.set({ value: { proxyType: 'system' } });
+      result = await browser.runtime.sendMessage({
+        type: 'set-network-proxy',
+        config: { mode: 'system' }
+      });
     } else {
       const host = socksHost.value.trim();
       const port = Number(socksPort.value);
+      const user = socksUser.value;
+      const pass = socksPass.value;
 
       if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
         throw new Error('SOCKS5: host o porta non validi.');
       }
+      if (!!user !== !!pass) {
+        throw new Error('SOCKS5: inserisci sia username sia password, oppure lascia vuoti entrambi.');
+      }
 
-      await browser.proxy.settings.set({
-        value: {
-          proxyType: 'manual',
-          socks: host + ':' + port,
-          socksVersion: 5,
-          proxyDNS: true,
-          passthrough: 'localhost, 127.0.0.1'
-        }
+      result = await browser.runtime.sendMessage({
+        type: 'set-proxy-auth',
+        config: { host, port, user, pass }
       });
     }
+    if (!result?.success) throw new Error('Il core non ha confermato l’applicazione del proxy.');
 
     await loadNetworkSettings();
     setPanelStatus('Rete applicata: ' + networkMode.value.toUpperCase());
@@ -626,6 +678,7 @@ async function waitFor(check, timeoutMs = 5000, stepMs = 150) {
 async function runControlSelfTest() {
   const checks = [];
   let passed = true;
+  const selfTestStartedAt = Date.now();
 
   const record = (name, ok, detail = '') => {
     checks.push({ name, ok: !!ok, detail });
@@ -643,7 +696,7 @@ async function runControlSelfTest() {
     const expectedNewTab = browser.runtime.getURL('newtab.html');
     const startup = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
     record('startup-homepage-config', startup.startupPage === 1 &&
-      startup.startupHomepage === 'about:newtab', JSON.stringify({
+      startup.startupHomepage === expectedNewTab, JSON.stringify({
         page: startup.startupPage, homepage: startup.startupHomepage,
         headlessInitialTabs: initialTabs.map(tab => tab.url || tab.pendingUrl || '')
       }));
@@ -658,7 +711,11 @@ async function runControlSelfTest() {
       await browser.tabs.remove(newTab.id);
     }
 
-    for (const mode of ['NORMAL', 'TURBO', 'PRIVATE', 'GHOST']) {
+    for (const [index, mode] of [
+      'NORMAL', 'TURBO', 'PRIVATE', 'GHOST',
+      'NORMAL', 'TURBO', 'PRIVATE', 'GHOST',
+      'NORMAL', 'TURBO', 'PRIVATE', 'GHOST', 'NORMAL'
+    ].entries()) {
       const button = modeButtons.find(item => item.dataset.mode === mode);
       button.click();
 
@@ -670,20 +727,22 @@ async function runControlSelfTest() {
 
       const applied = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
       const privacy = await browser.privacy.websites.resistFingerprinting.get({});
+      const webRtc = await browser.privacy.network.peerConnectionEnabled.get({});
       const health = (await getStatus()).modeHealth;
       const protectedMode = mode === 'PRIVATE' || mode === 'GHOST';
       const expectedAutoplay = mode === 'TURBO' || mode === 'GHOST' ? 5 : 1;
 
       record(
-        'mode-' + mode.toLowerCase(),
+        'mode-' + mode.toLowerCase() + (index < 4 ? '' : '-transition-' + (index + 1)),
         button.classList.contains('active') &&
           button.getAttribute('aria-pressed') === 'true' &&
           applied.httpsOnly === protectedMode &&
           applied.fingerprintResistance === protectedMode &&
           applied.autoplay === expectedAutoplay &&
-          privacy.value === protectedMode && health?.ok,
+          privacy.value === protectedMode &&
+          webRtc.value === false && health?.ok,
         JSON.stringify({ selected: mode, applied, fingerprintPrivacy: privacy.value,
-          issues: health?.issues || [] })
+          webRTCEnabled: webRtc.value, issues: health?.issues || [] })
       );
     }
 
@@ -748,14 +807,15 @@ async function runControlSelfTest() {
       uri: initialAdvanced.secureDnsUri || ''
     });
 
-    websiteAppearance.value =
+    const requestedAppearance =
       initialAdvanced.websiteAppearance === 'dark' ? 'light' : 'dark';
+    websiteAppearance.value = requestedAppearance;
     websiteAppearance.dispatchEvent(new Event('change'));
     await waitFor(async () => {
       const value = await browser.runtime.sendMessage({
         type: 'get-advanced-settings'
       });
-      return value.websiteAppearance === websiteAppearance.value;
+      return value.websiteAppearance === requestedAppearance;
     });
     record('website-appearance', true);
 
@@ -765,13 +825,14 @@ async function runControlSelfTest() {
     });
 
     const initialTheme = initialAdvanced.browserTheme || 'dark';
-    browserTheme.value = initialTheme === 'black' ? 'dark' : 'black';
+    const requestedTheme = initialTheme === 'black' ? 'dark' : 'black';
+    browserTheme.value = requestedTheme;
     browserTheme.dispatchEvent(new Event('change'));
     await waitFor(async () => {
       const value = await browser.runtime.sendMessage({
         type: 'get-advanced-settings'
       });
-      return value.browserTheme === browserTheme.value;
+      return value.browserTheme === requestedTheme;
     });
     record('browser-theme', true);
 
@@ -826,7 +887,44 @@ async function runControlSelfTest() {
         proxy?.value?.socksVersion === 5
     );
 
-    await browser.proxy.settings.set({ value: initialProxy });
+    let proxyAuthOk = false;
+    let proxyAuthListenerActive = false;
+    let proxyAuthChanged = false;
+    try {
+      const existingAuthBytes = await browser.storage.local.getBytesInUse('socks_auth_profile');
+      if (existingAuthBytes !== 0) throw new Error('Existing auth profile prevents isolated diagnostic.');
+
+      proxyAuthChanged = true;
+      const configured = await browser.runtime.sendMessage({
+        type: 'set-proxy-auth',
+        config: {
+          host: '127.0.0.1',
+          port: 65534,
+          user: 'filum-ci-user',
+          pass: 'filum-ci-test-password'
+        }
+      });
+      const authBytes = await browser.storage.local.getBytesInUse('socks_auth_profile');
+      const authStatus = await browser.runtime.sendMessage({ type: 'get-proxy-auth-status' });
+      proxyAuthListenerActive = authStatus?.hasListener === true;
+      proxyAuthOk = configured?.success === true && authBytes > 0 && proxyAuthListenerActive;
+    } catch (_) {
+      proxyAuthOk = false;
+    } finally {
+      if (proxyAuthChanged) {
+        try {
+          await browser.runtime.sendMessage({
+            type: 'set-network-proxy',
+            config: { mode: 'direct' }
+          });
+        } catch (_) {}
+      }
+      try {
+        await browser.proxy.settings.set({ value: initialProxy });
+      } catch (_) {}
+    }
+    record('proxy-auth-configured', proxyAuthOk,
+      `listener=${proxyAuthListenerActive}`);
 
     const torStartedAt = Date.now();
     let torOn = null;
@@ -1038,6 +1136,30 @@ async function runControlSelfTest() {
       });
     } catch (_) {}
   }
+
+  let loggerOk = false;
+  let logCount = 0;
+  try {
+    const entries = await waitFor(async () => {
+      const stored = await browser.storage.local.get('security_audit_log');
+      const logs = Array.isArray(stored.security_audit_log)
+        ? stored.security_audit_log : [];
+      const recent = logs.filter(event => {
+        const time = Date.parse(event?.timestamp);
+        return Number.isFinite(time) && time >= selfTestStartedAt;
+      });
+      return recent.length ? { logs, recent } : false;
+    }, 10000, 100);
+    logCount = entries.logs.length;
+    const lastEvent = entries.recent[entries.recent.length - 1];
+    loggerOk = !!lastEvent &&
+      ['TOR_ENABLE', 'TOR_DISABLE', 'CACHE_CLEAR', 'MODE_CHANGE'].includes(lastEvent.event_type) &&
+      ['SUCCESS', 'ERROR'].includes(lastEvent.result);
+    if (!Number.isFinite(Date.parse(lastEvent?.timestamp))) loggerOk = false;
+  } catch (_) {
+    loggerOk = false;
+  }
+  record('security-logger-runtime', loggerOk, `count=${logCount}`);
 
   await browser.browserControl.reportControlSelfTest(
     JSON.stringify({ passed, checks })

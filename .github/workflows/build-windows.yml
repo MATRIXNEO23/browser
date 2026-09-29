@@ -47,6 +47,7 @@ jobs:
           python3 scripts/validate-product.py
           python3 scripts/audit-wiring.py
           node scripts/audit-functional.cjs
+          node scripts/audit-addons.cjs
           node scripts/audit-toolbar.cjs
           python3 -m json.tool fork/UPSTREAM.json >/dev/null
           python3 -m json.tool extension/manifest.json >/dev/null
@@ -258,6 +259,9 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - name: Checkout Browser project for runtime harness
+        uses: actions/checkout@v4
+
       - name: Download Browser build
         uses: actions/download-artifact@v4
         with:
@@ -493,6 +497,7 @@ jobs:
             Write-Host "FILUM core runtime activation passed."
             Write-Host "FILUM native panel loaded and ran the functional control report."
             Write-Host "FILUM sidebar controls functional test passed."
+
           }
           finally {
             Get-CimInstance Win32_Process | Where-Object {

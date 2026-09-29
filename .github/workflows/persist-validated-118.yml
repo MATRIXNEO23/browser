@@ -1,0 +1,54 @@
+name: persist-validated-filum-118
+
+on:
+  push:
+    branches: [fix/tor-first-bootstrap]
+    paths:
+      - .github/workflows/persist-validated-118.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  persist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download exact validated artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          gh run download 36208276499 --repo "$GITHUB_REPOSITORY" \
+            -n Browser-Windows-x64-final -D artifact
+      - name: Verify source and binary identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin 77a1c1f65db6aeb9e9757d10e44a42d590b4ebce
+          test "$(git rev-parse 77a1c1f65db6aeb9e9757d10e44a42d590b4ebce^{tree})" = 073f949680f82fb310238f84e43e628f44951e0b
+          echo '78f2160d1014d5da89645b4c73bb414524d3c51e874293c558319fb1b34bc63b  artifact/Browser-Windows-x64.zip' | sha256sum -c -
+          test "$(unzip -p artifact/Browser-Windows-x64.zip Browser/browser.exe | sha256sum | cut -d ' ' -f 1)" = 7619adf588c57f40b241bb26938a6317b72f2218d2d63756a1477e2a038451bf
+          test "$(cut -d ' ' -f 1 artifact/SHA256SUMS.txt)" = 78f2160d1014d5da89645b4c73bb414524d3c51e874293c558319fb1b34bc63b
+      - name: Publish retained prerelease at exact source commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=fork-77a1c1f
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; refusing to replace immutable assets" >&2
+            exit 1
+          fi
+          gh release create "$tag" \
+            artifact/Browser-Windows-x64.zip artifact/SHA256SUMS.txt \
+            releases/FILUM_WINDOWS_X64_RUN_118.md \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 77a1c1f65db6aeb9e9757d10e44a42d590b4ebce \
+            --title 'FILUM Windows x64 build #118 — security review open' \
+            --prerelease \
+            --notes 'Preserved validated build #118. Source commit 77a1c1f65db6aeb9e9757d10e44a42d590b4ebce. Defender alert on the identical executable remains unexplained; see the attached technical report. This release is not antivirus clearance.'

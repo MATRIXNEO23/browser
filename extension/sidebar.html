@@ -55,6 +55,15 @@
       <button id="ads" class="pill-toggle">ADS: ON</button>
     </section>
 
+    <section class="card split-card">
+      <div>
+        <span class="eyebrow">PROTEZIONE MALWARE</span>
+        <h2>Protezione Malware (URLhaus)</h2>
+        <p class="hint">Blocca URL di distribuzione malware dal feed URLhaus.</p>
+      </div>
+      <button id="urlhaus-malware" class="pill-toggle">URLHAUS: OFF</button>
+    </section>
+
     <section class="card">
       <h2>Aspetto</h2>
       <div class="field-grid">
@@ -91,6 +100,8 @@
         <option value="cloudflare">Cloudflare 1.1.1.1</option>
         <option value="google">Google Public DNS</option>
         <option value="quad9">Quad9 (con blocco malware)</option>
+        <option value="opendns">OpenDNS</option>
+        <option value="adguard">AdGuard Standard</option>
         <option value="custom">Personalizzato</option>
       </select>
       <select id="secure-dns">
@@ -140,6 +151,8 @@
       <div id="socks-fields">
         <input id="socks-host" placeholder="Host SOCKS">
         <input id="socks-port" type="number" min="1" max="65535" placeholder="Porta">
+        <input id="socks-user" type="text" autocomplete="username" placeholder="Username SOCKS (opzionale)">
+        <input id="socks-pass" type="password" autocomplete="current-password" placeholder="Password SOCKS (opzionale)">
       </div>
       <button id="apply-network" class="wide-secondary">Applica rete</button>
       <p class="hint">SYSTEM/VPN usa il routing e l'eventuale VPN attiva in Windows.</p>

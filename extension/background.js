@@ -1,8 +1,61 @@
 const MODE_LIMITS = { NORMAL: 3, TURBO: 3, PRIVATE: 3, GHOST: 3 };
 const DEFAULT_MODE = 'NORMAL';
 const ADS_RULESET_ID = 'ads_basic';
+const URLHAUS_MALWARE_RULESET_ID = 'urlhaus_malware_basic';
 const TAVILY_DEFAULT_DAILY_LIMIT = 33;
 const TAVILY_MONTHLY_LIMIT = 1000;
+
+const SECURITY_LOG_KEY = 'security_audit_log';
+const MAX_LOG_ENTRIES = 200;
+const SECURITY_LOG_MODES = ['NORMAL', 'TURBO', 'PRIVATE', 'GHOST'];
+const SECURITY_LOG_RESULTS = ['SUCCESS', 'ERROR'];
+const SECURITY_LOG_EVENTS = ['TOR_ENABLE', 'TOR_DISABLE', 'CACHE_CLEAR', 'MODE_CHANGE'];
+
+let securityLogQueue = [];
+let securityLogWriting = false;
+
+function logSecurityEvent(eventType, modeValue, result, metadata) {
+  if (!SECURITY_LOG_EVENTS.includes(eventType) ||
+      !SECURITY_LOG_RESULTS.includes(result)) return;
+
+  const event = {
+    timestamp: new Date().toISOString(),
+    event_type: eventType,
+    result
+  };
+  if (SECURITY_LOG_MODES.includes(modeValue)) event.mode = modeValue;
+
+  if (metadata && Number.isSafeInteger(metadata.discarded) && metadata.discarded >= 0) {
+    event.metadata = { discarded: metadata.discarded };
+  }
+
+  securityLogQueue.push(event);
+  if (!securityLogWriting) void processSecurityLogQueue();
+}
+
+async function processSecurityLogQueue() {
+  if (securityLogWriting) return;
+  securityLogWriting = true;
+  try {
+    while (securityLogQueue.length) {
+      const event = securityLogQueue.shift();
+      try {
+        const stored = await browser.storage.local.get(SECURITY_LOG_KEY);
+        const previous = Array.isArray(stored[SECURITY_LOG_KEY])
+          ? stored[SECURITY_LOG_KEY] : [];
+        await browser.storage.local.set({
+          [SECURITY_LOG_KEY]: [...previous, event].slice(-MAX_LOG_ENTRIES)
+        });
+      } catch (error) {
+        console.warn('Security log write failed:', error?.message || error);
+      }
+    }
+  } finally {
+    securityLogWriting = false;
+    if (securityLogQueue.length) void processSecurityLogQueue();
+  }
+}
+
 let tavilyRequestInFlight = false;
 let torStarting = false;
 let controlTransition = Promise.resolve();
@@ -23,9 +76,12 @@ function hasTorProxy(proxy) {
 function matchesRestoredProxy(actual, expected) {
   if (actual?.proxyType !== expected?.proxyType) return false;
   if (expected.proxyType !== 'manual') return true;
-  return ['socks', 'socksVersion', 'proxyDNS', 'http', 'httpPort',
-    'ssl', 'sslPort', 'ftp', 'ftpPort', 'passthrough'].every(key =>
-    (actual[key] ?? null) === (expected[key] ?? null));
+  const requiredKeys = ['socks', 'socksVersion', 'proxyDNS'];
+  const optionalKeys = ['http', 'httpPort', 'ssl', 'sslPort', 'ftp', 'ftpPort', 'passthrough'];
+  const normalizeOptional = value => value === undefined || value === null || value === '' ? null : value;
+  // Gecko may omit unused proxy fields or return them as ""; treat those forms as equivalent.
+  return requiredKeys.every(key => actual[key] === expected[key]) &&
+    optionalKeys.every(key => normalizeOptional(actual[key]) === normalizeOptional(expected[key]));
 }
 
 async function restoreTorNetwork(proxy, level, uri) {
@@ -188,6 +244,22 @@ async function setAdsEnabled(enabled) {
   await browser.storage.local.set({ adsEnabled: enabled });
 }
 
+async function getUrlhausMalwareEnabled() {
+  const enabled = await browser.declarativeNetRequest.getEnabledRulesets();
+  return enabled.includes(URLHAUS_MALWARE_RULESET_ID);
+}
+
+async function setUrlhausMalwareEnabled(enabled) {
+  await browser.declarativeNetRequest.updateEnabledRulesets({
+    enableRulesetIds: enabled ? [URLHAUS_MALWARE_RULESET_ID] : [],
+    disableRulesetIds: enabled ? [] : [URLHAUS_MALWARE_RULESET_ID]
+  });
+  if (await getUrlhausMalwareEnabled() !== enabled) {
+    throw new Error('URLhaus non confermato dal browser.');
+  }
+  await browser.storage.local.set({ urlhausMalwareEnabled: enabled });
+}
+
 async function applyDarkTheme(mode) {
   const selected = mode || (await browser.storage.local.get('browserTheme')).browserTheme || 'dark';
   if (selected === 'system') {
@@ -301,7 +373,7 @@ async function applyRuntimePrivacy(mode) {
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
     await safeSet(browser.privacy.websites.referrersEnabled, true);
     await safeSet(browser.privacy.network.networkPredictionEnabled, false);
-    await safeSet(browser.privacy.network.peerConnectionEnabled, true);
+    await safeSet(browser.privacy.network.peerConnectionEnabled, false);
     await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'default_public_interface_only');
     return;
   }
@@ -315,7 +387,7 @@ async function applyRuntimePrivacy(mode) {
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
     await safeSet(browser.privacy.websites.referrersEnabled, true);
     await safeSet(browser.privacy.network.networkPredictionEnabled, false);
-    await safeSet(browser.privacy.network.peerConnectionEnabled, true);
+    await safeSet(browser.privacy.network.peerConnectionEnabled, false);
     await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'default_public_interface_only');
     return;
   }
@@ -329,7 +401,7 @@ async function applyRuntimePrivacy(mode) {
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
     await safeSet(browser.privacy.websites.referrersEnabled, true);
     await safeSet(browser.privacy.network.networkPredictionEnabled, false);
-    await safeSet(browser.privacy.network.peerConnectionEnabled, true);
+    await safeSet(browser.privacy.network.peerConnectionEnabled, false);
     await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'disable_non_proxied_udp');
     return;
   }
@@ -385,7 +457,7 @@ async function getModeHealth(mode, torEnabled) {
     if (cookies !== undefined) {
       expect('Protezione cookie', cookies?.behavior, 'reject_trackers_and_partition_foreign');
     }
-    if (webRtc !== undefined) expect('WebRTC', webRtc, !torEnabled && mode !== 'GHOST');
+    if (webRtc !== undefined) expect('WebRTC', webRtc, false);
     if (referrers !== undefined) expect('Referrer', referrers, mode !== 'GHOST');
     if (webRtcPolicy !== undefined) expect('Policy WebRTC', webRtcPolicy,
       mode === 'PRIVATE' || mode === 'GHOST'
@@ -487,6 +559,124 @@ async function endGhostSession() {
 }
 
 
+let socksAuthListener = null;
+let torAuthSuspended = false;
+
+function removeSocksAuthHandler() {
+  if (socksAuthListener) {
+    browser.proxy.onRequest.removeListener(socksAuthListener);
+    socksAuthListener = null;
+  }
+}
+
+function validSocksAuthProfile(profile) {
+  return !!profile && typeof profile.host === 'string' && profile.host.trim() &&
+    Number.isInteger(profile.port) && profile.port >= 1 && profile.port <= 65535 &&
+    typeof profile.user === 'string' && profile.user.length > 0 &&
+    typeof profile.pass === 'string' && profile.pass.length > 0;
+}
+
+async function restoreSocksAuthProfile() {
+  const saved = await browser.storage.local.get(['torEnabled', 'socks_auth_profile']);
+  if (torAuthSuspended || torStarting || saved.torEnabled) {
+    removeSocksAuthHandler();
+    return false;
+  }
+
+  const profile = saved.socks_auth_profile;
+  if (!validSocksAuthProfile(profile)) {
+    removeSocksAuthHandler();
+    return false;
+  }
+
+  const current = (await browser.proxy.settings.get({})).value || {};
+  if (current.proxyType !== 'manual' || current.socks !== profile.host + ':' + profile.port ||
+      current.socksVersion !== 5) {
+    removeSocksAuthHandler();
+    return false;
+  }
+
+  removeSocksAuthHandler();
+  socksAuthListener = async () => {
+    const state = await browser.storage.local.get(['torEnabled', 'socks_auth_profile']);
+    if (torAuthSuspended || torStarting || state.torEnabled) return null;
+    const active = state.socks_auth_profile;
+    if (!validSocksAuthProfile(active)) return null;
+
+    const proxy = (await browser.proxy.settings.get({})).value || {};
+    if (proxy.proxyType !== 'manual' || proxy.socks !== active.host + ':' + active.port ||
+        proxy.socksVersion !== 5) return null;
+
+    return {
+      type: 'socks',
+      host: active.host,
+      port: active.port,
+      username: active.user,
+      password: active.pass,
+      proxyDNS: true
+    };
+  };
+  browser.proxy.onRequest.addListener(socksAuthListener, { urls: ['<all_urls>'] });
+  return true;
+}
+
+async function setNetworkProxy(config) {
+  if (!config || !['direct', 'system'].includes(config.mode)) {
+    throw new Error('Modalità proxy non valida.');
+  }
+  const state = await browser.storage.local.get('torEnabled');
+  if (torAuthSuspended || torStarting || state.torEnabled) throw new Error('La rete è gestita da TOR.');
+
+  removeSocksAuthHandler();
+  const value = config.mode === 'direct'
+    ? { proxyType: 'none' }
+    : { proxyType: 'system' };
+  try {
+    await browser.proxy.settings.set({ value });
+    const applied = (await browser.proxy.settings.get({})).value || {};
+    if (!matchesRestoredProxy(applied, value)) throw new Error('Impostazione proxy non confermata.');
+  } catch (error) {
+    await restoreSocksAuthProfile();
+    throw error;
+  }
+  await browser.storage.local.remove('socks_auth_profile');
+  return { success: true };
+}
+
+async function setSocksAuthProxy(config) {
+  const { host, port, user = '', pass = '' } = config || {};
+  if (typeof host !== 'string' || !host.trim() || !Number.isInteger(port) ||
+      port < 1 || port > 65535) throw new Error('SOCKS5: host o porta non validi.');
+  if (typeof user !== 'string' || typeof pass !== 'string') throw new Error('Credenziali SOCKS5 non valide.');
+  if (!!user !== !!pass) throw new Error('SOCKS5: inserisci username e password insieme.');
+  const state = await browser.storage.local.get('torEnabled');
+  if (torAuthSuspended || torStarting || state.torEnabled) throw new Error('La rete è gestita da TOR.');
+
+  removeSocksAuthHandler();
+  const value = {
+    proxyType: 'manual',
+    socks: host.trim() + ':' + port,
+    socksVersion: 5,
+    proxyDNS: true,
+    passthrough: 'localhost, 127.0.0.1'
+  };
+  await browser.proxy.settings.set({ value });
+  const applied = (await browser.proxy.settings.get({})).value || {};
+  if (!matchesRestoredProxy(applied, value)) {
+    await restoreSocksAuthProfile();
+    throw new Error('Impostazione proxy SOCKS5 non confermata.');
+  }
+
+  if (user) {
+    const profile = { host: host.trim(), port, user, pass };
+    await browser.storage.local.set({ socks_auth_profile: profile });
+    await restoreSocksAuthProfile();
+  } else {
+    await browser.storage.local.remove('socks_auth_profile');
+  }
+  return { success: true, authenticated: !!user };
+}
+
 async function restoreStaleTorState() {
   const saved = await browser.storage.local.get([
     'torEnabled',
@@ -497,6 +687,8 @@ async function restoreStaleTorState() {
 
   if (!saved.torEnabled) return;
 
+  torAuthSuspended = true;
+  removeSocksAuthHandler();
   const restored = await restoreTorNetwork(saved.torPreviousProxy || { proxyType: 'system' },
     saved.torPreviousSecureDns || 'off', saved.torPreviousSecureDnsUri || '');
 
@@ -509,10 +701,13 @@ async function restoreStaleTorState() {
     await browser.storage.local.remove([
       'torPreviousProxy', 'torPreviousSecureDns', 'torPreviousSecureDnsUri'
     ]);
+    torAuthSuspended = false;
   }
 }
 
-async function setTorEnabled(enabled) {
+async function setTorEnabled(enabled, keepAuthSuspended = false) {
+  torAuthSuspended = true;
+  removeSocksAuthHandler();
   const saved = await browser.storage.local.get([
     'torEnabled',
     'torPreviousProxy',
@@ -531,14 +726,18 @@ async function setTorEnabled(enabled) {
         dns.secureDns === 'off') {
       return { enabled: true, process };
     }
-    await setTorEnabled(false);
-    return setTorEnabled(true);
+    await setTorEnabled(false, true);
+    return setTorEnabled(true, true);
   }
 
   if (!enabled && !saved.torEnabled) {
     try {
       await browser.browserControl.stopTor();
     } catch (_) {}
+    if (!keepAuthSuspended) {
+      torAuthSuspended = false;
+      await restoreSocksAuthProfile();
+    }
     return { enabled: false, process: { running: false, bootstrapped: false } };
   }
 
@@ -595,6 +794,10 @@ async function setTorEnabled(enabled) {
           'torPreviousProxy', 'torPreviousSecureDns', 'torPreviousSecureDnsUri'
         ]);
         await applyRuntimePrivacy(await getMode());
+        if (!keepAuthSuspended) {
+          torAuthSuspended = false;
+          await restoreSocksAuthProfile();
+        }
       }
 
       throw error;
@@ -616,6 +819,10 @@ async function setTorEnabled(enabled) {
   ]);
 
   await applyRuntimePrivacy(await getMode());
+  if (!keepAuthSuspended) {
+    torAuthSuspended = false;
+    await restoreSocksAuthProfile();
+  }
   return { enabled: false, process: { running: false } };
 }
 
@@ -625,6 +832,8 @@ async function initialize() {
   } catch (_) {}
 
   await restoreStaleTorState();
+  try { await restoreSocksAuthProfile(); }
+  catch (error) { console.warn('Unable to restore SOCKS5 auth profile', error); }
   try { await applyDarkTheme(); }
   catch (error) { console.warn('Unable to apply browser theme', error); }
   const mode = await getMode();
@@ -719,7 +928,20 @@ browser.runtime.onMessage.addListener(async (message) => {
           await applyHttpsOverride();
         }
         await browser.storage.local.set({ mode: message.mode });
+        let turboCacheCleared = false;
+        if (message.mode === 'TURBO' && previousMode !== 'TURBO') {
+          await browser.browsingData.removeCache({ since: 0 });
+          turboCacheCleared = true;
+        }
         await enforceBackgroundLimit();
+        if (turboCacheCleared) {
+          void Promise.resolve()
+            .then(() => browser.storage.local.get('status'))
+            .then(({ status }) => logSecurityEvent('CACHE_CLEAR', message.mode, 'SUCCESS', {
+              discarded: status?.discardedNow
+            }))
+            .catch(() => logSecurityEvent('CACHE_CLEAR', message.mode, 'SUCCESS'));
+        }
         await browser.storage.local.remove('ghostSessionRestartedAt');
       } catch (error) {
         await browser.storage.local.set({ mode: previousMode }).catch(() => {});
@@ -745,17 +967,52 @@ browser.runtime.onMessage.addListener(async (message) => {
       }
       const modeHealth = await getModeHealth(message.mode,
         !!(await browser.storage.local.get('torEnabled')).torEnabled);
+      if (modeHealth.ok) logSecurityEvent('MODE_CHANGE', message.mode, 'SUCCESS');
       return { ok: modeHealth.ok, mode: message.mode, modeHealth };
     });
   }
 
   if (message?.type === 'set-tor' && typeof message.enabled === 'boolean') {
-    return queueControlTransition(() => setTorEnabled(message.enabled));
+    const eventType = message.enabled ? 'TOR_ENABLE' : 'TOR_DISABLE';
+    return queueControlTransition(async () => {
+      try {
+        const result = await setTorEnabled(message.enabled);
+        logSecurityEvent(eventType, undefined, 'SUCCESS');
+        return result;
+      } catch (error) {
+        logSecurityEvent(eventType, undefined, 'ERROR');
+        throw error;
+      }
+    });
+  }
+
+  if (message?.type === 'set-network-proxy') {
+    return queueControlTransition(() => setNetworkProxy(message.config));
+  }
+
+  if (message?.type === 'set-proxy-auth') {
+    return queueControlTransition(() => setSocksAuthProxy(message.config));
+  }
+
+  if (message?.type === 'get-proxy-auth-status') {
+    const state = await browser.storage.local.get('torEnabled');
+    const proxy = (await browser.proxy.settings.get({})).value || {};
+    return {
+      hasListener: !!socksAuthListener &&
+        browser.proxy.onRequest.hasListener(socksAuthListener) &&
+        !torAuthSuspended && !torStarting && !state.torEnabled &&
+        proxy.proxyType === 'manual' && proxy.socksVersion === 5
+    };
   }
 
   if (message?.type === 'set-ads' && typeof message.enabled === 'boolean') {
     await setAdsEnabled(message.enabled);
     return { ok: true, adsEnabled: message.enabled };
+  }
+
+  if (message?.type === 'set-urlhaus-malware' && typeof message.enabled === 'boolean') {
+    await setUrlhausMalwareEnabled(message.enabled);
+    return { ok: true, urlhausMalwareEnabled: message.enabled };
   }
 
   if (message?.type === 'get-status') {
@@ -790,6 +1047,11 @@ browser.runtime.onMessage.addListener(async (message) => {
       adsEnabled = await getAdsEnabled();
     } catch (error) { console.warn('Unable to read ADS ruleset', error); }
 
+    let urlhausMalwareEnabled = null;
+    try {
+      urlhausMalwareEnabled = await getUrlhausMalwareEnabled();
+    } catch (error) { console.warn('Unable to read URLhaus ruleset', error); }
+
     let torRouted = false;
     if (data.torEnabled && torProcess.bootstrapped) {
       try {
@@ -808,6 +1070,7 @@ browser.runtime.onMessage.addListener(async (message) => {
       ghostSessionRestartedAt: data.ghostSessionRestartedAt || null,
       modeHealth: await getModeHealth(data.mode || DEFAULT_MODE, !!data.torEnabled),
       adsEnabled,
+      urlhausMalwareEnabled,
       status: data.status || null,
       processStats,
       torEnabled: !!data.torEnabled,
@@ -818,8 +1081,18 @@ browser.runtime.onMessage.addListener(async (message) => {
   }
 
   if (message?.type === 'enforce-now') {
-    await enforceBackgroundLimit();
-    return { ok: true };
+    try {
+      await browser.browsingData.removeCache({ since: 0 });
+      await enforceBackgroundLimit();
+      const { status } = await browser.storage.local.get('status');
+      logSecurityEvent('CACHE_CLEAR', undefined, 'SUCCESS', {
+        discarded: status?.discardedNow
+      });
+      return { ok: true, discarded: status?.discardedNow || 0 };
+    } catch (error) {
+      logSecurityEvent('CACHE_CLEAR', undefined, 'ERROR');
+      throw error;
+    }
   }
 
   if (message?.type === 'open-addons-installed') {

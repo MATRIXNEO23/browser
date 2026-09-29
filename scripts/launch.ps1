@@ -46,6 +46,7 @@ switch ($Mode) {
         $prefs += 'user_pref("privacy.resistFingerprinting", false);'
     }
     'PRIVATE' {
+        $prefs += 'user_pref("privacy.resistFingerprinting", true);'
         $prefs += 'user_pref("privacy.trackingprotection.fingerprinting.enabled", true);'
         $prefs += 'user_pref("privacy.trackingprotection.cryptomining.enabled", true);'
     }
