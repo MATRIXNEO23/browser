@@ -1,0 +1,103 @@
+name: publish-validated-final-browser
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "build/PUBLISH_TRIGGER"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository and tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate source run and release target
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source build/PUBLISH_TRIGGER
+          test "$source_run" = "36574970232"
+          test "$source_sha" = "65a27a0347dd03fb42dc460baacbb75371c2a086"
+
+          run_json="$(gh run view "$source_run" --repo "$GITHUB_REPOSITORY" --json headSha,conclusion)"
+          test "$(jq -r .headSha <<<"$run_json")" = "$source_sha"
+          test "$(jq -r .conclusion <<<"$run_json")" = "success"
+
+          for tag in fork-65a27a0 v0.5.0-runtime-verified; do
+            tag_sha="$(git rev-parse "refs/tags/$tag^{commit}")"
+            test "$tag_sha" = "$source_sha"
+          done
+
+          {
+            echo "SOURCE_RUN=$source_run"
+            echo "SOURCE_SHA=$source_sha"
+          } >> "$GITHUB_ENV"
+
+      - name: Download final artifact from CI #137
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name Browser-Windows-x64-final --dir artifact
+
+      - name: Verify package and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s artifact/Browser-Windows-x64.zip
+          test -s artifact/SHA256SUMS.txt
+          (cd artifact && sha256sum --check SHA256SUMS.txt)
+          actual="$(sha256sum artifact/Browser-Windows-x64.zip | cut -d' ' -f1)"
+          expected="4b3cdfa5b1cc7812cbc40f87aba27b3e0e24decd75fdca11cdf0339ae792b4e5"
+          test "$actual" = "$expected"
+          unzip -Z1 artifact/Browser-Windows-x64.zip | grep -Eiq '(^|/)browser\.exe$'
+          unzip -Z1 artifact/Browser-Windows-x64.zip | grep -Eiq '(^|/)tor\.exe$'
+
+      - name: Publish GitHub Release on canonical tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          notes="$(mktemp)"
+          cat > "$notes" <<'NOTES'
+          # FILUM Browser v0.5.0-runtime-verified
+
+          Windows x64 package built and smoke-tested by [CI #137](https://github.com/MATRIXNEO23/browser/actions/runs/36574970232) from commit `65a27a0347dd03fb42dc460baacbb75371c2a086`.
+
+          ## Included
+          - Tor bootstrap and lifecycle smoke tests passed.
+          - Proxy Auth configuration/listener and security logger diagnostics passed.
+          - Security audit logger uses a local FIFO capped at 200 entries; FIFO rotation is covered by the Node/VM audit.
+          - WebRTC protections, selective fingerprint resistance, and TURBO cache/tab cleanup are included.
+
+          ## Coverage limits
+          - No real SOCKS5 credential handshake was performed.
+          - Logger FIFO rotation was not exercised in Gecko runtime.
+          - The Windows package is not Authenticode-signed.
+
+          The release tag is `fork-65a27a0`; the semantic alias is `v0.5.0-runtime-verified`.
+          NOTES
+
+          if gh release view fork-65a27a0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload fork-65a27a0 artifact/Browser-Windows-x64.zip artifact/SHA256SUMS.txt \
+              --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit fork-65a27a0 --repo "$GITHUB_REPOSITORY" \
+              --title "FILUM Browser v0.5.0-runtime-verified" --notes-file "$notes"
+          else
+            gh release create fork-65a27a0 artifact/Browser-Windows-x64.zip artifact/SHA256SUMS.txt \
+              --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+              --title "FILUM Browser v0.5.0-runtime-verified" --notes-file "$notes"
+          fi
