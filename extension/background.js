@@ -994,6 +994,17 @@ browser.runtime.onMessage.addListener(async (message) => {
     return queueControlTransition(() => setSocksAuthProxy(message.config));
   }
 
+  if (message?.type === 'get-proxy-auth-status') {
+    const state = await browser.storage.local.get('torEnabled');
+    const proxy = (await browser.proxy.settings.get({})).value || {};
+    return {
+      hasListener: !!socksAuthListener &&
+        browser.proxy.onRequest.hasListener(socksAuthListener) &&
+        !torAuthSuspended && !torStarting && !state.torEnabled &&
+        proxy.proxyType === 'manual' && proxy.socksVersion === 5
+    };
+  }
+
   if (message?.type === 'set-ads' && typeof message.enabled === 'boolean') {
     await setAdsEnabled(message.enabled);
     return { ok: true, adsEnabled: message.enabled };

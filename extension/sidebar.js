@@ -678,6 +678,7 @@ async function waitFor(check, timeoutMs = 5000, stepMs = 150) {
 async function runControlSelfTest() {
   const checks = [];
   let passed = true;
+  const selfTestStartedAt = Date.now();
 
   const record = (name, ok, detail = '') => {
     checks.push({ name, ok: !!ok, detail });
@@ -886,7 +887,44 @@ async function runControlSelfTest() {
         proxy?.value?.socksVersion === 5
     );
 
-    await browser.proxy.settings.set({ value: initialProxy });
+    let proxyAuthOk = false;
+    let proxyAuthListenerActive = false;
+    let proxyAuthChanged = false;
+    try {
+      const existingAuthBytes = await browser.storage.local.getBytesInUse('socks_auth_profile');
+      if (existingAuthBytes !== 0) throw new Error('Existing auth profile prevents isolated diagnostic.');
+
+      proxyAuthChanged = true;
+      const configured = await browser.runtime.sendMessage({
+        type: 'set-proxy-auth',
+        config: {
+          host: '127.0.0.1',
+          port: 65534,
+          user: 'filum-ci-user',
+          pass: 'filum-ci-test-password'
+        }
+      });
+      const authBytes = await browser.storage.local.getBytesInUse('socks_auth_profile');
+      const authStatus = await browser.runtime.sendMessage({ type: 'get-proxy-auth-status' });
+      proxyAuthListenerActive = authStatus?.hasListener === true;
+      proxyAuthOk = configured?.success === true && authBytes > 0 && proxyAuthListenerActive;
+    } catch (_) {
+      proxyAuthOk = false;
+    } finally {
+      if (proxyAuthChanged) {
+        try {
+          await browser.runtime.sendMessage({
+            type: 'set-network-proxy',
+            config: { mode: 'direct' }
+          });
+        } catch (_) {}
+      }
+      try {
+        await browser.proxy.settings.set({ value: initialProxy });
+      } catch (_) {}
+    }
+    record('proxy-auth-configured', proxyAuthOk,
+      `listener=${proxyAuthListenerActive}`);
 
     const torStartedAt = Date.now();
     let torOn = null;
@@ -1098,6 +1136,30 @@ async function runControlSelfTest() {
       });
     } catch (_) {}
   }
+
+  let loggerOk = false;
+  let logCount = 0;
+  try {
+    const entries = await waitFor(async () => {
+      const stored = await browser.storage.local.get('security_audit_log');
+      const logs = Array.isArray(stored.security_audit_log)
+        ? stored.security_audit_log : [];
+      const recent = logs.filter(event => {
+        const time = Date.parse(event?.timestamp);
+        return Number.isFinite(time) && time >= selfTestStartedAt;
+      });
+      return recent.length ? { logs, recent } : false;
+    }, 10000, 100);
+    logCount = entries.logs.length;
+    const lastEvent = entries.recent[entries.recent.length - 1];
+    loggerOk = !!lastEvent &&
+      ['TOR_ENABLE', 'TOR_DISABLE', 'CACHE_CLEAR', 'MODE_CHANGE'].includes(lastEvent.event_type) &&
+      ['SUCCESS', 'ERROR'].includes(lastEvent.result);
+    if (!Number.isFinite(Date.parse(lastEvent?.timestamp))) loggerOk = false;
+  } catch (_) {
+    loggerOk = false;
+  }
+  record('security-logger-runtime', loggerOk, `count=${logCount}`);
 
   await browser.browserControl.reportControlSelfTest(
     JSON.stringify({ passed, checks })
