@@ -259,14 +259,14 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - name: Checkout Browser project for runtime harness
+        uses: actions/checkout@v4
+
       - name: Download Browser build
         uses: actions/download-artifact@v4
         with:
           name: Browser-Windows-x64
           path: artifact
-
-      - name: Checkout Browser project for runtime harness
-        uses: actions/checkout@v4
 
       - name: Verify incoming checksum and locate Browser
         shell: pwsh
