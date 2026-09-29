@@ -17,7 +17,6 @@ const SOCKS_USER = 'filum-ci-user';
 const SOCKS_PASS = 'filum-ci-test-password';
 const TARGET_HOST = 'filum-runtime.test';
 const TARGET_BODY = 'FILUM_SOCKS_AUTH_RUNTIME_OK';
-let extensionCallId = 0;
 
 function assertRuntimeInputs() {
   assert.ok(PROFILE_PATH && fs.existsSync(PROFILE_PATH), 'Smoke profile path is missing.');
@@ -160,38 +159,14 @@ class MarionetteClient {
   }
 }
 
-function extensionStartScript(body) {
+function extensionAsyncScript(body) {
   return `
+    const finish = arguments[arguments.length - 1];
     const input = arguments[0];
-    const resultKey = arguments[1];
-    const page = window.wrappedJSObject || window;
-    const writeResult = value => {
-      page[resultKey] = page.JSON.stringify(value);
-    };
-    try {
+    (async () => {
       const page = window.wrappedJSObject || window;
-      const candidates = [
-        ['global.browser', () => typeof browser !== 'undefined' ? browser : null],
-        ['page.browser', () => page.browser],
-        ['window.browser', () => window.browser],
-        ['wrappedWindow.browser', () => window.wrappedJSObject?.browser]
-      ];
-      let rawApi = null;
-      const availability = [];
-      for (const [name, read] of candidates) {
-        try {
-          const candidate = read();
-          const ready = Boolean(candidate && candidate.runtime && candidate.storage);
-          availability.push({ name, ready });
-          if (ready) { rawApi = candidate; break; }
-        } catch (_) {
-          availability.push({ name, ready: false });
-        }
-      }
-      if (!rawApi) {
-        writeResult({ error: 'FILUM extension page APIs are unavailable: ' + JSON.stringify(availability) });
-        return true;
-      }
+      const rawApi = typeof browser !== 'undefined' ? browser : page.browser;
+      if (!rawApi || !rawApi.runtime || !rawApi.storage) throw new Error('FILUM extension page APIs are unavailable.');
       const cloneForPage = value => page.JSON.parse(JSON.stringify(value));
       const cloneFromPage = async value => {
         const resolved = await value;
@@ -213,45 +188,14 @@ function extensionStartScript(body) {
           }
         }
       };
-      Promise.resolve((${body})(api, input)).then(
-        value => writeResult({ value }),
-        error => writeResult({ error: String(error && error.message || error) })
-      );
-      return true;
-    } catch (error) {
-      writeResult({ error: String(error && error.message || error) });
-      return true;
-    }
+      return await (${body})(api, input);
+    })().then(value => finish(JSON.stringify({ value })), error =>
+      finish(JSON.stringify({ error: String(error && error.message || error) })));
   `;
 }
 
 async function extensionCall(client, body, input = null, timeoutMs = 30000) {
-  const resultKey = `__filumMarionetteResult${++extensionCallId}`;
-  await client.execute(extensionStartScript(body), [input, resultKey], false, timeoutMs, 'default');
-  const deadline = Date.now() + timeoutMs;
-  let raw;
-  try {
-    while (Date.now() < deadline) {
-      raw = await client.execute(`
-        const page = window.wrappedJSObject || window;
-        const value = page[arguments[0]];
-        if (typeof value !== 'string') return null;
-        delete page[arguments[0]];
-        return value;
-      `, [resultKey], false, Math.min(5000, Math.max(1, deadline - Date.now())), 'system');
-      if (typeof raw === 'string') break;
-      await new Promise(resolve => setTimeout(resolve, 25));
-    }
-  } finally {
-    if (typeof raw !== 'string') {
-      await client.execute(`
-        const page = window.wrappedJSObject || window;
-        delete page[arguments[0]];
-        return true;
-      `, [resultKey], false, 5000, 'system').catch(() => {});
-    }
-  }
-  if (typeof raw !== 'string') throw new Error('Timed out waiting for the extension API result.');
+  const raw = await client.execute(extensionAsyncScript(body), [input], true, timeoutMs, 'system');
   const parsed = JSON.parse(raw);
   if (parsed.error) throw new Error(parsed.error);
   return parsed.value;
@@ -294,26 +238,13 @@ async function waitForExtensionPage(client) {
 
       try {
         const probe = await client.execute(`
-          const candidates = [
-            ['global.browser', () => typeof browser !== 'undefined' ? browser : null],
-            ['window.browser', () => window.browser],
-            ['wrappedWindow.browser', () => window.wrappedJSObject?.browser]
-          ];
-          let api = null;
-          const availability = [];
-          for (const [name, read] of candidates) {
-            try {
-              const candidate = read();
-              const ready = Boolean(candidate && candidate.runtime && candidate.storage);
-              availability.push({ name, ready });
-              if (ready) { api = candidate; break; }
-            } catch (_) {
-              availability.push({ name, ready: false });
-            }
-          }
+          const page = window.wrappedJSObject || window;
+          const api = typeof browser !== 'undefined' ? browser : page.browser;
           return {
             ready: Boolean(api && api.runtime && api.storage),
-            availability
+            globalBrowserType: typeof browser,
+            windowBrowserType: typeof window.browser,
+            wrappedBrowserType: typeof window.wrappedJSObject?.browser
           };
         `, [], false, 30000, 'system');
         if (probe?.ready) return { handle, url };
