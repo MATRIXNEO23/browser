@@ -26,6 +26,7 @@ jobs:
           $cfg = Get-Content ".\build\PROMOTE_TRIGGER" | ConvertFrom-StringData
           if (-not $cfg.source_run) { throw "source_run missing" }
           if (-not $cfg.source_sha) { throw "source_sha missing" }
+          if ($cfg.source_sha -ne "65a27a0347dd03fb42dc460baacbb75371c2a086") { throw "Unexpected release source SHA" }
           "SOURCE_RUN=$($cfg.source_run)" | Out-File $env:GITHUB_ENV -Append
           "SOURCE_SHA=$($cfg.source_sha)" | Out-File $env:GITHUB_ENV -Append
 
@@ -257,7 +258,6 @@ jobs:
           retention-days: 30
 
   release:
-    if: ${{ false }}
     needs: smoke-and-promote
     runs-on: ubuntu-latest
     steps:
@@ -269,6 +269,7 @@ jobs:
           set -euo pipefail
           source build/PROMOTE_TRIGGER
           echo "SOURCE_SHA=$source_sha" >> "$GITHUB_ENV"
+          echo "SOURCE_RUN=$source_run" >> "$GITHUB_ENV"
       - name: Download validated final Browser
         uses: actions/download-artifact@v4
         with:
@@ -281,9 +282,22 @@ jobs:
         run: |
           set -euo pipefail
           SHORT="${SOURCE_SHA:0:7}"
-          TAG="browser-$SHORT"
+          TAG="fork-$SHORT"
+          git fetch --tags origin
+          TAG_COMMIT="$(git rev-parse "refs/tags/$TAG^{commit}")"
+          if [[ "$TAG_COMMIT" != "$SOURCE_SHA" ]]; then
+            echo "Release tag does not point to the validated source commit."
+            exit 1
+          fi
+          RUN_JSON="$(gh run view "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --json headSha,conclusion)"
+          RUN_SHA="$(jq -r .headSha <<<"$RUN_JSON")"
+          RUN_CONCLUSION="$(jq -r .conclusion <<<"$RUN_JSON")"
+          if [[ "$RUN_SHA" != "$SOURCE_SHA" || "$RUN_CONCLUSION" != "success" ]]; then
+            echo "Source workflow run is not a successful run for the release commit."
+            exit 1
+          fi
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" artifact/Browser-Windows-x64.zip artifact/SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$TAG" artifact/Browser-Windows-x64.zip artifact/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title "Browser Windows x64 $SHORT" --notes "Stable Browser Windows x64 build promoted from validated build artifact. Passed checksum, Windows identity, built-in core, bundled Tor and runtime/profile smoke tests."
+            gh release create "$TAG" artifact/Browser-Windows-x64.zip artifact/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title "FILUM Browser v0.5.0-runtime-verified" --notes "Source: $SOURCE_SHA; CI #137 build/smoke plus this Windows artifact promotion smoke passed. Includes Tor lifecycle, Proxy Auth configuration diagnostics, security audit logger, selective RFP, and TURBO cache/tab cleanup. Known coverage limits: no real credentialed SOCKS5 handshake; logger FIFO rotation is VM-tested, not Gecko-runtime-tested. Semantic version tag: v0.5.0-runtime-verified."
           fi
