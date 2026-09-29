@@ -278,3 +278,12 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Il solo conflitto era `distribution/policies.json`. È stata mantenuta la configurazione del branch Gecko verificato da CI #136: homepage `moz-extension://5db2d283-fbda-489c-9f1f-f77a0a674080/newtab.html` e mapping UUID coerente per `resource-controller@matrixneo23.browser`.
 - Verifiche sul merge locale: `python scripts/validate-product.py`, `node --check extension/background.js`, `node --check extension/sidebar.js`, `node scripts/audit-functional.cjs`, parsing JSON della policy, parsing YAML di `.github/workflows/build-windows.yml`, `git diff --check` e scansione dei marcatori di conflitto: PASS. Nessun conflitto residuo; `background.js`, `sidebar.js` e workflow CI sono integrati.
 - Stato: merge pubblicato su `main`. Nessun tag di release creato. Limiti Proxy Auth e FIFO Gecko descritti nella sezione CI #136 precedente restano accettati per la Release e invariati.
+
+## Preparazione Release — 2026-09-29
+
+- Stato `main`: **Stable / Release Candidate** per decisione di Alberto; merge del codice su `f2433d12572daf8fa78b7671b0087ff6dd6ee08c`. Il checkpoint delle note/recovery creerà un nuovo HEAD, che andrà fissato come target della build e del tag.
+- Tag semantico proposto `v0.5.0-runtime-verified`: NON creato. Il manifest estensione resta `0.4.1`; il tag da solo non aggiorna la versione del prodotto.
+- Convenzione esistente in `releases/README.md`: il tag canonico delle release native è `fork-<short commit sha>` (`fork-f2433d1` per la base pre-documentazione). Ricalcolare il tag dal nuovo HEAD dopo il checkpoint. Va deciso se mantenere anche il tag semantico come alias oppure cambiare la convenzione prima del tagging.
+- La CI #136 (`36565342438`) ha testato il commit `91f72243ca8b752ff8eca0702cd4acb477df2a89`, tree `cf33635319df4afa1b6943f29506db8866b99b90`; l'HEAD `main` ha tree `e3a9aabba3f8ac29130e9cf987774b21bf6ee6a1`. Non dichiarare l'HEAD `main` buildato/verificato su Windows finché non passa una nuova build/smoke sul commit esatto scelto per la release.
+- Limiti accettati per la bozza: nessun handshake SOCKS5 reale con credenziali valide/invalidi; FIFO del logger coperta da audit VM ma non da runtime Gecko. Il report di note è in `releases/FILUM-v0.5.0-runtime-verified-DRAFT.md`.
+- Nessun tag o GitHub Release creato. Prossimi prerequisiti prima della pubblicazione: scegliere convenzione tag e target di versione; buildare/testare l'HEAD finale; verificare artifact e `SHA256SUMS.txt`; solo dopo creare il tag annotato e la release.
