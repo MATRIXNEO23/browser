@@ -165,8 +165,25 @@ function extensionAsyncScript(body) {
     const input = arguments[0];
     (async () => {
       const page = window.wrappedJSObject || window;
-      const rawApi = typeof browser !== 'undefined' ? browser : page.browser;
-      if (!rawApi || !rawApi.runtime || !rawApi.storage) throw new Error('FILUM extension page APIs are unavailable.');
+      const candidates = [
+        ['global.browser', () => typeof browser !== 'undefined' ? browser : null],
+        ['window.browser', () => window.browser],
+        ['wrappedWindow.browser', () => window.wrappedJSObject?.browser],
+        ['page.browser', () => page.browser]
+      ];
+      const availability = [];
+      let rawApi = null;
+      for (const [name, read] of candidates) {
+        try {
+          const candidate = read();
+          const ready = Boolean(candidate && candidate.runtime && candidate.storage);
+          availability.push({ name, ready });
+          if (ready) { rawApi = candidate; break; }
+        } catch (_) {
+          availability.push({ name, ready: false });
+        }
+      }
+      if (!rawApi) throw new Error('FILUM extension page APIs are unavailable: ' + JSON.stringify(availability));
       const cloneForPage = value => page.JSON.parse(JSON.stringify(value));
       const cloneFromPage = async value => {
         const resolved = await value;
