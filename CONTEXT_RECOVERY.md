@@ -287,3 +287,23 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - La CI #136 (`36565342438`) ha testato il commit `91f72243ca8b752ff8eca0702cd4acb477df2a89`, tree `cf33635319df4afa1b6943f29506db8866b99b90`; l'HEAD `main` ha tree `e3a9aabba3f8ac29130e9cf987774b21bf6ee6a1`. Non dichiarare l'HEAD `main` buildato/verificato su Windows finché non passa una nuova build/smoke sul commit esatto scelto per la release.
 - Limiti accettati per la bozza: nessun handshake SOCKS5 reale con credenziali valide/invalidi; FIFO del logger coperta da audit VM ma non da runtime Gecko. Il report di note è in `releases/FILUM-v0.5.0-runtime-verified-DRAFT.md`.
 - Nessun tag o GitHub Release creato. Prossimi prerequisiti prima della pubblicazione: scegliere convenzione tag e target di versione; buildare/testare l'HEAD finale; verificare artifact e `SHA256SUMS.txt`; solo dopo creare il tag annotato e la release.
+
+
+## Release v0.5.0-runtime-verified — RELEASED (2026-09-29)
+
+- Stato: **RELEASED v0.5.0-runtime-verified**.
+- Commit baseline verificato e taggato: `65a27a0347dd03fb42dc460baacbb75371c2a086`.
+- Tag canonico: [`fork-65a27a0`](https://github.com/MATRIXNEO23/browser/tree/fork-65a27a0).
+- Tag semantico: [`v0.5.0-runtime-verified`](https://github.com/MATRIXNEO23/browser/tree/v0.5.0-runtime-verified).
+- Verifica tag: entrambi i tag annotati sono pubblicati su GitHub e i rispettivi oggetti tag puntano direttamente al commit baseline indicato sopra.
+- CI di riferimento: [run #137](https://github.com/MATRIXNEO23/browser/actions/runs/36574970232), trigger manuale `workflow_dispatch` su `main`; commit esatto `65a27a0347dd03fb42dc460baacbb75371c2a086`; conclusione **success**. Build Windows e `smoke-windows` PASS. Il job `release` risulta `skipped`: questa milestone è taggata, ma il workflow non ha pubblicato una GitHub Release.
+- Evidenze smoke: bootstrap Tor 100%, egress `IsTor=true`, ripristino proxy dopo Tor; self-test modalità e controlli sidebar PASS, inclusi WebRTC disabilitato e controllo Free RAM; diagnostica Proxy Auth `listener=true`; Security Logger attivo con `count=23`.
+- Limiti di copertura accettati: il controllo Proxy Auth conferma configurazione/listener, ma non un handshake SOCKS5 reale con credenziali valide e invalide. La rotazione FIFO del logger è verificata dall'audit Node/VM, non in Gecko runtime. Il conteggio runtime e lo schema minimo del logger sono stati verificati nel self-test.
+- Avvisi CI non bloccanti: deprecazioni Node.js 20 e warning Node relativi a `punycode`/`url.parse()`. Nessun claim sul fix `WSAEADDRINUSE` è incluso nelle note di release.
+- La sezione “Preparazione Release” precedente è superata da questo stato finale; i limiti di copertura restano parte della documentazione della release.
+
+### Roadmap Futura
+
+- Update System.
+- Android Porting Study.
+- Advanced Fingerprinting Script-Level.
