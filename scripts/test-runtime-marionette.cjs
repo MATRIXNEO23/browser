@@ -137,13 +137,13 @@ class MarionetteClient {
     return response[3];
   }
 
-  async execute(script, args = [], asynchronous = false, timeoutMs = 30000) {
+  async execute(script, args = [], asynchronous = false, timeoutMs = 30000, sandbox = 'default') {
     const command = asynchronous ? 'WebDriver:ExecuteAsyncScript' : 'WebDriver:ExecuteScript';
     const result = await this.command(command, {
       script,
       args,
       newSandbox: true,
-      sandbox: 'default',
+      sandbox,
       line: 0,
       filename: 'filum-runtime-marionette-test'
     }, timeoutMs);
@@ -165,7 +165,7 @@ function extensionAsyncScript(body) {
     const input = arguments[0];
     (async () => {
       const page = window.wrappedJSObject || window;
-      const api = page.browser;
+      const api = typeof browser !== 'undefined' ? browser : page.browser;
       if (!api || !api.runtime || !api.storage) throw new Error('FILUM extension page APIs are unavailable.');
       return await (${body})(api, input);
     })().then(value => finish(JSON.stringify({ value })), error =>
@@ -174,7 +174,7 @@ function extensionAsyncScript(body) {
 }
 
 async function extensionCall(client, body, input = null, timeoutMs = 30000) {
-  const raw = await client.execute(extensionAsyncScript(body), [input], true, timeoutMs);
+  const raw = await client.execute(extensionAsyncScript(body), [input], true, timeoutMs, 'system');
   const parsed = JSON.parse(raw);
   if (parsed.error) throw new Error(parsed.error);
   return parsed.value;
@@ -216,12 +216,18 @@ async function waitForExtensionPage(client) {
       }
 
       try {
-        const ready = await client.execute(`
+        const probe = await client.execute(`
           const page = window.wrappedJSObject || window;
-          return Boolean(page.browser && page.browser.runtime && page.browser.storage);
-        `);
-        if (ready) return { handle, url };
-        observedWindows.set(handle, `${url} (extension APIs unavailable)`);
+          const api = typeof browser !== 'undefined' ? browser : page.browser;
+          return {
+            ready: Boolean(api && api.runtime && api.storage),
+            globalBrowserType: typeof browser,
+            windowBrowserType: typeof window.browser,
+            wrappedBrowserType: typeof window.wrappedJSObject?.browser
+          };
+        `, [], false, 30000, 'system');
+        if (probe?.ready) return { handle, url };
+        observedWindows.set(handle, `${url} (extension APIs unavailable: ${JSON.stringify(probe)})`);
       } catch (error) {
         observedWindows.set(handle, `${url} (API probe failed: ${error.message})`);
       }
