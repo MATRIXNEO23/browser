@@ -265,6 +265,9 @@ jobs:
           name: Browser-Windows-x64
           path: artifact
 
+      - name: Checkout Browser project for runtime harness
+        uses: actions/checkout@v4
+
       - name: Verify incoming checksum and locate Browser
         shell: pwsh
         run: |
@@ -368,11 +371,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path $profile | Out-Null
 
           'user_pref("filum.selftest.enabled", true);' | Set-Content (Join-Path $profile "user.js") -Encoding ascii
+          'user_pref("marionette.port", 0);' | Add-Content (Join-Path $profile "user.js") -Encoding ascii
 
           $args = @(
             "-no-remote",
             "-new-instance",
-            "-profile", $profile
+            "-profile", $profile,
+            "--marionette"
           )
 
           $launcher = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -PassThru
@@ -494,6 +499,41 @@ jobs:
             Write-Host "FILUM core runtime activation passed."
             Write-Host "FILUM native panel loaded and ran the functional control report."
             Write-Host "FILUM sidebar controls functional test passed."
+
+            $activePortFile = Join-Path $profile "MarionetteActivePort"
+            $marionetteDeadline = (Get-Date).AddSeconds(30)
+            while ((Get-Date) -lt $marionetteDeadline -and -not (Test-Path $activePortFile)) {
+              Start-Sleep -Milliseconds 250
+            }
+            if (-not (Test-Path $activePortFile)) {
+              throw "Marionette did not create MarionetteActivePort in the smoke profile."
+            }
+            $marionettePortText = (Get-Content $activePortFile -Raw).Trim()
+            if ($marionettePortText -notmatch '^\d+$') {
+              throw "MarionetteActivePort does not contain a valid TCP port."
+            }
+            $marionettePort = [int]$marionettePortText
+
+            $listener = $null
+            $listenerDeadline = (Get-Date).AddSeconds(15)
+            while ((Get-Date) -lt $listenerDeadline -and -not $listener) {
+              $listener = Get-NetTCPConnection -State Listen -LocalPort $marionettePort -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+              if (-not $listener) { Start-Sleep -Milliseconds 250 }
+            }
+            if (-not $listener) { throw "Marionette TCP port is not listening." }
+
+            $owner = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)"
+            if (-not $owner -or $owner.Name -ine "browser.exe" -or -not $owner.ExecutablePath -or
+                [System.IO.Path]::GetFullPath($owner.ExecutablePath) -ne [System.IO.Path]::GetFullPath($env:BROWSER_EXE) -or
+                $owner.CommandLine -notlike "*$profile*") {
+              throw "Marionette port is not owned by the Browser smoke process for this profile."
+            }
+
+            $env:MARIONETTE_PORT = "$marionettePort"
+            $env:BROWSER_PROFILE_PATH = $profile
+            node scripts/test-runtime-marionette.cjs
+            if ($LASTEXITCODE -ne 0) { throw "Marionette runtime integration tests failed." }
           }
           finally {
             Get-CimInstance Win32_Process | Where-Object {

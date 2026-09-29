@@ -187,3 +187,15 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Copertura: eventi e risultati fuori whitelist scartati; modalità e metadata non validi omessi; 205 scritture serializzate con FIFO cap a 200; errore storage su B tra A riuscito e C riuscito senza bloccare la coda; assert statico che nessun trigger attenda `logSecurityEvent`.
 - Nessun file runtime modificato. I test non verificano persistenza Gecko dopo riavvio né permessi/policy runtime.
 - La verifica runtime Windows dello Step 4 resta pendente, in attesa del trigger CI manuale. Nessuna modifica a `main` o al workflow.
+
+
+## Integrazione test runtime Marionette — in preparazione (2026-09-29)
+
+- Base analizzata: commit FILUM `47690f975c3fc0b248f030a0a71fe9458ece50d7`, isolato nel branch `ci/runtime-marionette-47690`.
+- Il workflow `.github/workflows/build-windows.yml` scarica l'artefatto e termina il browser nello stesso step PowerShell; perciò il test Marionette è eseguito nello step smoke esistente, prima del `finally` che chiude `browser.exe`. Il job fa checkout del commit del workflow per rendere disponibile l'harness.
+- Lo smoke avvia Marionette su porta dinamica (`marionette.port=0`, `--marionette`), legge `MarionetteActivePort` dal profilo temporaneo e verifica che la porta loopback sia posseduta dall'eseguibile browser associato a quel profilo prima di passarla all'harness.
+- `scripts/test-runtime-marionette.cjs` implementa il framing Marionette TCP e usa la pagina `about:newtab` FILUM per inviare messaggi alle API reali dell'estensione. Verifica SOCKS5 con server SOCKS e HTTP di test locali: credenziali valide devono raggiungere il server, quelle errate devono essere respinte. Ripristina il proxy diretto.
+- Il test logger genera 201 eventi tramite transizioni NORMAL/TURBO, legge `security_audit_log` dalla storage reale del profilo, controlla schema/assenza credenziali e confronta la sequenza per verificare che restino gli ultimi 200 eventi in ordine FIFO.
+- Nessun file runtime dell'estensione è modificato. Credenziali di test sintetiche; nessuna credenziale viene stampata. Nessuna dipendenza npm aggiunta.
+- Verifiche locali finora: `node --check scripts/test-runtime-marionette.cjs`, `node --check extension/background.js`, `node scripts/audit-functional.cjs`, parsing YAML e `git diff --check` PASS. L'harness non è stato eseguito contro un Browser Windows/Gecko locale; l'esito runtime è pendente CI.
+- Prossimo passo: completare review del protocollo/harness e dello smoke PowerShell, poi registrare un checkpoint e attendere conferma esplicita prima di pubblicare o avviare una CI remota.
