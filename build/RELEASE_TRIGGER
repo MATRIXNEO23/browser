@@ -1,5 +1,5 @@
 release_request: final
-source_head_before_trigger: 9513f1d7d20e2d687da8ee44608313bac1445162
+source_head_before_trigger: 03b92653f168977335e45c325c4c7595b92069e0
 product_gate: required
 webextension_panel_context: required
 all_sidebar_controls_selftest: required
@@ -9,4 +9,4 @@ compact_sidebar: required
 approved_cyber_background: unchanged
 windows_runtime_smoke: required
 stable_release_only: false
-rerun_reason: rfp_tor_state_coordination_runtime_verification
+rerun_reason: tor_bundle_15_0_24_fix_ci_139

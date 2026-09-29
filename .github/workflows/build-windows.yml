@@ -149,9 +149,9 @@ jobs:
           fi
 
           # Bundle the official stable Tor Expert Bundle for .onion/TOR mode.
-          TOR_VERSION="15.0.23"
+          TOR_VERSION="15.0.24"
           TOR_FILE="tor-expert-bundle-windows-x86_64-$TOR_VERSION.tar.gz"
-          TOR_SHA256="231dad6b9cb401a54c260db7046965ef04e4f72ff071b140d423fb5da281ab1e"
+          TOR_SHA256="e9dc6ccc93cd6afa507193f4de284d6424233ff5102155cd2c94b259e8a22b65"
           TOR_URL="https://dist.torproject.org/torbrowser/$TOR_VERSION/$TOR_FILE"
 
           curl --fail --location --retry 3 --retry-delay 2 "$TOR_URL" -o "/tmp/$TOR_FILE"
