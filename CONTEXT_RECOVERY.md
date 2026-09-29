@@ -253,11 +253,11 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 
 ## Diagnostica interna self-test — 2026-09-29
 
-- Branch attivo: `ci/runtime-marionette-47690`; HEAD prima di questo aggiornamento: `b6a0bcfe72401086a1cc90526829184df2c30761`.
+- Branch attivo: `ci/runtime-marionette-47690`; commit diagnostica checkpointato: `91f72243ca8b752ff8eca0702cd4acb477df2a89` (parent remoto `dd5db0c7e064f6bfb5a099d317f328d0fc67f919`).
 - Integrato nel self-test esistente un controllo Proxy Auth sanitizzato: usa solo credenziali sintetiche, verifica i byte associati alla chiave storage senza recuperarne i valori e chiede al background se il listener `proxy.onRequest` risulta registrato, attivo e non sospeso da Tor. Se trova già un profilo auth, non lo sovrascrive. Il controllo verifica configurazione/registrazione del listener, NON un handshake SOCKS5 riuscito con server remoto.
 - Integrato il controllo Logger: attende un evento prodotto durante il self-test, controlla timestamp, event type ed esito, e include nel report solo booleani/conteggio. Non serializza né stampa eventi o credenziali.
 - Aggiunto in `background.js` il messaggio diagnostico `get-proxy-auth-status`, che restituisce solo `hasListener`.
 - Rimosso dal workflow Windows l'avvio del server Marionette e la chiamata al bridge che falliva in CI #135. I controlli aggiunti entrano nel report `filum.selftest.controls` esistente e il gate già presente legge `passed`/`checks`.
 - Verifiche locali: `node --check` su `background.js` e `sidebar.js`, `node scripts/audit-functional.cjs`, `python scripts/validate-product.py`, parsing YAML del workflow e `git diff --check` PASS.
-- Stato: modifiche locali non ancora checkpointate; CI #136 non avviata. Proxy Auth è verificato qui a livello di profilo configurato e listener registrato; autenticazione effettiva con credenziali valide/non valide resta da confermare con handshake SOCKS5 runtime dedicato. Tor e ripristino proxy devono essere riconfermati nello smoke Windows.
-- Prossimo passo: checkpointare solo `ci/runtime-marionette-47690`, quindi lanciare la CI su questo branch e leggere il report self-test per `proxy-auth-configured` e `security-logger-runtime`, insieme agli esiti Tor.
+- Stato: CI #136 (`36565342438`) avviata manualmente sul branch corretto e commit `91f72243ca8b752ff8eca0702cd4acb477df2a89`; al momento del checkpoint era in coda. Proxy Auth è verificato qui a livello di profilo configurato e listener registrato, NON con handshake SOCKS5 reale. Esito runtime Windows/Gecko ancora pendente.
+- Prossimo passo: seguire CI #136 e leggere il report self-test per `proxy-auth-configured` e `security-logger-runtime`, insieme agli esiti Tor e ripristino proxy. Non lanciare run da `main` e non dichiarare autenticazione SOCKS5 end-to-end verificata dal solo test di configurazione.
