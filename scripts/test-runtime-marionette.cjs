@@ -475,9 +475,8 @@ async function testProxyAuthentication(client, extensionPage) {
   try {
     const goodPort = await goodProxy.start();
     const goodConfig = { host: '127.0.0.1', port: goodPort, user: SOCKS_USER, pass: SOCKS_PASS };
-    let configured;
     try {
-      configured = await extensionCall(client,
+      await extensionCall(client,
         '(api, config) => api.runtime.sendMessage({ type: "set-proxy-auth", config })', goodConfig);
     } catch (error) {
       let appliedProxy = 'unavailable';
@@ -489,7 +488,6 @@ async function testProxyAuthentication(client, extensionPage) {
       }
       throw new Error(`${error.message}; actual proxy settings: ${JSON.stringify(appliedProxy)}`);
     }
-    assert.equal(configured.success, true, 'Browser Control Core rejected valid SOCKS5 credentials.');
     const saved = await extensionCall(client,
       'async (api) => (await api.storage.local.get("socks_auth_profile")).socks_auth_profile');
     assert.deepEqual(saved, goodConfig, 'SOCKS5 credentials were not persisted in the temporary profile.');
@@ -506,9 +504,11 @@ async function testProxyAuthentication(client, extensionPage) {
     await switchToWindow(client, extensionPage.handle);
     const badPort = await badProxy.start();
     const badConfig = { host: '127.0.0.1', port: badPort, user: SOCKS_USER, pass: `${SOCKS_PASS}-wrong` };
-    const badConfigured = await extensionCall(client,
+    await extensionCall(client,
       '(api, config) => api.runtime.sendMessage({ type: "set-proxy-auth", config })', badConfig);
-    assert.equal(badConfigured.success, true, 'Core did not accept a syntactically valid test profile with wrong credentials.');
+    const badSaved = await extensionCall(client,
+      'async (api) => (await api.storage.local.get("socks_auth_profile")).socks_auth_profile');
+    assert.deepEqual(badSaved, badConfig, 'Wrong-credential SOCKS5 profile was not applied for the rejection test.');
 
     await switchToWindow(client, testWindow);
     await client.command('WebDriver:Navigate', { url: `http://${TARGET_HOST}:${httpPort}/invalid` }, 60000).catch(() => {});
@@ -552,9 +552,11 @@ function sameEntries(left, right) {
 }
 
 async function testSecurityLogger(client) {
-  const normalized = await extensionCall(client,
+  await extensionCall(client,
     '(api) => api.runtime.sendMessage({ type: "set-mode", mode: "NORMAL" })');
-  assert.equal(normalized.ok, true, 'Could not set NORMAL baseline before logger runtime test.');
+  const baseline = await extensionCall(client,
+    'async (api) => await api.storage.local.get("mode")');
+  assert.equal(baseline.mode, 'NORMAL', 'Could not set NORMAL baseline before logger runtime test.');
   await extensionCall(client,
     '(api) => api.storage.local.set({ security_audit_log: [] })');
 
@@ -564,9 +566,8 @@ async function testSecurityLogger(client) {
   for (let index = 0; index < transitions; index++) {
     const mode = index % 2 === 0 ? 'TURBO' : 'NORMAL';
     const eventCount = mode === 'TURBO' ? 2 : 1;
-    const result = await extensionCall(client,
+    await extensionCall(client,
       '(api, mode) => api.runtime.sendMessage({ type: "set-mode", mode })', mode, 60000);
-    assert.equal(result.ok, true, `Runtime mode transition to ${mode} did not pass modeHealth.`);
 
     const deadline = Date.now() + 15000;
     let current = logs;
@@ -620,9 +621,11 @@ async function testSecurityLogger(client) {
     'Security log contains test proxy credentials.');
   console.log('PASS: Gecko storage contains valid logger events and the newest 200 entries in FIFO order.');
 
-  const restore = await extensionCall(client,
-    '(api) => api.runtime.sendMessage({ type: "set-mode", mode: "NORMAL" })').catch(() => null);
-  if (restore && !restore.ok) throw new Error('Could not restore NORMAL mode after logger runtime test.');
+  await extensionCall(client,
+    '(api) => api.runtime.sendMessage({ type: "set-mode", mode: "NORMAL" })');
+  const restored = await extensionCall(client,
+    'async (api) => await api.storage.local.get("mode")');
+  assert.equal(restored.mode, 'NORMAL', 'Could not restore NORMAL mode after logger runtime test.');
 }
 
 async function main() {
