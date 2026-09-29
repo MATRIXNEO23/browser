@@ -180,25 +180,31 @@ async function extensionCall(client, body, input = null, timeoutMs = 30000) {
   return parsed.value;
 }
 
+async function switchToWindow(client, handle) {
+  await client.command('WebDriver:SwitchToWindow', { handle });
+}
+
 async function waitForExtensionPage(client) {
-  const state = await client.execute(`
-    const finish = arguments[arguments.length - 1];
-    const end = Date.now() + 15000;
-    const check = () => {
-      const page = window.wrappedJSObject || window;
-      if (location.protocol === 'moz-extension:' && page.browser && page.browser.runtime) {
-        finish(JSON.stringify({ url: location.href, ready: true }));
-      } else if (Date.now() >= end) {
-        finish(JSON.stringify({ error: 'FILUM extension new-tab page did not become ready.' }));
-      } else {
-        setTimeout(check, 50);
-      }
-    };
-    check();
-  `, [], true, 20000);
-  const parsed = JSON.parse(state);
-  if (parsed.error) throw new Error(parsed.error);
-  return parsed.url;
+  const deadline = Date.now() + 15000;
+  let seenWindowCount = 0;
+  while (Date.now() < deadline) {
+    const handles = await client.command('WebDriver:GetWindowHandles');
+    seenWindowCount = handles.length;
+    for (const handle of handles) {
+      try {
+        await switchToWindow(client, handle);
+        const url = await client.command('WebDriver:GetCurrentURL');
+        if (!url.startsWith('moz-extension:')) continue;
+        const ready = await client.execute(`
+          const page = window.wrappedJSObject || window;
+          return Boolean(page.browser && page.browser.runtime && page.browser.storage);
+        `);
+        if (ready) return { handle, url };
+      } catch (_) {}
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error(`FILUM extension page with browser APIs was not found in ${seenWindowCount} WebDriver window(s).`);
 }
 
 function listen(server) {
@@ -332,7 +338,7 @@ class Socks5TestServer {
   }
 }
 
-async function testProxyAuthentication(client, extensionUrl) {
+async function testProxyAuthentication(client, extensionPage) {
   let httpRequests = 0;
   const httpServer = http.createServer((request, response) => {
     httpRequests++;
@@ -343,6 +349,7 @@ async function testProxyAuthentication(client, extensionUrl) {
   const goodProxy = new Socks5TestServer(httpPort);
   const badProxy = new Socks5TestServer(httpPort);
   let extensionRestored = false;
+  let testWindow = null;
 
   try {
     const goodPort = await goodProxy.start();
@@ -354,6 +361,8 @@ async function testProxyAuthentication(client, extensionUrl) {
       'async (api) => (await api.storage.local.get("socks_auth_profile")).socks_auth_profile');
     assert.deepEqual(saved, goodConfig, 'SOCKS5 credentials were not persisted in the temporary profile.');
 
+    const createdWindow = await client.command('WebDriver:NewWindow', { type: 'tab' });
+    testWindow = createdWindow.handle;
     await client.command('WebDriver:Navigate', { url: `http://${TARGET_HOST}:${httpPort}/valid` }, 60000);
     const validBody = await client.execute('return document.body && document.body.innerText;');
     assert.ok(String(validBody).includes(TARGET_BODY), 'Valid SOCKS5 credentials did not reach the local test endpoint.');
@@ -361,14 +370,14 @@ async function testProxyAuthentication(client, extensionUrl) {
     assert.ok(httpRequests > 0, 'The authenticated SOCKS5 tunnel did not reach the local endpoint.');
     const validRequestCount = httpRequests;
 
-    await client.command('WebDriver:Navigate', { url: extensionUrl }, 30000);
-    await waitForExtensionPage(client);
+    await switchToWindow(client, extensionPage.handle);
     const badPort = await badProxy.start();
     const badConfig = { host: '127.0.0.1', port: badPort, user: SOCKS_USER, pass: `${SOCKS_PASS}-wrong` };
     const badConfigured = await extensionCall(client,
       '(api, config) => api.runtime.sendMessage({ type: "set-proxy-auth", config })', badConfig);
     assert.equal(badConfigured.success, true, 'Core did not accept a syntactically valid test profile with wrong credentials.');
 
+    await switchToWindow(client, testWindow);
     await client.command('WebDriver:Navigate', { url: `http://${TARGET_HOST}:${httpPort}/invalid` }, 60000).catch(() => {});
     const failureDeadline = Date.now() + 10000;
     while (Date.now() < failureDeadline && badProxy.stats.rejectedAuth === 0) {
@@ -378,15 +387,13 @@ async function testProxyAuthentication(client, extensionUrl) {
     assert.equal(badProxy.stats.httpRequests, 0, 'Invalid SOCKS5 credentials opened an HTTP tunnel.');
     assert.equal(httpRequests, validRequestCount, 'The invalid credential request reached the HTTP test endpoint.');
 
-    await client.command('WebDriver:Navigate', { url: extensionUrl }, 30000);
-    await waitForExtensionPage(client);
+    await switchToWindow(client, extensionPage.handle);
     extensionRestored = true;
     console.log('PASS: SOCKS5 auth accepted valid credentials and rejected invalid credentials.');
   } finally {
     if (!extensionRestored) {
       try {
-        await client.command('WebDriver:Navigate', { url: extensionUrl }, 30000);
-        await waitForExtensionPage(client);
+        await switchToWindow(client, extensionPage.handle);
         extensionRestored = true;
       } catch (_) {}
     }
@@ -394,6 +401,11 @@ async function testProxyAuthentication(client, extensionUrl) {
       await extensionCall(client,
         '(api) => api.runtime.sendMessage({ type: "set-network-proxy", config: { mode: "direct" } })')
         .catch(() => {});
+    }
+    if (testWindow) {
+      await switchToWindow(client, testWindow).catch(() => {});
+      await client.command('WebDriver:CloseWindow').catch(() => {});
+      await switchToWindow(client, extensionPage.handle).catch(() => {});
     }
     await goodProxy.stop();
     await badProxy.stop();
@@ -489,10 +501,9 @@ async function main() {
       capabilities: { alwaysMatch: { pageLoadStrategy: 'eager' }, firstMatch: [{}] }
     });
     await client.command('WebDriver:SetTimeouts', { script: 30000, pageLoad: 60000, implicit: 0 });
-    await client.command('WebDriver:Navigate', { url: 'about:newtab' }, 30000);
-    const extensionUrl = await waitForExtensionPage(client);
+    const extensionPage = await waitForExtensionPage(client);
     console.log('Marionette connected to the temporary FILUM profile.');
-    await testProxyAuthentication(client, extensionUrl);
+    await testProxyAuthentication(client, extensionPage);
     await testSecurityLogger(client);
     console.log('Runtime integration tests completed successfully.');
   } finally {
