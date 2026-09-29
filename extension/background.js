@@ -76,9 +76,12 @@ function hasTorProxy(proxy) {
 function matchesRestoredProxy(actual, expected) {
   if (actual?.proxyType !== expected?.proxyType) return false;
   if (expected.proxyType !== 'manual') return true;
-  return ['socks', 'socksVersion', 'proxyDNS', 'http', 'httpPort',
-    'ssl', 'sslPort', 'ftp', 'ftpPort', 'passthrough'].every(key =>
-    (actual[key] ?? null) === (expected[key] ?? null));
+  const requiredKeys = ['socks', 'socksVersion', 'proxyDNS'];
+  const optionalKeys = ['http', 'httpPort', 'ssl', 'sslPort', 'ftp', 'ftpPort', 'passthrough'];
+  const normalizeOptional = value => value === undefined || value === null || value === '' ? null : value;
+  // Gecko may omit unused proxy fields or return them as ""; treat those forms as equivalent.
+  return requiredKeys.every(key => actual[key] === expected[key]) &&
+    optionalKeys.every(key => normalizeOptional(actual[key]) === normalizeOptional(expected[key]));
 }
 
 async function restoreTorNetwork(proxy, level, uri) {
