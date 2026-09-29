@@ -379,8 +379,20 @@ async function testProxyAuthentication(client, extensionPage) {
   try {
     const goodPort = await goodProxy.start();
     const goodConfig = { host: '127.0.0.1', port: goodPort, user: SOCKS_USER, pass: SOCKS_PASS };
-    const configured = await extensionCall(client,
-      '(api, config) => api.runtime.sendMessage({ type: "set-proxy-auth", config })', goodConfig);
+    let configured;
+    try {
+      configured = await extensionCall(client,
+        '(api, config) => api.runtime.sendMessage({ type: "set-proxy-auth", config })', goodConfig);
+    } catch (error) {
+      let appliedProxy = 'unavailable';
+      try {
+        appliedProxy = await extensionCall(client,
+          'async (api) => (await api.proxy.settings.get({})).value');
+      } catch (inspectionError) {
+        appliedProxy = `inspection failed: ${inspectionError.message}`;
+      }
+      throw new Error(`${error.message}; actual proxy settings: ${JSON.stringify(appliedProxy)}`);
+    }
     assert.equal(configured.success, true, 'Browser Control Core rejected valid SOCKS5 credentials.');
     const saved = await extensionCall(client,
       'async (api) => (await api.storage.local.get("socks_auth_profile")).socks_auth_profile');
@@ -528,8 +540,19 @@ async function main() {
     await client.command('WebDriver:SetTimeouts', { script: 30000, pageLoad: 60000, implicit: 0 });
     const extensionPage = await waitForExtensionPage(client);
     console.log('Marionette connected to the temporary FILUM profile.');
-    await testProxyAuthentication(client, extensionPage);
-    await testSecurityLogger(client);
+    const failures = [];
+    for (const [name, test] of [
+      ['Proxy authentication', () => testProxyAuthentication(client, extensionPage)],
+      ['Security logger', () => testSecurityLogger(client)]
+    ]) {
+      try {
+        await test();
+      } catch (error) {
+        failures.push(`${name}: ${error.message}`);
+        console.error(`FAIL: ${name}: ${error.message}`);
+      }
+    }
+    if (failures.length) throw new Error(failures.join(' | '));
     console.log('Runtime integration tests completed successfully.');
   } finally {
     await client.close();
