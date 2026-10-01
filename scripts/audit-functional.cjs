@@ -5,11 +5,47 @@ const vm = require('node:vm');
 const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
+const sidebarSource = fs.readFileSync(path.join(__dirname, '../extension/sidebar.js'), 'utf8');
+const bridgeSource = fs.readFileSync(path.join(__dirname, '../extension/experiment-apis/browserControl.js'), 'utf8');
+const bridgeSchema = JSON.parse(fs.readFileSync(
+  path.join(__dirname, '../extension/experiment-apis/browserControl.json'), 'utf8'));
 function section(start, end) {
   return source.slice(source.indexOf(start), source.indexOf(end));
 }
 
 async function main() {
+  const bridgeFunctions = bridgeSchema[0].functions.map(item => item.name);
+  assert.ok(bridgeFunctions.includes('applyGhostHardening'), 'privileged bridge must expose GHOST hardening');
+  const hardeningStart = bridgeSource.indexOf('const applyGhostHardening = isActive =>');
+  const hardeningEnd = bridgeSource.indexOf('\n\n    return {\n      browserControl:', hardeningStart);
+  const hardeningCode = bridgeSource.slice(hardeningStart, hardeningEnd);
+  const activationOrder = [
+    'setInt("network.cookie.cookieBehavior", 1)',
+    'setBool("privacy.firstparty.isolate", true)',
+    'setBool("javascript.options.wasm", false)',
+    'setBool("network.http.http3.enable", false)',
+    'setBool("network.http.altsvc.enabled", false)'
+  ];
+  let lastActivationIndex = -1;
+  for (const expression of activationOrder) {
+    const index = hardeningCode.indexOf(expression);
+    assert.ok(index > lastActivationIndex, `GHOST hardening order must include ${expression}`);
+    lastActivationIndex = index;
+  }
+  assert.match(bridgeSource, /restoreGhostHardeningSnapshot\(snapshot\)/,
+    'GHOST hardening must rollback the complete preference snapshot after activation failure');
+  assert.match(bridgeSource, /GHOST_HARDENING_SNAPSHOT_PREF/,
+    'GHOST hardening snapshot must survive browser restarts');
+  for (const check of [
+    'ghost-hardening-active', 'tor-bootstrap-with-ghost-fpi',
+    'tor-normal-restores-ghost-hardening', 'ghost-exit-restores-native-prefs'
+  ]) {
+    assert.ok(sidebarSource.includes(`'${check}'`), `Windows runtime self-test must include ${check}`);
+  }
+  assert.ok(sidebarSource.indexOf("await selectMode('GHOST');") <
+    sidebarSource.indexOf('torButton.click();', sidebarSource.indexOf('async function runControlSelfTest')),
+  'Windows runtime self-test must enter GHOST before bootstrapping Tor');
+
   const calls = [];
   const data = { ghostSession: { startedAt: 100, hosts: ['example.org'] } };
   let failCleanup = true;
@@ -218,6 +254,7 @@ async function main() {
   const modePrivacySetting = { async set() {} };
   const modeFingerprintWrites = [];
   const modeWebRtcWrites = [];
+  const ghostHardeningWrites = [];
   browser.privacy = {
     websites: {
       trackingProtectionMode: modePrivacySetting, cookieConfig: modePrivacySetting,
@@ -254,6 +291,10 @@ async function main() {
   let failMode = true;
   browser.browserControl.applyMode = async mode => {
     if (mode === 'PRIVATE' && failMode) throw new Error('mode pref failed');
+  };
+  browser.browserControl.applyGhostHardening = async active => {
+    ghostHardeningWrites.push(active);
+    return { active };
   };
   context.MODE_LIMITS = { NORMAL: 3, PRIVATE: 3 };
   context.queueControlTransition = action => action();
@@ -340,12 +381,28 @@ async function main() {
 
   browser.privacy.network.peerConnectionEnabled.set = async () => {};
   browser.browserControl.applyMode = async () => {};
+  ghostHardeningWrites.length = 0;
   data.mode = 'GHOST';
   data.ghostSession = { startedAt: 101, hosts: ['example.org'] };
   const ghostExit = await vm.runInContext("handleMode({type:'set-mode',mode:'NORMAL'})", context);
   assert.equal(data.mode, 'NORMAL', 'GHOST exit must complete on Firefox');
   assert.equal(data.ghostSession, undefined, 'successful cleanup must close GHOST session');
   assert.equal(ghostExit.mode, 'NORMAL');
+  assert.deepEqual(ghostHardeningWrites, [false], 'GHOST exit must restore hardening before cleanup');
+
+  ghostHardeningWrites.length = 0;
+  data.mode = 'TURBO';
+  data.torEnabled = true;
+  await vm.runInContext("handleMode({type:'set-mode',mode:'TURBO'})", context);
+  assert.deepEqual(ghostHardeningWrites, [false],
+    'Tor in NORMAL/TURBO must not enable GHOST-only hardening');
+  data.torEnabled = false;
+
+  ghostHardeningWrites.length = 0;
+  context.MODE_LIMITS.GHOST = 3;
+  context.beginGhostSession = async () => { data.ghostSession = { startedAt: 300, hosts: [] }; };
+  await vm.runInContext("handleMode({type:'set-mode',mode:'GHOST'})", context);
+  assert.deepEqual(ghostHardeningWrites, [true], 'entering GHOST must activate hardening');
 
   data.mode = 'GHOST';
   data.ghostSession = { startedAt: 101, hosts: ['example.org'] };

@@ -409,7 +409,7 @@ async function applyRuntimePrivacy(mode) {
   if (mode === 'GHOST') {
     await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
     await safeSet(browser.privacy.websites.cookieConfig, {
-      behavior: 'reject_trackers_and_partition_foreign'
+      behavior: 'reject_third_party'
     });
     await updateRFPState(mode);
     await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
@@ -464,7 +464,15 @@ async function getModeHealth(mode, torEnabled) {
     if (fingerprint !== undefined) expect('Fingerprint', fingerprint, expectedRFP);
     if (tracking !== undefined) expect('Protezione tracciamento', tracking, 'always');
     if (cookies !== undefined) {
-      expect('Protezione cookie', cookies?.behavior, 'reject_trackers_and_partition_foreign');
+      expect('Protezione cookie', cookies?.behavior,
+        mode === 'GHOST' ? 'reject_third_party' : 'reject_trackers_and_partition_foreign');
+    }
+    if (mode === 'GHOST') {
+      expect('Cookie behavior hardening', prefs.ghostCookieBehavior, 1);
+      expect('FPI', prefs.ghostFpi, true);
+      expect('WASM', prefs.ghostWasm, false);
+      expect('HTTP/3', prefs.ghostHttp3, false);
+      expect('Alt-Svc', prefs.ghostAltSvc, false);
     }
     if (webRtc !== undefined) expect('WebRTC', webRtc, false);
     if (referrers !== undefined) expect('Referrer', referrers, mode !== 'GHOST');
@@ -858,6 +866,13 @@ async function initialize() {
   try { await applyDarkTheme(); }
   catch (error) { console.warn('Unable to apply browser theme', error); }
   const mode = await getMode();
+  // Recover an interrupted prior GHOST session before applying the selected mode's cookie policy.
+  if (mode !== 'GHOST' && browser.browserControl?.applyGhostHardening) {
+    await browser.browserControl.applyGhostHardening(false);
+  }
+  if (mode === 'GHOST' && browser.browserControl?.applyGhostHardening) {
+    await browser.browserControl.applyGhostHardening(true);
+  }
   await applyRuntimePrivacy(mode);
   // A failed Tor restore keeps ownership recorded. Never re-enable WebRTC in that state.
   if ((await browser.storage.local.get('torEnabled')).torEnabled) {
@@ -932,12 +947,18 @@ browser.runtime.onMessage.addListener(async (message) => {
     return queueControlTransition(async () => {
       const previousMode = await getMode();
 
+      if (message.mode !== 'GHOST' && browser.browserControl?.applyGhostHardening) {
+        await browser.browserControl.applyGhostHardening(false);
+      }
       if (previousMode === 'GHOST' && message.mode !== 'GHOST') {
         await endGhostSession();
       }
       try {
         if (message.mode === 'GHOST' && previousMode !== 'GHOST') {
           await beginGhostSession();
+        }
+        if (message.mode === 'GHOST' && browser.browserControl?.applyGhostHardening) {
+          await browser.browserControl.applyGhostHardening(true);
         }
         await applyRuntimePrivacy(message.mode);
         if ((await browser.storage.local.get('torEnabled')).torEnabled) {
@@ -976,7 +997,13 @@ browser.runtime.onMessage.addListener(async (message) => {
             await browser.storage.local.set({ ghostSessionRestartedAt: Date.now() }).catch(() => {});
           }
         }
+        if (previousMode !== 'GHOST' && browser.browserControl?.applyGhostHardening) {
+          await browser.browserControl.applyGhostHardening(false).catch(() => {});
+        }
         await applyRuntimePrivacy(previousMode).catch(() => {});
+        if (previousMode === 'GHOST' && browser.browserControl?.applyGhostHardening) {
+          await browser.browserControl.applyGhostHardening(true).catch(() => {});
+        }
         if ((await browser.storage.local.get('torEnabled')).torEnabled) {
           await browser.privacy.network.peerConnectionEnabled.set({ value: false }).catch(() => {});
         }

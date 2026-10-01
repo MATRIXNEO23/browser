@@ -14,6 +14,14 @@ const { AddonManager } = ChromeUtils.importESModule(
 
 const Ci = Components.interfaces;
 const TOR_BOOTSTRAP_TIMEOUT_MS = 180000;
+const GHOST_HARDENING_SNAPSHOT_PREF = "filum.ghostHardening.snapshot";
+const GHOST_HARDENING_PREFS = {
+  "network.cookie.cookieBehavior": { type: "int", fallback: 5 },
+  "privacy.firstparty.isolate": { type: "bool", fallback: false },
+  "javascript.options.wasm": { type: "bool", fallback: true },
+  "network.http.http3.enable": { type: "bool", fallback: true },
+  "network.http.altsvc.enabled": { type: "bool", fallback: true }
+};
 let torProcess = null;
 let torWaitPromise = null;
 let torBootstrapped = false;
@@ -257,6 +265,87 @@ this.browserControl = class extends ExtensionAPI {
   getAPI() {
     const setBool = (name, value) => Services.prefs.setBoolPref(name, value);
     const setInt = (name, value) => Services.prefs.setIntPref(name, value);
+    const readGhostHardeningSnapshot = () => {
+      if (!Services.prefs.prefHasUserValue(GHOST_HARDENING_SNAPSHOT_PREF)) return null;
+      try {
+        const snapshot = JSON.parse(Services.prefs.getStringPref(GHOST_HARDENING_SNAPSHOT_PREF));
+        return snapshot && typeof snapshot === "object" ? snapshot : null;
+      } catch (_) {
+        throw new Error("GHOST hardening snapshot is invalid; preferences were left unchanged.");
+      }
+    };
+    const captureGhostHardeningSnapshot = () => Object.fromEntries(
+      Object.entries(GHOST_HARDENING_PREFS).map(([name, definition]) => {
+        const hasUserValue = Services.prefs.prefHasUserValue(name);
+        const value = definition.type === "int"
+          ? Services.prefs.getIntPref(name, definition.fallback)
+          : Services.prefs.getBoolPref(name, definition.fallback);
+        return [name, { hasUserValue, value }];
+      })
+    );
+    const writeGhostHardeningValue = (name, entry) => {
+      const definition = GHOST_HARDENING_PREFS[name];
+      if (!definition || !entry) throw new Error(`Invalid GHOST hardening snapshot entry: ${name}`);
+      if (!entry.hasUserValue) {
+        if (Services.prefs.prefHasUserValue(name)) Services.prefs.clearUserPref(name);
+      } else if (definition.type === "int") {
+        Services.prefs.setIntPref(name, entry.value);
+      } else {
+        Services.prefs.setBoolPref(name, entry.value);
+      }
+    };
+    const restoreGhostHardeningSnapshot = snapshot => {
+      const errors = [];
+      // Drop FPI before restoring the cookie policy, then restore the remaining prefs.
+      for (const name of [
+        "privacy.firstparty.isolate",
+        "network.cookie.cookieBehavior",
+        "javascript.options.wasm",
+        "network.http.http3.enable",
+        "network.http.altsvc.enabled"
+      ]) {
+        try { writeGhostHardeningValue(name, snapshot[name]); }
+        catch (error) { errors.push(`${name}: ${error?.message || error}`); }
+      }
+      if (errors.length) throw new Error(`GHOST hardening rollback incomplete: ${errors.join("; ")}`);
+    };
+    const applyGhostHardening = isActive => {
+      if (typeof isActive !== "boolean") throw new TypeError("isActive must be boolean");
+      const existingSnapshot = readGhostHardeningSnapshot();
+      if (!isActive) {
+        if (!existingSnapshot) return { active: false, restored: false };
+        restoreGhostHardeningSnapshot(existingSnapshot);
+        Services.prefs.clearUserPref(GHOST_HARDENING_SNAPSHOT_PREF);
+        Services.prefs.savePrefFile(null);
+        return { active: false, restored: true };
+      }
+
+      // Keep the first pre-GHOST state across repeated calls and browser restarts.
+      const snapshot = existingSnapshot || captureGhostHardeningSnapshot();
+      if (!existingSnapshot) {
+        Services.prefs.setStringPref(GHOST_HARDENING_SNAPSHOT_PREF, JSON.stringify(snapshot));
+        Services.prefs.savePrefFile(null);
+      }
+      try {
+        // Cookie policy must be compatible before enabling first-party isolation.
+        setInt("network.cookie.cookieBehavior", 1);
+        setBool("privacy.firstparty.isolate", true);
+        setBool("javascript.options.wasm", false);
+        setBool("network.http.http3.enable", false);
+        setBool("network.http.altsvc.enabled", false);
+        Services.prefs.savePrefFile(null);
+        return { active: true, restored: false };
+      } catch (error) {
+        try {
+          restoreGhostHardeningSnapshot(snapshot);
+          Services.prefs.clearUserPref(GHOST_HARDENING_SNAPSHOT_PREF);
+          Services.prefs.savePrefFile(null);
+        } catch (rollbackError) {
+          throw new Error(`${error?.message || error}; ${rollbackError?.message || rollbackError}`);
+        }
+        throw error;
+      }
+    };
 
     return {
       browserControl: {
@@ -281,6 +370,10 @@ this.browserControl = class extends ExtensionAPI {
           }
 
           return { mode, applied: true };
+        },
+
+        async applyGhostHardening(isActive) {
+          return applyGhostHardening(isActive);
         },
 
         async startTor() {
@@ -462,6 +555,11 @@ this.browserControl = class extends ExtensionAPI {
             startupPage: Services.prefs.getIntPref("browser.startup.page", 0),
             httpsOnly: Services.prefs.getBoolPref("dom.security.https_only_mode", false),
             fingerprintResistance: Services.prefs.getBoolPref("privacy.resistFingerprinting", false),
+            ghostCookieBehavior: Services.prefs.getIntPref("network.cookie.cookieBehavior", 5),
+            ghostFpi: Services.prefs.getBoolPref("privacy.firstparty.isolate", false),
+            ghostWasm: Services.prefs.getBoolPref("javascript.options.wasm", true),
+            ghostHttp3: Services.prefs.getBoolPref("network.http.http3.enable", true),
+            ghostAltSvc: Services.prefs.getBoolPref("network.http.altsvc.enabled", true),
             autoplay: Services.prefs.getIntPref("media.autoplay.default", 1),
             prefetch: Services.prefs.getBoolPref("network.prefetch-next", true),
             dnsPrefetch: Services.prefs.getBoolPref("network.dns.disablePrefetch", false)

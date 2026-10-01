@@ -21,6 +21,17 @@
         ]
       },
       {
+        "name": "applyGhostHardening",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "isActive",
+            "type": "boolean"
+          }
+        ]
+      },
+      {
         "name": "getProcessStats",
         "type": "function",
         "async": true,

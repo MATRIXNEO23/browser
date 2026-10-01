@@ -92,6 +92,13 @@ async function verify() {
     check('Resistenza fingerprint (preferenza)', prefs.fingerprintResistance, privateMode);
     check('Cookie senza archiviazione persistente (preferenza)',
       prefs.cookieNoPersistentStorage, mode === 'GHOST');
+    if (mode === 'GHOST') {
+      check('GHOST: cookie di terze parti bloccati (pref)', prefs.ghostCookieBehavior, 1);
+      check('GHOST: First Party Isolation', prefs.ghostFpi, true);
+      check('GHOST: WebAssembly abilitato', prefs.ghostWasm, false);
+      check('GHOST: HTTP/3 abilitato', prefs.ghostHttp3, false);
+      check('GHOST: Alt-Svc abilitato', prefs.ghostAltSvc, false);
+    }
     check('Autoplay (preferenza)', prefs.autoplay, expectedAutoplay);
     check('Prefetch disabilitato', prefs.prefetch, false);
     check('DNS prefetch disabilitato', prefs.dnsPrefetch, true);

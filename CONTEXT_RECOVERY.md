@@ -331,14 +331,16 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Aggiunta in `extension/sidebar.html` sotto i controlli diagnostici una nota che chiarisce che FILUM usa RFP nativo Gecko e che la firma Canvas può variare con il rendering hardware Windows; non promette equivalenza con Tor Browser.
 - Modifica solo informativa: nessun cambiamento runtime o ai test del fingerprint.
 - Commit UI: `d31c36415a9358aa6c915eabf79722072a3917ec`.
-- Verifica statica: il markup resta nella card Prestazioni; trigger della CI #140 in preparazione tramite `build/RELEASE_TRIGGER`.
 
 ## CI #141 — verifica Windows e Tor — 2026-10-01
 
 - Run: [#141](https://github.com/MATRIXNEO23/browser/actions/runs/36882120139), source commit `d97ea9dae5377eea3f4388050312c6817627ae50`.
-- Esito verificato dai job GitHub Actions: `build` **success** e `smoke-windows` **success**. Il build ha superato il gate prodotto, compilazione e packaging Windows; lo smoke Windows ha superato checksum, verifica del core integrato, verifica dell'eseguibile Tor e avvio runtime. L'artefatto Windows x64 finale è stato caricato.
-- Il job `release` è **skipped**, coerente con `if: ${{ false }}` nel workflow. La run non ha pubblicato una release.
-- Il sorgente a questo commit mantiene la regola RFP Tor-aware: `PRIVATE || GHOST || Tor attivo`. La run CI non contiene però un test runtime dedicato che dimostri il comportamento RFP, né misura fingerprint Canvas/TLS.
-- Questa CI non verifica le proposte FPI, WASM o HTTP/3. Prima di pianificare un'implementazione occorre risolvere: (1) la regola proposta “GHOST o Tor” attiverebbe i nuovi hardening anche in NORMAL/TURBO con Tor, in conflitto con il vincolo di escludere NORMAL/TURBO; (2) Gecko rifiuta l'attivazione di FPI mentre FILUM usa `reject_trackers_and_partition_foreign`; (3) disattivare `network.http.altsvc.enabled` da solo non equivale a disattivare HTTP/3.
-- Nessun codice modificato in questo passaggio. Per la prossima modifica usare il `main` corrente (commit `d97ea9dae5377eea3f4388050312c6817627ae50`); il checkout scratch locale osservato è più vecchio e ha una modifica preesistente allo ZIP #117, che va preservata.
+- Esito: `build` e `smoke-windows` PASS; `release` skipped. Lo smoke ha verificato il bundle Tor e l'avvio runtime, ma non aveva test specifici per FPI, WASM o HTTP/3.
 
+## Hardening GHOST-only — checkpoint v0.5.2
+
+- Portata su `main` la modifica del checkpoint locale `38b94c1`: bridge `browserControl.applyGhostHardening(boolean)`, snapshot persistente e rollback delle preferenze, applicazione solo in GHOST e diagnostica delle preferenze.
+- Su `main` la base è `715115ffd9f03ef54ad9a5d24d0c0a21f7eca784`; il cherry-pick locale del checkpoint ha richiesto di preservare le sezioni recovery più recenti relative a CI #141.
+- Il workflow Windows parte solo se cambia `build/RELEASE_TRIGGER`; il test runtime esistente non avviava Tor in GHOST. Per questa verifica il self-test viene esteso per avviare Tor con FPI attivo, controllare le preferenze, passare a NORMAL con Tor attivo e verificare il ripristino, quindi ripristinare GHOST e fermare Tor.
+- Prima del push saranno eseguiti gli audit funzionali/prodotto, i controlli sintattici e `git diff --check`. La run Windows dovrà confermare bootstrap Tor con GHOST/FPI attivo e ripristino in NORMAL; finché non termina, questi aspetti restano non verificati.
+- La modifica preesistente a `releases/FILUM-Windows-x64-117.zip` resta esclusa dal commit e dal push.

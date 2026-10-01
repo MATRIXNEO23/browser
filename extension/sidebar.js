@@ -684,6 +684,14 @@ async function runControlSelfTest() {
     checks.push({ name, ok: !!ok, detail });
     if (!ok) passed = false;
   };
+  const hardeningKeys = [
+    'ghostCookieBehavior', 'ghostFpi', 'ghostWasm', 'ghostHttp3', 'ghostAltSvc'
+  ];
+  const matchesGhostHardening = prefs => prefs?.ghostCookieBehavior === 1 &&
+    prefs?.ghostFpi === true && prefs?.ghostWasm === false &&
+    prefs?.ghostHttp3 === false && prefs?.ghostAltSvc === false;
+  const matchesPrefs = (actual, expected) => hardeningKeys.every(key =>
+    actual?.[key] === expected?.[key]);
 
   const initialStatus = await getStatus();
   const initialAdvanced = await browser.runtime.sendMessage({
@@ -746,7 +754,14 @@ async function runControlSelfTest() {
       );
     }
 
-    await selectMode(initialStatus.mode || 'NORMAL');
+    await selectMode('NORMAL');
+    const normalHardeningBaseline = await browser.runtime.sendMessage({
+      type: 'get-mode-diagnostics'
+    });
+    await selectMode('GHOST');
+    let ghostPrefs = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
+    record('ghost-hardening-active', matchesGhostHardening(ghostPrefs),
+      JSON.stringify(Object.fromEntries(hardeningKeys.map(key => [key, ghostPrefs[key]]))));
 
     const adsBefore = (await getStatus()).adsEnabled;
     adsButton.click();
@@ -979,14 +994,30 @@ async function runControlSelfTest() {
     });
     record('tor-bootstrap-100', !!torOn?.torProcess?.bootstrapped, torDiagnostic);
 
+    const ghostPrefsDuringTor = await browser.runtime.sendMessage({
+      type: 'get-mode-diagnostics'
+    });
+    record('tor-bootstrap-with-ghost-fpi', !!torOn && matchesGhostHardening(ghostPrefsDuringTor),
+      JSON.stringify({ bootstrapped: !!torOn?.torProcess?.bootstrapped,
+        ...Object.fromEntries(hardeningKeys.map(key => [key, ghostPrefsDuringTor[key]])) }));
+
     if (torOn) {
-      await browser.runtime.sendMessage({ type: 'set-mode', mode: 'NORMAL' });
+      await selectMode('NORMAL');
+      const normalPrefsDuringTor = await browser.runtime.sendMessage({
+        type: 'get-mode-diagnostics'
+      });
+      record('tor-normal-restores-ghost-hardening',
+        matchesPrefs(normalPrefsDuringTor, normalHardeningBaseline),
+        JSON.stringify({ expected: Object.fromEntries(hardeningKeys.map(key =>
+          [key, normalHardeningBaseline[key]])),
+        actual: Object.fromEntries(hardeningKeys.map(key => [key, normalPrefsDuringTor[key]])) }));
       const webRtc = await browser.privacy.network.peerConnectionEnabled.get({});
       record('tor-mode-switch-webrtc', webRtc.value === false,
         `WebRTC enabled=${webRtc.value}`);
-      await browser.runtime.sendMessage({
-        type: 'set-mode', mode: initialStatus.mode || 'NORMAL'
-      });
+      await selectMode('GHOST');
+      ghostPrefs = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
+      record('tor-ghost-reapplies-hardening', matchesGhostHardening(ghostPrefs),
+        JSON.stringify(Object.fromEntries(hardeningKeys.map(key => [key, ghostPrefs[key]]))));
     }
     record(
       'tor-proxy',
@@ -1027,6 +1058,19 @@ async function runControlSelfTest() {
     record('tor-stop', proxy?.value?.proxyType === initialProxy?.proxyType &&
       proxy?.value?.socks === initialProxy?.socks,
       JSON.stringify(proxy?.value || null));
+
+    await selectMode('NORMAL');
+    const restoredNormalPrefs = await browser.runtime.sendMessage({
+      type: 'get-mode-diagnostics'
+    });
+    record('ghost-exit-restores-native-prefs',
+      matchesPrefs(restoredNormalPrefs, normalHardeningBaseline),
+      JSON.stringify({ expected: Object.fromEntries(hardeningKeys.map(key =>
+        [key, normalHardeningBaseline[key]])),
+      actual: Object.fromEntries(hardeningKeys.map(key => [key, restoredNormalPrefs[key]])) }));
+    if (initialStatus.mode && initialStatus.mode !== 'NORMAL') {
+      await selectMode(initialStatus.mode);
+    }
 
     const verifyLauncher = async (name, buttonId, expectedUrl) => {
       const before = new Set((await browser.tabs.query({})).map(tab => tab.id));
