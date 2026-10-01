@@ -332,3 +332,13 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Modifica solo informativa: nessun cambiamento runtime o ai test del fingerprint.
 - Commit UI: `d31c36415a9358aa6c915eabf79722072a3917ec`.
 - Verifica statica: il markup resta nella card Prestazioni; trigger della CI #140 in preparazione tramite `build/RELEASE_TRIGGER`.
+
+## CI #141 — verifica Windows e Tor — 2026-10-01
+
+- Run: [#141](https://github.com/MATRIXNEO23/browser/actions/runs/36882120139), source commit `d97ea9dae5377eea3f4388050312c6817627ae50`.
+- Esito verificato dai job GitHub Actions: `build` **success** e `smoke-windows` **success**. Il build ha superato il gate prodotto, compilazione e packaging Windows; lo smoke Windows ha superato checksum, verifica del core integrato, verifica dell'eseguibile Tor e avvio runtime. L'artefatto Windows x64 finale è stato caricato.
+- Il job `release` è **skipped**, coerente con `if: ${{ false }}` nel workflow. La run non ha pubblicato una release.
+- Il sorgente a questo commit mantiene la regola RFP Tor-aware: `PRIVATE || GHOST || Tor attivo`. La run CI non contiene però un test runtime dedicato che dimostri il comportamento RFP, né misura fingerprint Canvas/TLS.
+- Questa CI non verifica le proposte FPI, WASM o HTTP/3. Prima di pianificare un'implementazione occorre risolvere: (1) la regola proposta “GHOST o Tor” attiverebbe i nuovi hardening anche in NORMAL/TURBO con Tor, in conflitto con il vincolo di escludere NORMAL/TURBO; (2) Gecko rifiuta l'attivazione di FPI mentre FILUM usa `reject_trackers_and_partition_foreign`; (3) disattivare `network.http.altsvc.enabled` da solo non equivale a disattivare HTTP/3.
+- Nessun codice modificato in questo passaggio. Per la prossima modifica usare il `main` corrente (commit `d97ea9dae5377eea3f4388050312c6817627ae50`); il checkout scratch locale osservato è più vecchio e ha una modifica preesistente allo ZIP #117, che va preservata.
+
