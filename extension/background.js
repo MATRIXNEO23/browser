@@ -2,8 +2,48 @@ const MODE_LIMITS = { NORMAL: 3, TURBO: 3, PRIVATE: 3, GHOST: 3 };
 const DEFAULT_MODE = 'NORMAL';
 const ADS_RULESET_ID = 'ads_basic';
 const URLHAUS_MALWARE_RULESET_ID = 'urlhaus_malware_basic';
+const BLOCK_COUNTER_RULESET_IDS = new Set([
+  ADS_RULESET_ID,
+  URLHAUS_MALWARE_RULESET_ID
+]);
 const TAVILY_DEFAULT_DAILY_LIMIT = 33;
 const TAVILY_MONTHLY_LIMIT = 1000;
+
+let sessionBlockCount = 0;
+let sessionBlockCounterAvailable = false;
+
+function recordDnrBlock(details) {
+  const rule = details?.rule;
+  if (!BLOCK_COUNTER_RULESET_IDS.has(rule?.rulesetId) ||
+      !Number.isSafeInteger(rule?.ruleId)) return;
+
+  sessionBlockCount = Math.min(Number.MAX_SAFE_INTEGER, sessionBlockCount + 1);
+}
+
+if (browser.declarativeNetRequest?.onRuleMatchedDebug) {
+  browser.declarativeNetRequest.onRuleMatchedDebug.addListener(recordDnrBlock);
+}
+
+async function initializeBlockCounter() {
+  sessionBlockCount = 0;
+  sessionBlockCounterAvailable = false;
+  const dnr = browser.declarativeNetRequest;
+  if (!dnr?.getMatchedRules || !dnr?.onRuleMatchedDebug) return;
+
+  try {
+    await dnr.getMatchedRules({ minTimeStamp: Date.now() });
+    sessionBlockCounterAvailable = true;
+  } catch (_) {
+    // Firefox exposes DNR feedback only when its debugging preference is enabled.
+  }
+}
+
+function getBlockCount() {
+  return {
+    count: sessionBlockCount,
+    available: sessionBlockCounterAvailable
+  };
+}
 
 const SECURITY_LOG_KEY = 'security_audit_log';
 const MAX_LOG_ENTRIES = 200;
@@ -856,6 +896,7 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
 }
 
 async function initialize() {
+  await initializeBlockCounter();
   try {
     browser.alarms.create('resource-sweep', { periodInMinutes: 1 });
   } catch (_) {}
@@ -923,6 +964,7 @@ browser.alarms.onAlarm.addListener((alarm) => {
 });
 
 browser.runtime.onMessage.addListener(async (message) => {
+  if (message?.type === 'get-block-count') return getBlockCount();
   if (message?.type === 'tavily-key-status') return tavilyKeyStatus();
   if (message?.type === 'tavily-key-save') {
     const key = String(message.key || '').trim();
@@ -1119,6 +1161,8 @@ browser.runtime.onMessage.addListener(async (message) => {
       modeHealth: await getModeHealth(data.mode || DEFAULT_MODE, !!data.torEnabled),
       adsEnabled,
       urlhausMalwareEnabled,
+      blockCount: sessionBlockCount,
+      blockCountAvailable: sessionBlockCounterAvailable,
       status: data.status || null,
       processStats,
       torEnabled: !!data.torEnabled,

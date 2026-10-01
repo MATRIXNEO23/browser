@@ -370,6 +370,7 @@ async function main() {
   context.applyRuntimePrivacy = async () => { webRtc = true; };
   context.enforceBackgroundLimit = async () => {};
   context.getMode = async () => data.mode;
+  context.initializeBlockCounter = async () => {};
   vm.runInContext(section('async function initialize()', 'async function scheduleEnforcement()'), context);
   await vm.runInContext('initialize()', context);
   assert.equal(webRtc, false, 'startup with Tor recovery pending must disable WebRTC');
@@ -559,22 +560,27 @@ async function main() {
   assert.equal(await queueContext.queueControlTransition(async () => 'recovered'), 'recovered');
 
   const sidebar = fs.readFileSync(path.join(__dirname, '../extension/sidebar.js'), 'utf8');
-  const element = () => ({ hidden: false, disabled: false, textContent: '',
+  const element = () => ({ hidden: false, disabled: false, textContent: '', dataset: {},
     classList: { toggle() {} }, setAttribute() {} });
   const ui = Object.fromEntries([
-    'modeWarning', 'adsButton', 'urlhausMalwareButton', 'torButton', 'dnsProvider', 'secureDns',
+    'modeWarning', 'blockCounterEl', 'adsButton', 'urlhausMalwareButton', 'torButton', 'dnsProvider', 'secureDns',
     'dnsEndpoint', 'applyDns', 'torStatus', 'dnsStatus'
   ].map(name => [name, element()]));
   const uiContext = vm.createContext({ ...ui,
     torEnabled: false, torStarting: false, adsEnabled: true, urlhausMalwareEnabled: false,
     setModeVisual() {}, renderResources() {}, updateSocksVisibility() {}, setPanelStatus() {}
   });
+  vm.runInContext(sidebar.slice(sidebar.indexOf('function renderBlockCounter('),
+    sidebar.indexOf('function errorText(')), uiContext);
   vm.runInContext(sidebar.slice(sidebar.indexOf('function render(data)'),
     sidebar.indexOf('async function getStatus()')), uiContext);
   vm.runInContext("render({mode:'NORMAL', adsEnabled:true, urlhausMalwareEnabled:true, modeHealth:{ok:true}, torStarting:true, torProcess:{running:true,bootstrapped:false}})", uiContext);
   assert.equal(ui.torButton.textContent, 'TOR: AVVIO');
   assert.equal(ui.urlhausMalwareButton.textContent, 'URLHAUS: ON');
+  assert.match(ui.blockCounterEl.textContent, /non disponibile/);
   assert.equal(ui.modeWarning.hidden, true);
+  vm.runInContext('renderBlockCounter(1234567, true)', uiContext);
+  assert.match(ui.blockCounterEl.textContent, /1\.234\.567/);
   vm.runInContext("render({mode:'NORMAL', urlhausMalwareEnabled:false, modeHealth:{ok:true}, torEnabled:true, torRouted:false, torProcess:{running:false,bootstrapped:false}})", uiContext);
   assert.equal(ui.torButton.textContent, 'TOR: ERRORE');
   assert.equal(ui.modeWarning.hidden, false);
@@ -663,6 +669,54 @@ async function main() {
     assert.match(rule.condition.urlFilter, /^\|http:\/\/\d+\.\d+\.\d+\.\d+:\d+\/[^*]+\^$/);
     assert.doesNotMatch(rule.condition.urlFilter, /example|placeholder/i);
   }
+
+  assert.ok(manifest.permissions.includes('declarativeNetRequestFeedback'),
+    'DNR feedback permission must be requested for the optional session counter');
+  const adsRuleset = manifest.declarative_net_request.rule_resources.find(
+    ruleset => ruleset.id === 'ads_basic'
+  );
+  assert.equal(adsRuleset.path, 'rules/ads-basic.json');
+  assert.ok(fs.existsSync(path.join(__dirname, '../extension', adsRuleset.path)));
+  const adsRules = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '../extension', adsRuleset.path),
+    'utf8'
+  ));
+  assert.ok(adsRules.length > 0 && adsRules.every(rule => rule.action.type === 'block'),
+    'the session counter counts matches only while the Ads ruleset contains block actions');
+
+  let matchedRuleListener;
+  let feedbackEnabled = true;
+  const counterContext = vm.createContext({
+    browser: {
+      declarativeNetRequest: {
+        onRuleMatchedDebug: {
+          addListener(listener) { matchedRuleListener = listener; }
+        },
+        async getMatchedRules() {
+          if (!feedbackEnabled) throw new Error('DNR feedback is disabled');
+          return {};
+        }
+      }
+    },
+    Date,
+    console: { warn() {} }
+  });
+  vm.runInContext(section('const ADS_RULESET_ID', 'const SECURITY_LOG_KEY'), counterContext);
+  await vm.runInContext('initializeBlockCounter()', counterContext);
+  assert.equal(counterContext.getBlockCount().available, true);
+  matchedRuleListener({ rule: { rulesetId: 'ads_basic', ruleId: 1 } });
+  matchedRuleListener({ rule: { rulesetId: 'urlhaus_malware_basic', ruleId: 1001 } });
+  matchedRuleListener({ rule: { rulesetId: 'unrelated_ruleset', ruleId: 5 } });
+  assert.equal(counterContext.getBlockCount().count, 2,
+    'counter should include only matches from the existing Ads and URLhaus rulesets');
+  feedbackEnabled = false;
+  await vm.runInContext('initializeBlockCounter()', counterContext);
+  assert.equal(counterContext.getBlockCount().count, 0,
+    'counter must reset when a new browser session initializes');
+  assert.equal(counterContext.getBlockCount().available, false,
+    'unsupported DNR feedback must be reported as unavailable, not as zero blocks');
+  assert.match(sidebarSource, /conteggio non disponibile/);
+  assert.match(sidebarSource, /new Intl\.NumberFormat\('it-IT'\)/);
   assert.match(fs.readFileSync(path.join(__dirname, '../extension/sidebar.html'), 'utf8'), /id="urlhaus-malware" class="pill-toggle"/);
   assert.match(sidebar, /type: 'set-urlhaus-malware'/);
 

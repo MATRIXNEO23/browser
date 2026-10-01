@@ -1,6 +1,7 @@
 const statusEl = document.getElementById('status');
 const modeWarning = document.getElementById('mode-warning');
 const resourceEl = document.getElementById('resource-stats');
+const blockCounterEl = document.getElementById('block-counter');
 const adsButton = document.getElementById('ads');
 const urlhausMalwareButton = document.getElementById('urlhaus-malware');
 const modeButtons = [...document.querySelectorAll('[data-mode]')];
@@ -41,6 +42,19 @@ function providerFor(level, uri) {
 
 function formatMb(bytes) {
   return (Number(bytes || 0) / 1024 / 1024).toFixed(0) + ' MB';
+}
+
+function renderBlockCounter(count, available) {
+  if (!blockCounterEl) return;
+  if (!available || !Number.isSafeInteger(count) || count < 0) {
+    blockCounterEl.textContent = 'Blocchi Ads/Malware in sessione: conteggio non disponibile';
+    blockCounterEl.dataset.available = 'false';
+    return;
+  }
+
+  blockCounterEl.textContent =
+    `Blocchi Ads/Malware in sessione: ${new Intl.NumberFormat('it-IT').format(count)}`;
+  blockCounterEl.dataset.available = 'true';
 }
 
 function errorText(error) {
@@ -163,6 +177,7 @@ function render(data) {
   if (torEnabled) dnsStatus.textContent = 'DNS gestito da TOR; modifica disponibile dopo lo stop.';
 
   renderResources(data?.processStats);
+  renderBlockCounter(data?.blockCount, data?.blockCountAvailable === true);
   updateSocksVisibility();
 
   const s = data?.status;

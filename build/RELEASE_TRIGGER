@@ -1,5 +1,5 @@
 release_request: final
-source_head_before_trigger: 715115ffd9f03ef54ad9a5d24d0c0a21f7eca784
+source_head_before_trigger: b0c7023b2b8a2ed7e57a2d3a346499f4348f23df
 product_gate: required
 webextension_panel_context: required
 all_sidebar_controls_selftest: required
@@ -9,4 +9,4 @@ compact_sidebar: required
 approved_cyber_background: unchanged
 windows_runtime_smoke: required
 stable_release_only: false
-rerun_reason: ghost_only_hardening_tor_fpi_runtime_ci_142
+rerun_reason: ads_malware_ephemeral_counter_ci_143

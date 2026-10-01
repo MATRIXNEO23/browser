@@ -355,3 +355,13 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Ambito delle evidenze: verifica runtime riuscita su questa build e sul runner Windows della CI. Non dimostra anonimato assoluto o garantito, non verifica il diniego della geolocalizzazione e non prova l'assenza di altri vettori di fingerprinting o di incompatibilità su ogni sito.
 - `v0.5.2-stable` non è ancora una release formale: il job `release` è skipped e questa run non ha creato né pubblicato un tag o una release.
 - Asset finale smoke: artifact ID `11180491586`, SHA-256 del payload Windows `7ff3daf7f060e87bc4b3f684198d2290af5acbc67ec8abfaba60bef0ed4fb615`.
+
+## Contatore sessione Ads/Malware — preparazione CI #143 (2026-10-01)
+
+- Riutilizzati i ruleset già presenti: `ads_basic` (`extension/rules/ads-basic.json`) e `urlhaus_malware_basic` (`extension/rules/urlhaus-malware.json`). Non cambiano i loro ID, percorsi, regole, toggle o stato predefinito.
+- Aggiunto alla sidebar un contatore volatile di sessione, aggiornato dal refresh esistente ogni 5 secondi. Il background incrementa solo sui match dei due ruleset e non scrive il conteggio in storage o nel security audit log.
+- L'API Gecko `declarativeNetRequest.onRuleMatchedDebug` / `getMatchedRules` è per testing/debug. In Firefox richiede il permesso `declarativeNetRequestFeedback` e la preferenza `extensions.dnr.feedback=true`. Il background prova la disponibilità all'avvio; quando la preferenza/API non è attiva la sidebar mostra “conteggio non disponibile”, mai uno zero che potrebbe essere scambiato per un conteggio verificato. Riferimento Mozilla: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/declarativeNetRequest#testing
+- Audit funzionale aggiornato per verificare conteggi Ads+URLhaus, esclusione di ruleset estranei, reset all'inizializzazione, fallback non disponibile e rendering numerico/sidebar.
+- `build/RELEASE_TRIGGER` aggiornato da `b0c7023` per richiedere la build Windows e lo smoke runtime della CI #143; nessuna release formale richiesta.
+- Verifiche locali: `node --check` per background/sidebar/audit, `node scripts/audit-functional.cjs` e `git diff --check` PASS. Non è ancora stata eseguita una build o una verifica runtime Windows; la CI #143 è pendente.
+- La modifica utente preesistente a `releases/FILUM-Windows-x64-117.zip` resta esclusa.
