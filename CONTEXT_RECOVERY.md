@@ -342,5 +342,16 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Portata su `main` la modifica del checkpoint locale `38b94c1`: bridge `browserControl.applyGhostHardening(boolean)`, snapshot persistente e rollback delle preferenze, applicazione solo in GHOST e diagnostica delle preferenze.
 - Su `main` la base è `715115ffd9f03ef54ad9a5d24d0c0a21f7eca784`; il cherry-pick locale del checkpoint ha richiesto di preservare le sezioni recovery più recenti relative a CI #141.
 - Il workflow Windows parte solo se cambia `build/RELEASE_TRIGGER`; il test runtime esistente non avviava Tor in GHOST. Per questa verifica il self-test viene esteso per avviare Tor con FPI attivo, controllare le preferenze, passare a NORMAL con Tor attivo e verificare il ripristino, quindi ripristinare GHOST e fermare Tor.
-- Prima del push saranno eseguiti gli audit funzionali/prodotto, i controlli sintattici e `git diff --check`. La run Windows dovrà confermare bootstrap Tor con GHOST/FPI attivo e ripristino in NORMAL; finché non termina, questi aspetti restano non verificati.
+- Prima del push sono passati gli audit funzionali/prodotto, i controlli sintattici e `git diff --check`; la verifica runtime è stata poi eseguita dalla CI #142.
 - La modifica preesistente a `releases/FILUM-Windows-x64-117.zip` resta esclusa dal commit e dal push.
+
+## CI #142 — runtime GHOST/FPI e bootstrap Tor — 2026-10-01
+
+- Run: [#142](https://github.com/MATRIXNEO23/browser/actions/runs/36897308327), evento `push`, commit sorgente `f42c9c6151a4e41dd3ea8ad3a8270d596de5fca6` su `main`.
+- Esito: `build` **success**, `smoke-windows` **success**, `release` **skipped** (workflow disabilitato). La run ha costruito e avviato il pacchetto Windows; non ha pubblicato una GitHub Release.
+- Il self-test runtime Windows ha letto in GHOST: cookie behavior `1`, FPI `true`, WASM `false`, HTTP/3 `false`, Alt-Svc `false`.
+- Tor è stato avviato mentre GHOST/FPI era attivo: bootstrap al 100% in circa 14,8 secondi; egress verificato con HTTP 200 e `IsTor=true`.
+- Con Tor ancora attivo, GHOST → NORMAL ha ripristinato i valori normali rilevati prima del test (cookie behavior `5`, FPI `false`, WASM `true`, HTTP/3 `true`, Alt-Svc `true`). Il rientro in GHOST ha riapplicato l'hardening; dopo l'arresto Tor, l'uscita da GHOST ha nuovamente ripristinato quei valori. Tutti questi check sono PASS nel report self-test Windows.
+- Ambito delle evidenze: verifica runtime riuscita su questa build e sul runner Windows della CI. Non dimostra anonimato assoluto o garantito, non verifica il diniego della geolocalizzazione e non prova l'assenza di altri vettori di fingerprinting o di incompatibilità su ogni sito.
+- `v0.5.2-stable` non è ancora una release formale: il job `release` è skipped e questa run non ha creato né pubblicato un tag o una release.
+- Asset finale smoke: artifact ID `11180491586`, SHA-256 del payload Windows `7ff3daf7f060e87bc4b3f684198d2290af5acbc67ec8abfaba60bef0ed4fb615`.
