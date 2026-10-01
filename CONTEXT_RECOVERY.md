@@ -324,3 +324,11 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Aggiornamento preparato: bundle Windows x86_64 `15.0.24` (Tor `0.4.9.13`), URL ufficiale `https://dist.torproject.org/torbrowser/15.0.24/tor-expert-bundle-windows-x86_64-15.0.24.tar.gz`, SHA-256 `e9dc6ccc93cd6afa507193f4de284d6424233ff5102155cd2c94b259e8a22b65`.
 - Riferimenti allineati in `.github/workflows/build-windows.yml` e `scripts/validate-product.py`. `build/RELEASE_TRIGGER` aggiornato con base `03b92653f168977335e45c325c4c7595b92069e0` e motivo `tor_bundle_15_0_24_fix_ci_139`.
 - Stato: **Ready for Retry CI #139**. La verifica runtime RFP/Tor dipende dal completamento del nuovo build e dello smoke Windows.
+
+
+## Nota informativa anti-fingerprinting — 2026-10-01
+
+- Aggiunta in `extension/sidebar.html` sotto i controlli diagnostici una nota che chiarisce che FILUM usa RFP nativo Gecko e che la firma Canvas può variare con il rendering hardware Windows; non promette equivalenza con Tor Browser.
+- Modifica solo informativa: nessun cambiamento runtime o ai test del fingerprint.
+- Commit UI: `d31c36415a9358aa6c915eabf79722072a3917ec`.
+- Verifica statica: il markup resta nella card Prestazioni; trigger della CI #140 in preparazione tramite `build/RELEASE_TRIGGER`.
