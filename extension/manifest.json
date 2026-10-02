@@ -34,7 +34,7 @@
       },
       {
         "id": "urlhaus_malware_basic",
-        "enabled": false,
+        "enabled": true,
         "path": "rules/urlhaus-malware.json"
       }
     ]

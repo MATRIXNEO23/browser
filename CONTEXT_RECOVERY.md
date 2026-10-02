@@ -363,5 +363,18 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - L'API Gecko `declarativeNetRequest.onRuleMatchedDebug` / `getMatchedRules` è per testing/debug. In Firefox richiede il permesso `declarativeNetRequestFeedback` e la preferenza `extensions.dnr.feedback=true`. Il background prova la disponibilità all'avvio; quando la preferenza/API non è attiva la sidebar mostra “conteggio non disponibile”, mai uno zero che potrebbe essere scambiato per un conteggio verificato. Riferimento Mozilla: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/declarativeNetRequest#testing
 - Audit funzionale aggiornato per verificare conteggi Ads+URLhaus, esclusione di ruleset estranei, reset all'inizializzazione, fallback non disponibile e rendering numerico/sidebar.
 - `build/RELEASE_TRIGGER` aggiornato da `b0c7023` per richiedere la build Windows e lo smoke runtime della CI #143; nessuna release formale richiesta.
-- Verifiche locali: `node --check` per background/sidebar/audit, `node scripts/audit-functional.cjs` e `git diff --check` PASS. Non è ancora stata eseguita una build o una verifica runtime Windows; la CI #143 è pendente.
+- Verifiche locali: `node --check` per background/sidebar/audit, `node scripts/audit-functional.cjs` e `git diff --check` PASS.
+- CI #143 (`36929369891`), commit `c7a7142eaa3f0f0feb4f13ecba97186369787d24`: job `build` e `smoke-windows` **success**, `release` **skipped**. Il runtime smoke ha verificato modalità GHOST, hardening nativo, bootstrap Tor con FPI, egress Tor e ripristino delle preferenze.
+- Limiti della CI #143: il runner era Windows Server 2025 (`10.0.26100`); non ha eseguito BrowserLeaks, test di stabilità Canvas o catture ClientHello/JA3. La misurazione runtime Canvas/TLS su Windows 10 resta da eseguire in un ambiente disponibile.
 - La modifica utente preesistente a `releases/FILUM-Windows-x64-117.zip` resta esclusa.
+
+## Smart Toggle Ads per scheda — v0.5.4 (2026-10-02)
+
+- `urlhaus_malware_basic` è abilitato di default accanto ad `ads_basic`; i due controlli esistenti restano indipendenti e possono ancora disabilitare i rispettivi ruleset.
+- Aggiunta in sidebar l’azione “Sblocca sito / Riattiva blocco”, con hostname corrente e stato visibile. L’eccezione viene applicata solo alla scheda attiva e al dominio visualizzato, poi la scheda viene ricaricata.
+- Il background usa `declarativeNetRequest.updateSessionRules()` con un’azione `allow` di priorità 1000 e condizioni `tabIds` + `initiatorDomains`. Un aggiornamento è serializzato e ogni chiamata DNR è atomica; la mappa effimera viene aggiornata solo dopo conferma dell’API.
+- Le eccezioni non sono persistite. Le regole riservate residue vengono rimosse all’avvio dell’estensione; quelle associate a una scheda vengono eliminate su `tabs.onRemoved`. Il toggle non cambia modalità, Tor, RFP o preferenze di rete.
+- Audit funzionale: copre URLhaus attivo per default, abilitazione/disabilitazione dei ruleset, priorità e condizioni della regola, isolamento da un’altra scheda dello stesso dominio, doppio click concorrente, rifiuto di dominio cambiato, update DNR fallito, reinserimento, cleanup all’avvio e chiusura scheda, stato UI.
+- Verifiche locali: `node --check` su background/sidebar/audit, `node scripts/audit-functional.cjs`, `python3 scripts/validate-product.py`, `python3 scripts/audit-wiring.py` e `git diff --check`.
+- Il test è Node/VM e non sostituisce una verifica runtime Gecko/Windows. Non avvia una nuova CI e non viene eseguito alcun push in questo checkpoint.
+- La modifica utente preesistente a `releases/FILUM-Windows-x64-117.zip` resta esclusa dal commit.

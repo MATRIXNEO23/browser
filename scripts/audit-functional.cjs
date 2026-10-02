@@ -560,10 +560,11 @@ async function main() {
   assert.equal(await queueContext.queueControlTransition(async () => 'recovered'), 'recovered');
 
   const sidebar = fs.readFileSync(path.join(__dirname, '../extension/sidebar.js'), 'utf8');
-  const element = () => ({ hidden: false, disabled: false, textContent: '', dataset: {},
-    classList: { toggle() {} }, setAttribute() {} });
+  const element = () => ({ hidden: false, disabled: false, textContent: '', dataset: {}, attributes: {},
+    classList: { toggle() {} }, setAttribute(name, value) { this.attributes[name] = value; } });
   const ui = Object.fromEntries([
-    'modeWarning', 'blockCounterEl', 'adsButton', 'urlhausMalwareButton', 'torButton', 'dnsProvider', 'secureDns',
+    'modeWarning', 'blockCounterEl', 'siteBlockDomainEl', 'siteBlockButton', 'adsButton',
+    'urlhausMalwareButton', 'torButton', 'dnsProvider', 'secureDns',
     'dnsEndpoint', 'applyDns', 'torStatus', 'dnsStatus'
   ].map(name => [name, element()]));
   const uiContext = vm.createContext({ ...ui,
@@ -577,10 +578,17 @@ async function main() {
   vm.runInContext("render({mode:'NORMAL', adsEnabled:true, urlhausMalwareEnabled:true, modeHealth:{ok:true}, torStarting:true, torProcess:{running:true,bootstrapped:false}})", uiContext);
   assert.equal(ui.torButton.textContent, 'TOR: AVVIO');
   assert.equal(ui.urlhausMalwareButton.textContent, 'URLHAUS: ON');
+  assert.equal(ui.siteBlockDomainEl.textContent, 'Sito corrente: non disponibile');
+  assert.equal(ui.siteBlockButton.disabled, true);
   assert.match(ui.blockCounterEl.textContent, /non disponibile/);
   assert.equal(ui.modeWarning.hidden, true);
   vm.runInContext('renderBlockCounter(1234567, true)', uiContext);
   assert.match(ui.blockCounterEl.textContent, /1\.234\.567/);
+  vm.runInContext("renderSiteBlockStatus({available:true,tabId:9,domain:'shop.example.com',unblocked:true})", uiContext);
+  assert.equal(ui.siteBlockDomainEl.textContent, 'Sito corrente: shop.example.com');
+  assert.equal(ui.siteBlockButton.textContent, '🛡️ Riattiva blocco');
+  assert.equal(ui.siteBlockButton.dataset.unblocked, 'true');
+  assert.equal(ui.siteBlockButton.attributes['aria-pressed'], 'true');
   vm.runInContext("render({mode:'NORMAL', urlhausMalwareEnabled:false, modeHealth:{ok:true}, torEnabled:true, torRouted:false, torProcess:{running:false,bootstrapped:false}})", uiContext);
   assert.equal(ui.torButton.textContent, 'TOR: ERRORE');
   assert.equal(ui.modeWarning.hidden, false);
@@ -619,7 +627,7 @@ async function main() {
   assert.match(sidebar, /value\.browserTheme === requestedTheme/);
   assert.match(sidebar, /value\.websiteAppearance === requestedAppearance/);
 
-  let rulesets = [];
+  let rulesets = ['ads_basic', 'urlhaus_malware_basic'];
   let allowRulesetUpdates = false;
   browser.declarativeNetRequest = {
     async getEnabledRulesets() { return rulesets; },
@@ -634,20 +642,22 @@ async function main() {
     context
   );
   vm.runInContext(section('async function getAdsEnabled()', 'async function applyDarkTheme('), context);
-  await assert.rejects(vm.runInContext('setAdsEnabled(true)', context), /ADS non confermato/);
+  await assert.rejects(vm.runInContext('setAdsEnabled(false)', context), /ADS non confermato/);
   await assert.rejects(
-    vm.runInContext('setUrlhausMalwareEnabled(true)', context),
+    vm.runInContext('setUrlhausMalwareEnabled(false)', context),
     /URLhaus non confermato/
   );
   allowRulesetUpdates = true;
+  await vm.runInContext('setUrlhausMalwareEnabled(false)', context);
+  assert.deepEqual(rulesets, ['ads_basic']);
   await vm.runInContext('setUrlhausMalwareEnabled(true)', context);
+  assert.deepEqual(new Set(rulesets), new Set(['urlhaus_malware_basic', 'ads_basic']));
+  await vm.runInContext('setAdsEnabled(false)', context);
   assert.deepEqual(rulesets, ['urlhaus_malware_basic']);
   await vm.runInContext('setAdsEnabled(true)', context);
   assert.deepEqual(new Set(rulesets), new Set(['urlhaus_malware_basic', 'ads_basic']));
-  await vm.runInContext('setUrlhausMalwareEnabled(false)', context);
-  assert.deepEqual(rulesets, ['ads_basic']);
   assert.equal(data.adsEnabled, true);
-  assert.equal(data.urlhausMalwareEnabled, false);
+  assert.equal(data.urlhausMalwareEnabled, true);
 
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../extension/manifest.json'), 'utf8'));
   const malwareRuleset = manifest.declarative_net_request.rule_resources.find(
@@ -655,7 +665,7 @@ async function main() {
   );
   assert.deepEqual(malwareRuleset, {
     id: 'urlhaus_malware_basic',
-    enabled: false,
+    enabled: true,
     path: 'rules/urlhaus-malware.json'
   });
   const malwareRules = JSON.parse(fs.readFileSync(
@@ -683,6 +693,89 @@ async function main() {
   ));
   assert.ok(adsRules.length > 0 && adsRules.every(rule => rule.action.type === 'block'),
     'the session counter counts matches only while the Ads ruleset contains block actions');
+
+  const siteBlockSource = source.slice(source.indexOf('const SITE_BLOCK_RULE_PRIORITY'),
+    source.indexOf('function recordDnrBlock('));
+  const siteBlockRules = [
+    { id: 1500001, action: { type: 'allow' }, condition: {} },
+    { id: 42, action: { type: 'allow' }, condition: {} }
+  ];
+  const tabs = new Map([
+    [9, { id: 9, url: 'https://shop.example.com/cart' }],
+    [10, { id: 10, url: 'https://shop.example.com/cart' }]
+  ]);
+  let rejectSessionUpdate = false;
+  const siteBlockContext = vm.createContext({
+    URL,
+    browser: {
+      tabs: {
+        async get(tabId) {
+          const tab = tabs.get(tabId);
+          if (!tab) throw new Error('tab missing');
+          return tab;
+        }
+      },
+      declarativeNetRequest: {
+        async getSessionRules() { return [...siteBlockRules]; },
+        async updateSessionRules({ addRules = [], removeRuleIds = [] }) {
+          if (rejectSessionUpdate) throw new Error('session update failed');
+          for (const id of removeRuleIds) {
+            const index = siteBlockRules.findIndex(rule => rule.id === id);
+            if (index >= 0) siteBlockRules.splice(index, 1);
+          }
+          siteBlockRules.push(...addRules);
+        }
+      }
+    }
+  });
+  vm.runInContext(
+    "const ADS_RULESET_ID = 'ads_basic'; const URLHAUS_MALWARE_RULESET_ID = 'urlhaus_malware_basic';\n" +
+      siteBlockSource,
+    siteBlockContext
+  );
+  await vm.runInContext('initializeSiteBlockRules()', siteBlockContext);
+  assert.deepEqual(siteBlockRules.map(rule => rule.id), [42],
+    'startup must clear stale reserved exceptions and leave other session rules untouched');
+  await Promise.all([
+    vm.runInContext('toggleSiteBlock(9, "shop.example.com", true)', siteBlockContext),
+    vm.runInContext('toggleSiteBlock(9, "shop.example.com", true)', siteBlockContext)
+  ]);
+  const allowRule = siteBlockRules.find(rule => rule.id >= 1500000);
+  assert.equal(siteBlockRules.length, 2, 'concurrent requests must not create duplicate exceptions');
+  assert.equal(allowRule.priority, 1000);
+  assert.equal(allowRule.action.type, 'allow');
+  assert.deepEqual(Array.from(allowRule.condition.tabIds), [9]);
+  assert.deepEqual(Array.from(allowRule.condition.initiatorDomains), ['shop.example.com']);
+  assert.ok(allowRule.condition.resourceTypes.includes('main_frame'));
+  assert.equal((await vm.runInContext('getSiteBlockStatus(9)', siteBlockContext)).unblocked, true);
+  assert.equal((await vm.runInContext('getSiteBlockStatus(10)', siteBlockContext)).unblocked, false,
+    'the exception must not apply to another tab on the same domain');
+  await assert.rejects(
+    vm.runInContext('toggleSiteBlock(9, "other.example", true)', siteBlockContext),
+    /dominio della scheda è cambiato/
+  );
+  rejectSessionUpdate = true;
+  await assert.rejects(
+    vm.runInContext('toggleSiteBlock(9, "shop.example.com", false)', siteBlockContext),
+    /session update failed/
+  );
+  assert.equal(siteBlockRules.length, 2,
+    'a failed atomic update must leave the existing session rule and in-memory state intact');
+  assert.equal((await vm.runInContext('getSiteBlockStatus(9)', siteBlockContext)).unblocked, true);
+  rejectSessionUpdate = false;
+  await vm.runInContext('toggleSiteBlock(9, "shop.example.com", false)', siteBlockContext);
+  assert.equal(siteBlockRules.length, 1);
+  assert.equal((await vm.runInContext('getSiteBlockStatus(9)', siteBlockContext)).unblocked, false);
+  await vm.runInContext('toggleSiteBlock(9, "shop.example.com", true)', siteBlockContext);
+  await vm.runInContext('toggleSiteBlock(10, "shop.example.com", true)', siteBlockContext);
+  assert.equal(siteBlockRules.length, 3);
+  await vm.runInContext('removeSiteBlockRulesForTab(9)', siteBlockContext);
+  assert.equal(siteBlockRules.length, 2,
+    'closing a tab must remove only that tab’s temporary exceptions');
+  assert.equal(siteBlockRules.find(rule => rule.condition.tabIds)?.condition.tabIds[0], 10);
+  assert.match(source, /browser\.tabs\.onRemoved\.addListener\(\(tabId\) => \{\s*removeSiteBlockRulesForTab\(tabId\)/);
+  assert.match(source, /message\?\.type === 'toggle-site-block'/);
+  assert.match(sidebarSource, /browser\.tabs\.reload\(previous\.tabId\)/);
 
   let matchedRuleListener;
   let feedbackEnabled = true;

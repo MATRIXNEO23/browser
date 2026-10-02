@@ -2,6 +2,8 @@ const statusEl = document.getElementById('status');
 const modeWarning = document.getElementById('mode-warning');
 const resourceEl = document.getElementById('resource-stats');
 const blockCounterEl = document.getElementById('block-counter');
+const siteBlockDomainEl = document.getElementById('site-block-domain');
+const siteBlockButton = document.getElementById('site-block-toggle');
 const adsButton = document.getElementById('ads');
 const urlhausMalwareButton = document.getElementById('urlhaus-malware');
 const modeButtons = [...document.querySelectorAll('[data-mode]')];
@@ -22,6 +24,7 @@ const diagnosticsButton = document.getElementById('diagnostics');
 
 let adsEnabled = null;
 let urlhausMalwareEnabled = null;
+let siteBlockStatus = { available: false, tabId: null, domain: null, unblocked: false };
 let torEnabled = false;
 let torStarting = false;
 let torActionError = '';
@@ -55,6 +58,25 @@ function renderBlockCounter(count, available) {
   blockCounterEl.textContent =
     `Blocchi Ads/Malware in sessione: ${new Intl.NumberFormat('it-IT').format(count)}`;
   blockCounterEl.dataset.available = 'true';
+}
+
+function renderSiteBlockStatus(status) {
+  siteBlockStatus = status && typeof status === 'object'
+    ? status : { available: false, tabId: null, domain: null, unblocked: false };
+  const available = siteBlockStatus.available === true &&
+    Number.isSafeInteger(siteBlockStatus.tabId) && typeof siteBlockStatus.domain === 'string';
+  const unblocked = available && siteBlockStatus.unblocked === true;
+
+  siteBlockDomainEl.textContent = available
+    ? `Sito corrente: ${siteBlockStatus.domain}`
+    : 'Sito corrente: non disponibile';
+  siteBlockButton.disabled = !available;
+  siteBlockButton.textContent = unblocked ? '🛡️ Riattiva blocco' : '🛡️ Sblocca sito';
+  siteBlockButton.dataset.unblocked = String(unblocked);
+  siteBlockButton.setAttribute('aria-pressed', String(unblocked));
+  siteBlockButton.title = available
+    ? `Eccezione DNR limitata a questa scheda: ${siteBlockStatus.domain}`
+    : 'Disponibile solo sulle schede HTTP o HTTPS';
 }
 
 function errorText(error) {
@@ -178,6 +200,7 @@ function render(data) {
 
   renderResources(data?.processStats);
   renderBlockCounter(data?.blockCount, data?.blockCountAvailable === true);
+  renderSiteBlockStatus(data?.siteBlockStatus);
   updateSocksVisibility();
 
   const s = data?.status;
@@ -343,6 +366,32 @@ urlhausMalwareButton.addEventListener('click', async () => {
     await refresh();
   } catch (error) {
     setPanelStatus('URLhaus: ' + errorText(error), true);
+    await refresh().catch(() => {});
+  }
+});
+
+siteBlockButton.addEventListener('click', async () => {
+  if (siteBlockButton.disabled || !siteBlockStatus.available) return;
+  const previous = siteBlockStatus;
+  const requested = !previous.unblocked;
+  siteBlockButton.disabled = true;
+
+  try {
+    const result = await browser.runtime.sendMessage({
+      type: 'toggle-site-block',
+      tabId: previous.tabId,
+      domain: previous.domain,
+      enabled: requested
+    });
+    if (!result?.ok || result.unblocked !== requested || result.domain !== previous.domain) {
+      throw new Error('Stato del blocco sito non confermato.');
+    }
+
+    renderSiteBlockStatus(result);
+    await browser.tabs.reload(previous.tabId);
+    await refresh();
+  } catch (error) {
+    setPanelStatus('Blocco sito: ' + errorText(error), true);
     await refresh().catch(() => {});
   }
 });
@@ -1236,6 +1285,14 @@ Promise.all([
 setInterval(() => {
   refresh().catch(() => {});
 }, 5000);
+
+browser.tabs.onActivated.addListener(() => refresh().catch(() => {}));
+browser.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+  if ('url' in changeInfo || changeInfo.status === 'complete') {
+    refresh().catch(() => {});
+  }
+});
+browser.windows.onFocusChanged.addListener(() => refresh().catch(() => {}));
 
 if (new URL(location.href).searchParams.get('selftest') === '1') {
   setTimeout(() => {

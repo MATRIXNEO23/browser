@@ -2,6 +2,12 @@ const MODE_LIMITS = { NORMAL: 3, TURBO: 3, PRIVATE: 3, GHOST: 3 };
 const DEFAULT_MODE = 'NORMAL';
 const ADS_RULESET_ID = 'ads_basic';
 const URLHAUS_MALWARE_RULESET_ID = 'urlhaus_malware_basic';
+const SITE_BLOCK_RULE_PRIORITY = 1000;
+const SITE_BLOCK_RULE_ID_START = 1500000;
+const SITE_BLOCK_RULE_ID_LIMIT = SITE_BLOCK_RULE_ID_START + 5000;
+const SITE_BLOCK_RESOURCE_TYPES = Object.freeze([
+  'main_frame', 'sub_frame', 'script', 'image', 'xmlhttprequest', 'media', 'font', 'other'
+]);
 const BLOCK_COUNTER_RULESET_IDS = new Set([
   ADS_RULESET_ID,
   URLHAUS_MALWARE_RULESET_ID
@@ -11,6 +17,142 @@ const TAVILY_MONTHLY_LIMIT = 1000;
 
 let sessionBlockCount = 0;
 let sessionBlockCounterAvailable = false;
+const siteBlockRulesByKey = new Map();
+let siteBlockUpdateQueue = Promise.resolve();
+
+function queueSiteBlockUpdate(action) {
+  const next = siteBlockUpdateQueue.then(action);
+  siteBlockUpdateQueue = next.catch(() => {});
+  return next;
+}
+
+function siteBlockKey(tabId, domain) {
+  return JSON.stringify([tabId, domain]);
+}
+
+function getSiteBlockDomain(url) {
+  try {
+    const parsed = new URL(String(url || ''));
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.hostname.toLowerCase().replace(/\.$/, '') || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function getActiveSiteBlockTab() {
+  try {
+    const tabs = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+    return tabs.find(tab => Number.isSafeInteger(tab.id) && tab.id >= 0) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function initializeSiteBlockRules() {
+  const dnr = browser.declarativeNetRequest;
+  if (!dnr?.getSessionRules || !dnr?.updateSessionRules) return;
+
+  const staleRuleIds = (await dnr.getSessionRules())
+    .filter(rule => rule.id >= SITE_BLOCK_RULE_ID_START && rule.id < SITE_BLOCK_RULE_ID_LIMIT)
+    .map(rule => rule.id);
+  if (staleRuleIds.length) {
+    await dnr.updateSessionRules({ removeRuleIds: staleRuleIds });
+  }
+  siteBlockRulesByKey.clear();
+}
+
+async function getSiteBlockStatus(tabId) {
+  if (!Number.isSafeInteger(tabId) || tabId < 0) {
+    return { available: false, tabId: null, domain: null, unblocked: false };
+  }
+
+  let tab;
+  try { tab = await browser.tabs.get(tabId); }
+  catch (_) { tab = null; }
+
+  const domain = getSiteBlockDomain(tab?.url);
+  if (!domain) return { available: false, tabId, domain: null, unblocked: false };
+  return {
+    available: true,
+    tabId,
+    domain,
+    unblocked: siteBlockRulesByKey.has(siteBlockKey(tabId, domain))
+  };
+}
+
+async function allocateSiteBlockRuleId() {
+  const dnr = browser.declarativeNetRequest;
+  const rules = await dnr.getSessionRules();
+  const usedIds = new Set(rules.map(rule => rule.id));
+  for (let id = SITE_BLOCK_RULE_ID_START; id < SITE_BLOCK_RULE_ID_LIMIT; id++) {
+    if (!usedIds.has(id)) return id;
+  }
+  throw new Error('Limite delle eccezioni temporanee raggiunto.');
+}
+
+function toggleSiteBlock(tabId, domain, enable) {
+  return queueSiteBlockUpdate(() => applySiteBlockToggle(tabId, domain, enable));
+}
+
+async function applySiteBlockToggle(tabId, domain, enable) {
+  if (!Number.isSafeInteger(tabId) || tabId < 0 || typeof enable !== 'boolean') {
+    throw new Error('Scheda o stato Smart Toggle non valido.');
+  }
+  const dnr = browser.declarativeNetRequest;
+  if (!dnr?.getSessionRules || !dnr?.updateSessionRules) {
+    throw new Error('Le regole DNR di sessione non sono disponibili.');
+  }
+
+  let tab;
+  try { tab = await browser.tabs.get(tabId); }
+  catch (_) { throw new Error('La scheda non è più disponibile.'); }
+  const actualDomain = getSiteBlockDomain(tab?.url);
+  const requestedDomain = String(domain || '').toLowerCase().replace(/\.$/, '');
+  if (!actualDomain || requestedDomain !== actualDomain) {
+    throw new Error('Il dominio della scheda è cambiato; aggiorna il controllo.');
+  }
+
+  const key = siteBlockKey(tabId, actualDomain);
+  const current = siteBlockRulesByKey.get(key);
+  if (enable && current) return getSiteBlockStatus(tabId);
+  if (!enable && !current) return getSiteBlockStatus(tabId);
+
+  if (enable) {
+    const id = await allocateSiteBlockRuleId();
+    await dnr.updateSessionRules({ addRules: [{
+      id,
+      priority: SITE_BLOCK_RULE_PRIORITY,
+      action: { type: 'allow' },
+      condition: {
+        urlFilter: '*',
+        initiatorDomains: [actualDomain],
+        tabIds: [tabId],
+        resourceTypes: SITE_BLOCK_RESOURCE_TYPES
+      }
+    }] });
+    siteBlockRulesByKey.set(key, { id, tabId, domain: actualDomain });
+  } else {
+    await dnr.updateSessionRules({ removeRuleIds: [current.id] });
+    siteBlockRulesByKey.delete(key);
+  }
+
+  return getSiteBlockStatus(tabId);
+}
+
+function removeSiteBlockRulesForTab(tabId) {
+  return queueSiteBlockUpdate(() => applyRemoveSiteBlockRulesForTab(tabId));
+}
+
+async function applyRemoveSiteBlockRulesForTab(tabId) {
+  const entries = [...siteBlockRulesByKey.entries()]
+    .filter(([, rule]) => rule.tabId === tabId);
+  if (!entries.length) return;
+  await browser.declarativeNetRequest.updateSessionRules({
+    removeRuleIds: entries.map(([, rule]) => rule.id)
+  });
+  for (const [key] of entries) siteBlockRulesByKey.delete(key);
+}
 
 function recordDnrBlock(details) {
   const rule = details?.rule;
@@ -897,6 +1039,8 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
 
 async function initialize() {
   await initializeBlockCounter();
+  try { await initializeSiteBlockRules(); }
+  catch (error) { console.warn('Unable to clear stale site exceptions', error); }
   try {
     browser.alarms.create('resource-sweep', { periodInMinutes: 1 });
   } catch (_) {}
@@ -947,7 +1091,12 @@ browser.runtime.onStartup.addListener(initialize);
 
 browser.tabs.onActivated.addListener(scheduleEnforcement);
 browser.tabs.onCreated.addListener(scheduleEnforcement);
-browser.tabs.onRemoved.addListener(scheduleEnforcement);
+browser.tabs.onRemoved.addListener((tabId) => {
+  removeSiteBlockRulesForTab(tabId).catch(error => {
+    console.warn('Unable to remove site exceptions for closed tab', error);
+  });
+  scheduleEnforcement();
+});
 browser.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
   if ('url' in changeInfo || 'status' in changeInfo) {
     recordGhostHost(changeInfo.url || tab?.url).catch(() => {});
@@ -965,6 +1114,24 @@ browser.alarms.onAlarm.addListener((alarm) => {
 
 browser.runtime.onMessage.addListener(async (message) => {
   if (message?.type === 'get-block-count') return getBlockCount();
+  if (message?.type === 'get-site-block-status') {
+    const tab = await getActiveSiteBlockTab();
+    return tab ? getSiteBlockStatus(tab.id) : {
+      available: false, tabId: null, domain: null, unblocked: false
+    };
+  }
+  if (message?.type === 'toggle-site-block' && typeof message.enabled === 'boolean') {
+    const tab = await getActiveSiteBlockTab();
+    if (!tab || tab.id !== message.tabId) {
+      throw new Error('La scheda attiva è cambiata; aggiorna il controllo.');
+    }
+    const domain = getSiteBlockDomain(tab.url);
+    if (!domain || message.domain !== domain) {
+      throw new Error('Il dominio della scheda è cambiato; aggiorna il controllo.');
+    }
+    const status = await toggleSiteBlock(tab.id, domain, message.enabled);
+    return { ok: true, ...status };
+  }
   if (message?.type === 'tavily-key-status') return tavilyKeyStatus();
   if (message?.type === 'tavily-key-save') {
     const key = String(message.key || '').trim();
@@ -1142,6 +1309,11 @@ browser.runtime.onMessage.addListener(async (message) => {
       urlhausMalwareEnabled = await getUrlhausMalwareEnabled();
     } catch (error) { console.warn('Unable to read URLhaus ruleset', error); }
 
+    const activeSiteTab = await getActiveSiteBlockTab();
+    const siteBlockStatus = activeSiteTab
+      ? await getSiteBlockStatus(activeSiteTab.id)
+      : { available: false, tabId: null, domain: null, unblocked: false };
+
     let torRouted = false;
     if (data.torEnabled && torProcess.bootstrapped) {
       try {
@@ -1161,6 +1333,7 @@ browser.runtime.onMessage.addListener(async (message) => {
       modeHealth: await getModeHealth(data.mode || DEFAULT_MODE, !!data.torEnabled),
       adsEnabled,
       urlhausMalwareEnabled,
+      siteBlockStatus,
       blockCount: sessionBlockCount,
       blockCountAvailable: sessionBlockCounterAvailable,
       status: data.status || null,
