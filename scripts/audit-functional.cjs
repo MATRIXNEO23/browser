@@ -16,12 +16,14 @@ function section(start, end) {
 async function main() {
   const bridgeFunctions = bridgeSchema[0].functions.map(item => item.name);
   assert.ok(bridgeFunctions.includes('applyGhostHardening'), 'privileged bridge must expose GHOST hardening');
+  assert.ok(bridgeFunctions.includes('setGhostJavascriptEnabled'), 'privileged bridge must expose the GHOST JavaScript toggle');
   const hardeningStart = bridgeSource.indexOf('const applyGhostHardening = isActive =>');
   const hardeningEnd = bridgeSource.indexOf('\n\n    return {\n      browserControl:', hardeningStart);
   const hardeningCode = bridgeSource.slice(hardeningStart, hardeningEnd);
   const activationOrder = [
     'setInt("network.cookie.cookieBehavior", 1)',
     'setBool("privacy.firstparty.isolate", true)',
+    'setBool("javascript.enabled", false)',
     'setBool("javascript.options.wasm", false)',
     'setBool("network.http.http3.enable", false)',
     'setBool("network.http.altsvc.enabled", false)'
@@ -36,9 +38,30 @@ async function main() {
     'GHOST hardening must rollback the complete preference snapshot after activation failure');
   assert.match(bridgeSource, /GHOST_HARDENING_SNAPSHOT_PREF/,
     'GHOST hardening snapshot must survive browser restarts');
+  assert.match(bridgeSource, /"javascript\.enabled": \{ type: "bool", fallback: true \}/,
+    'javascript.enabled must be included in the existing native preference snapshot');
+  assert.match(bridgeSource, /javascriptEnabled: Services\.prefs\.getBoolPref\("javascript\.enabled", true\)/,
+    'mode diagnostics must expose the effective global JavaScript preference');
+  assert.match(source, /message\.mode === 'GHOST' && previousMode !== 'GHOST'[\s\S]{0,180}applyGhostHardening\(true\)/,
+    'reselecting GHOST must not reapply hardening and reset the temporary JavaScript override');
+  assert.match(source, /set-ghost-javascript[\s\S]{0,180}setGhostJavascript\(message\.enabled\)/,
+    'the background must route the GHOST-only JavaScript toggle through its serialized transition queue');
+  assert.match(sidebarSource, /ghost-javascript-toggle/,
+    'the sidebar must expose the JavaScript toggle and state rendering');
+  assert.ok(sidebarSource.includes('Attiva JavaScript') && sidebarSource.includes('Disattiva JavaScript'),
+    'the sidebar must label both JavaScript toggle states');
+  assert.match(fs.readFileSync(path.join(__dirname, '../extension/sidebar.html'), 'utf8'),
+    /id="ghost-javascript-control"[\s\S]*id="ghost-javascript-toggle"/,
+    'the GHOST JavaScript control must exist in the sidebar markup');
   for (const check of [
     'ghost-hardening-active', 'tor-bootstrap-with-ghost-fpi',
     'tor-normal-restores-ghost-hardening', 'ghost-exit-restores-native-prefs'
+  ]) {
+    assert.ok(sidebarSource.includes(`'${check}'`), `Windows runtime self-test must include ${check}`);
+  }
+  for (const check of [
+    'ghost-javascript-toggle-visible-while-off', 'ghost-javascript-enable-from-sidebar',
+    'ghost-javascript-override-survives-reselect', 'ghost-javascript-disable-from-sidebar'
   ]) {
     assert.ok(sidebarSource.includes(`'${check}'`), `Windows runtime self-test must include ${check}`);
   }
@@ -289,8 +312,16 @@ async function main() {
     const modeCode = section("  if (message?.type === 'set-mode'", "  if (message?.type === 'set-tor'");
   data.mode = 'NORMAL';
   let failMode = true;
+  let mockGhostJavascriptEnabled = true;
   browser.browserControl.applyMode = async mode => {
     if (mode === 'PRIVATE' && failMode) throw new Error('mode pref failed');
+  };
+  browser.browserControl.getModeDiagnostics = async () => ({
+    javascriptEnabled: mockGhostJavascriptEnabled
+  });
+  browser.browserControl.setGhostJavascriptEnabled = async enabled => {
+    mockGhostJavascriptEnabled = enabled;
+    return { enabled };
   };
   browser.browserControl.applyGhostHardening = async active => {
     ghostHardeningWrites.push(active);
@@ -405,6 +436,12 @@ async function main() {
   await vm.runInContext("handleMode({type:'set-mode',mode:'GHOST'})", context);
   assert.deepEqual(ghostHardeningWrites, [true], 'entering GHOST must activate hardening');
 
+  ghostHardeningWrites.length = 0;
+  mockGhostJavascriptEnabled = true;
+  await vm.runInContext("handleMode({type:'set-mode',mode:'GHOST'})", context);
+  assert.deepEqual(ghostHardeningWrites, [], 'reselecting GHOST must preserve the temporary JavaScript override');
+  assert.equal(mockGhostJavascriptEnabled, true, 'same-mode GHOST selection changed the JavaScript override');
+
   data.mode = 'GHOST';
   data.ghostSession = { startedAt: 101, hosts: ['example.org'] };
   context.beginGhostSession = async () => { data.ghostSession = { startedAt: 200, hosts: [] }; };
@@ -413,6 +450,8 @@ async function main() {
   };
   await assert.rejects(vm.runInContext("handleMode({type:'set-mode',mode:'NORMAL'})", context), /mode failed after cleanup/);
   assert.equal(data.mode, 'GHOST');
+  assert.equal(mockGhostJavascriptEnabled, true,
+    'failed exit from GHOST must restore the pre-transition JavaScript override');
   assert.equal(data.ghostSession.hosts.length, 0);
   assert.ok(data.ghostSessionRestartedAt, 'new GHOST session must show persistent warning');
 

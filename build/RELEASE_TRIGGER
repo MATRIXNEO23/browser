@@ -9,4 +9,4 @@ compact_sidebar: required
 approved_cyber_background: unchanged
 windows_runtime_smoke: required
 stable_release_only: false
-rerun_reason: ads_malware_ephemeral_counter_ci_143
+rerun_reason: ghost_global_javascript_off_windows_runtime_test_2026_10_03

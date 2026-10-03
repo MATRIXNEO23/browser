@@ -676,6 +676,27 @@ async function getModeHealth(mode, torEnabled) {
   return { ok: issues.length === 0, issues, checkedAt: Date.now() };
 }
 
+async function setGhostJavascript(enabled) {
+  return queueControlTransition(async () => {
+    if (await getMode() !== 'GHOST') {
+      throw new Error('Il controllo JavaScript è disponibile solo in modalità GHOST.');
+    }
+    const result = await browser.browserControl.setGhostJavascriptEnabled(enabled);
+    let reloaded = false;
+    try {
+      const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+      const activeUrl = tab?.url || tab?.pendingUrl || '';
+      if (Number.isInteger(tab?.id) && /^https?:/i.test(activeUrl)) {
+        await browser.tabs.reload(tab.id);
+        reloaded = true;
+      }
+    } catch (error) {
+      console.warn('JavaScript preference changed but active tab reload failed:', error?.message || error);
+    }
+    return { ...result, reloaded };
+  });
+}
+
 async function beginGhostSession() {
   await browser.storage.local.set({
     ghostSession: {
@@ -1152,9 +1173,15 @@ browser.runtime.onMessage.addListener(async (message) => {
     return tavilyKeyStatus();
   }
   if (message?.type === 'tavily-search-explicit') return searchTavilyExplicit(message.query);
+  if (message?.type === 'set-ghost-javascript' && typeof message.enabled === 'boolean') {
+    return setGhostJavascript(message.enabled);
+  }
   if (message?.type === 'set-mode' && MODE_LIMITS[message.mode]) {
     return queueControlTransition(async () => {
       const previousMode = await getMode();
+      const previousGhostJavascriptEnabled = previousMode === 'GHOST'
+        ? (await browser.browserControl.getModeDiagnostics()).javascriptEnabled
+        : undefined;
 
       if (message.mode !== 'GHOST' && browser.browserControl?.applyGhostHardening) {
         await browser.browserControl.applyGhostHardening(false);
@@ -1166,7 +1193,8 @@ browser.runtime.onMessage.addListener(async (message) => {
         if (message.mode === 'GHOST' && previousMode !== 'GHOST') {
           await beginGhostSession();
         }
-        if (message.mode === 'GHOST' && browser.browserControl?.applyGhostHardening) {
+        if (message.mode === 'GHOST' && previousMode !== 'GHOST' &&
+            browser.browserControl?.applyGhostHardening) {
           await browser.browserControl.applyGhostHardening(true);
         }
         await applyRuntimePrivacy(message.mode);
@@ -1210,8 +1238,13 @@ browser.runtime.onMessage.addListener(async (message) => {
           await browser.browserControl.applyGhostHardening(false).catch(() => {});
         }
         await applyRuntimePrivacy(previousMode).catch(() => {});
-        if (previousMode === 'GHOST' && browser.browserControl?.applyGhostHardening) {
+        if (previousMode === 'GHOST' && message.mode !== 'GHOST' &&
+            browser.browserControl?.applyGhostHardening) {
           await browser.browserControl.applyGhostHardening(true).catch(() => {});
+          if (typeof previousGhostJavascriptEnabled === 'boolean') {
+            await browser.browserControl.setGhostJavascriptEnabled(previousGhostJavascriptEnabled)
+              .catch(() => {});
+          }
         }
         if ((await browser.storage.local.get('torEnabled')).torEnabled) {
           await browser.privacy.network.peerConnectionEnabled.set({ value: false }).catch(() => {});

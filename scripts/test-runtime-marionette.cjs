@@ -580,6 +580,47 @@ async function testSecurityLogger(client) {
   assert.equal(restored?.mode, 'NORMAL', 'Could not restore NORMAL mode after logger runtime test.');
 }
 
+async function testGhostJavascript(client) {
+  await extensionCall(client,
+    '(api) => api.runtime.sendMessage({ type: "set-mode", mode: "NORMAL" })');
+  const baseline = await extensionCall(client,
+    '(api) => api.runtime.sendMessage({ type: "get-mode-diagnostics" })');
+  assert.equal(typeof baseline?.javascriptEnabled, 'boolean',
+    'Could not read the baseline JavaScript preference.');
+
+  try {
+    await extensionCall(client,
+      '(api) => api.runtime.sendMessage({ type: "set-mode", mode: "GHOST" })', null, 60000);
+    let prefs = await extensionCall(client,
+      '(api) => api.runtime.sendMessage({ type: "get-mode-diagnostics" })');
+    assert.equal(prefs.javascriptEnabled, false, 'Entering GHOST did not disable global JavaScript.');
+
+    const enabled = await extensionCall(client,
+      '(api) => api.runtime.sendMessage({ type: "set-ghost-javascript", enabled: true })');
+    assert.equal(enabled?.enabled, true, 'GHOST JavaScript override was not enabled.');
+
+    await extensionCall(client,
+      '(api) => api.runtime.sendMessage({ type: "set-mode", mode: "GHOST" })', null, 60000);
+    prefs = await extensionCall(client,
+      '(api) => api.runtime.sendMessage({ type: "get-mode-diagnostics" })');
+    assert.equal(prefs.javascriptEnabled, true,
+      'Reselecting the already-active GHOST mode reset the temporary JavaScript override.');
+
+    const disabled = await extensionCall(client,
+      '(api) => api.runtime.sendMessage({ type: "set-ghost-javascript", enabled: false })');
+    assert.equal(disabled?.enabled, false, 'GHOST JavaScript override was not disabled.');
+  } finally {
+    await extensionCall(client,
+      '(api) => api.runtime.sendMessage({ type: "set-mode", mode: "NORMAL" })', null, 60000);
+  }
+
+  const restored = await extensionCall(client,
+    '(api) => api.runtime.sendMessage({ type: "get-mode-diagnostics" })');
+  assert.equal(restored.javascriptEnabled, baseline.javascriptEnabled,
+    'Exiting GHOST did not restore the pre-GHOST JavaScript preference.');
+  console.log('PASS: GHOST JavaScript off/on, same-mode selection, and snapshot restoration.');
+}
+
 async function main() {
   assertRuntimeInputs();
   const client = new MarionetteClient(PORT);
@@ -594,6 +635,7 @@ async function main() {
     const failures = [];
     for (const [name, test] of [
       ['Proxy authentication', () => testProxyAuthentication(client, extensionPage)],
+      ['GHOST JavaScript', () => testGhostJavascript(client)],
       ['Security logger', () => testSecurityLogger(client)]
     ]) {
       try {

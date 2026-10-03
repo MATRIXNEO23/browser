@@ -159,6 +159,33 @@ h2 {
   margin-top: 5px;
 }
 
+.ghost-javascript-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  font-size: 10px;
+}
+
+.ghost-javascript-control[hidden],
+.ghost-javascript-control .hint[hidden] { display: none; }
+
+.ghost-javascript-control .hint {
+  margin: 3px 0 0;
+  color: var(--danger);
+  font-size: 9px;
+}
+
+.ghost-javascript-control button {
+  flex: 0 0 auto;
+  font-size: 9px;
+}
+
 .mode-grid button {
   min-height: 42px;
   text-align: left;

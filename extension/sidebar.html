@@ -34,6 +34,13 @@
         <button data-mode="GHOST"><b>GHOST</b><span>Sessione effimera</span></button>
       </div>
       <p class="hint">GHOST ripulisce cronologia della sessione e dati dei siti visitati all'uscita; può rimuovere anche dati preesistenti di quei siti.</p>
+      <div id="ghost-javascript-control" class="ghost-javascript-control" hidden>
+        <div>
+          <strong>JavaScript globale</strong>
+          <p id="ghost-javascript-warning" class="hint" hidden>JavaScript riattivato: protezione GHOST ridotta per tutti i siti.</p>
+        </div>
+        <button id="ghost-javascript-toggle" type="button" disabled aria-pressed="false">Stato non disponibile</button>
+      </div>
     </section>
 
     <section class="card">

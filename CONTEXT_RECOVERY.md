@@ -378,3 +378,30 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Verifiche locali: `node --check` su background/sidebar/audit, `node scripts/audit-functional.cjs`, `python3 scripts/validate-product.py`, `python3 scripts/audit-wiring.py` e `git diff --check`.
 - Il test è Node/VM e non sostituisce una verifica runtime Gecko/Windows. Non avvia una nuova CI e non viene eseguito alcun push in questo checkpoint.
 - La modifica utente preesistente a `releases/FILUM-Windows-x64-117.zip` resta esclusa dal commit.
+
+## CI #144 — validazione Smart Toggle v0.5.4 (2026-10-02)
+
+- Il checkpoint locale `b8818550038c046bbb859feb01721cbe8906c3b9` è stato pubblicato su `main` con commit remoto `737c99cb0b25e021c41eff1e86aa97b9dc7e045d`; gli alberi Git coincidono (`30bb9ba42714dfe778eec6feb72524497c1b09df`). Il push Git diretto non era autenticato, quindi il commit equivalente è stato creato tramite GitHub API. La run è stata avviata con `workflow_dispatch`.
+- Run: [#144](https://github.com/MATRIXNEO23/browser/actions/runs/37021931611), `workflow_dispatch` su `main`, commit `737c99cb0b25e021c41eff1e86aa97b9dc7e045d`.
+- Esito: `build` **success**, `smoke-windows` **success**, `release` **skipped** (job disabilitato). Product gate, compilazione Windows, packaging, checksum, registrazione del core, verifica bundle Tor e avvio runtime PASS.
+- Nel self-test Windows: modalità e hardening GHOST PASS; Tor bootstrap 100% in circa 17,9 secondi; egress `HTTP 200; IsTor=true`; ripristino NORMAL/GHOST e WebRTC PASS. Runner: Windows Server 2025 (`10.0.26100`).
+- Limite specifico Smart Toggle: il self-test Windows non ha cliccato il nuovo toggle né verificato `tabs.onRemoved`; DNR statico era presente durante lo smoke, ma il comportamento interattivo e il cleanup sono stati verificati dall’audit funzionale Node/VM, non da Gecko runtime. CI #144 conferma build e runtime generale/Tor, non una prova end-to-end del toggle.
+- Artifact runtime finale: ID `11233977929`, digest ZIP artifact `15bce3b1989fd8f89312e73bb562b44000439ee66fa9040b8c5ec6c733878bd6`.
+- La modifica utente preesistente a `releases/FILUM-Windows-x64-117.zip` resta esclusa.
+
+## Chiusura ciclo v0.5.4-stable (2026-10-02)
+
+- Stato operativo accettato: **v0.5.4-stable**, in stabilizzazione e in attesa di feedback sullo Smart Toggle o di nuove direttive. Nessun coding o rilascio formale richiesto in questa fase.
+- Evidenze: CI #144 `build` e `smoke-windows` PASS; audit locale Node/VM PASS per scope tab/dominio, atomicità, concorrenza e cleanup. Il limite di copertura Gecko end-to-end del toggle resta quello annotato sopra.
+- `release` rimane disabilitato/skipped: questo stato non equivale a una release formale pubblicata.
+
+## GHOST JavaScript OFF globale — implementazione locale (2026-10-03)
+
+- Aggiunto `javascript.enabled` alla mappa dello snapshot persistente `filum.ghostHardening.snapshot` in `extension/experiment-apis/browserControl.js`; ingresso in GHOST lo imposta a `false`, uscita ripristina il valore originario, rollback include la preferenza.
+- Il bridge espone `setGhostJavascriptEnabled()` nello schema `extension/experiment-apis/browserControl.json` e riporta lo stato effettivo tramite `getModeDiagnostics()`. Il background serializza il toggle, lo rifiuta fuori da GHOST e ricarica la scheda attiva solo per URL HTTP(S), evitando di ricaricare la UI dell’estensione.
+- La sidebar mostra il toggle solo in GHOST e un avviso quando JS è riattivato. Riselezionare GHOST non riapplica l’hardening e preserva l’override; riavviare il browser mentre GHOST resta selezionata riapplica JS OFF. Se l’uscita da GHOST fallisce, il rollback ripristina anche lo stato JS effettivo precedente.
+- Aggiornati `extension/diagnostics.js`, `scripts/audit-functional.cjs`, il self-test Windows integrato in `extension/sidebar.js` e `scripts/test-runtime-marionette.cjs`. Il self-test UI verifica che il controllo resti visibile/interattivo quando JS è OFF, che si possa riattivare/disattivare JS, che la riselezione GHOST preservi l’override e che l’uscita ripristini lo snapshot. Il runtime Marionette copre inoltre ingresso/uscita e ripristino.
+- Aggiornato `build/RELEASE_TRIGGER` con motivo `ghost_global_javascript_off_windows_runtime_test_2026_10_03`; il workflow esegue build e smoke Windows, mentre il job `release` resta disabilitato.
+- Verifiche locali PASS: `node --check` per browserControl, background, sidebar, diagnostics, audit e Marionette; parsing JSON dello schema bridge; `node scripts/audit-functional.cjs`; `python3 scripts/validate-product.py`; `python3 scripts/audit-wiring.py`; `git diff --check`. Il self-test Windows non è stato eseguito in questo ambiente.
+- File coinvolti: `extension/experiment-apis/browserControl.js`, `extension/experiment-apis/browserControl.json`, `extension/background.js`, `extension/sidebar.html`, `extension/sidebar.css`, `extension/sidebar.js`, `extension/diagnostics.js`, `scripts/audit-functional.cjs`, `scripts/test-runtime-marionette.cjs`, `build/RELEASE_TRIGGER`, questo file.
+- La modifica utente preesistente a `releases/FILUM-Windows-x64-117.zip` resta esclusa da staging e commit.

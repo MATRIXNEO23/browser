@@ -18,6 +18,7 @@ const GHOST_HARDENING_SNAPSHOT_PREF = "filum.ghostHardening.snapshot";
 const GHOST_HARDENING_PREFS = {
   "network.cookie.cookieBehavior": { type: "int", fallback: 5 },
   "privacy.firstparty.isolate": { type: "bool", fallback: false },
+  "javascript.enabled": { type: "bool", fallback: true },
   "javascript.options.wasm": { type: "bool", fallback: true },
   "network.http.http3.enable": { type: "bool", fallback: true },
   "network.http.altsvc.enabled": { type: "bool", fallback: true }
@@ -300,6 +301,7 @@ this.browserControl = class extends ExtensionAPI {
       for (const name of [
         "privacy.firstparty.isolate",
         "network.cookie.cookieBehavior",
+        "javascript.enabled",
         "javascript.options.wasm",
         "network.http.http3.enable",
         "network.http.altsvc.enabled"
@@ -330,6 +332,7 @@ this.browserControl = class extends ExtensionAPI {
         // Cookie policy must be compatible before enabling first-party isolation.
         setInt("network.cookie.cookieBehavior", 1);
         setBool("privacy.firstparty.isolate", true);
+        setBool("javascript.enabled", false);
         setBool("javascript.options.wasm", false);
         setBool("network.http.http3.enable", false);
         setBool("network.http.altsvc.enabled", false);
@@ -374,6 +377,15 @@ this.browserControl = class extends ExtensionAPI {
 
         async applyGhostHardening(isActive) {
           return applyGhostHardening(isActive);
+        },
+
+        async setGhostJavascriptEnabled(enabled) {
+          if (typeof enabled !== "boolean") {
+            throw new TypeError("enabled must be boolean");
+          }
+          setBool("javascript.enabled", enabled);
+          Services.prefs.savePrefFile(null);
+          return { enabled: Services.prefs.getBoolPref("javascript.enabled", true) };
         },
 
         async startTor() {
@@ -557,6 +569,7 @@ this.browserControl = class extends ExtensionAPI {
             fingerprintResistance: Services.prefs.getBoolPref("privacy.resistFingerprinting", false),
             ghostCookieBehavior: Services.prefs.getIntPref("network.cookie.cookieBehavior", 5),
             ghostFpi: Services.prefs.getBoolPref("privacy.firstparty.isolate", false),
+            javascriptEnabled: Services.prefs.getBoolPref("javascript.enabled", true),
             ghostWasm: Services.prefs.getBoolPref("javascript.options.wasm", true),
             ghostHttp3: Services.prefs.getBoolPref("network.http.http3.enable", true),
             ghostAltSvc: Services.prefs.getBoolPref("network.http.altsvc.enabled", true),

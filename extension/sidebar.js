@@ -7,6 +7,9 @@ const siteBlockButton = document.getElementById('site-block-toggle');
 const adsButton = document.getElementById('ads');
 const urlhausMalwareButton = document.getElementById('urlhaus-malware');
 const modeButtons = [...document.querySelectorAll('[data-mode]')];
+const ghostJavascriptControl = document.getElementById('ghost-javascript-control');
+const ghostJavascriptButton = document.getElementById('ghost-javascript-toggle');
+const ghostJavascriptWarning = document.getElementById('ghost-javascript-warning');
 const browserTheme = document.getElementById('browser-theme');
 const websiteAppearance = document.getElementById('website-appearance');
 const httpsOnly = document.getElementById('https-only');
@@ -96,6 +99,17 @@ function setModeVisual(mode) {
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   }
+}
+
+function renderGhostJavascript(mode, enabled) {
+  ghostJavascriptControl.hidden = mode !== 'GHOST';
+  const available = mode === 'GHOST' && typeof enabled === 'boolean';
+  ghostJavascriptButton.disabled = !available;
+  ghostJavascriptButton.textContent = !available
+    ? 'Stato non disponibile'
+    : enabled ? 'Disattiva JavaScript' : 'Attiva JavaScript';
+  ghostJavascriptButton.setAttribute('aria-pressed', String(available && enabled));
+  ghostJavascriptWarning.hidden = !available || !enabled;
 }
 
 function renderResources(stats) {
@@ -235,6 +249,12 @@ async function refresh() {
   try {
     const data = await getStatus();
     render(data);
+    try {
+      const prefs = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
+      renderGhostJavascript(data?.mode || 'NORMAL', prefs?.javascriptEnabled);
+    } catch (_) {
+      renderGhostJavascript(data?.mode || 'NORMAL', undefined);
+    }
     return data;
   } catch (error) {
     setPanelStatus('Errore stato: ' + errorText(error), true);
@@ -315,6 +335,32 @@ for (const button of modeButtons) {
     } catch (_) {}
   });
 }
+
+ghostJavascriptButton.addEventListener('click', async () => {
+  if (ghostJavascriptButton.disabled) return;
+  ghostJavascriptButton.disabled = true;
+  try {
+    const prefs = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
+    if (typeof prefs?.javascriptEnabled !== 'boolean') {
+      throw new Error('Stato JavaScript non leggibile.');
+    }
+    const result = await browser.runtime.sendMessage({
+      type: 'set-ghost-javascript',
+      enabled: !prefs.javascriptEnabled
+    });
+    if (typeof result?.enabled !== 'boolean') {
+      throw new Error('Modifica JavaScript non confermata dal bridge.');
+    }
+    renderGhostJavascript('GHOST', result.enabled);
+    setPanelStatus(result.enabled
+      ? 'JavaScript attivato globalmente: protezione GHOST ridotta.'
+      : 'JavaScript disattivato globalmente in GHOST.');
+  } catch (error) {
+    setPanelStatus('JavaScript: ' + errorText(error), true);
+  } finally {
+    await refresh().catch(() => {});
+  }
+});
 
 diagnosticsButton.addEventListener('click', async () => {
   try {
@@ -826,6 +872,26 @@ async function runControlSelfTest() {
     let ghostPrefs = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
     record('ghost-hardening-active', matchesGhostHardening(ghostPrefs),
       JSON.stringify(Object.fromEntries(hardeningKeys.map(key => [key, ghostPrefs[key]]))));
+    record('ghost-javascript-toggle-visible-while-off',
+      ghostPrefs.javascriptEnabled === false && !ghostJavascriptControl.hidden &&
+        !ghostJavascriptButton.disabled && ghostJavascriptButton.textContent === 'Attiva JavaScript');
+    ghostJavascriptButton.click();
+    await waitFor(async () => (await browser.runtime.sendMessage({
+      type: 'get-mode-diagnostics'
+    })).javascriptEnabled === true && !ghostJavascriptWarning.hidden &&
+      ghostJavascriptButton.textContent === 'Disattiva JavaScript');
+    record('ghost-javascript-enable-from-sidebar', ghostJavascriptWarning.hidden === false &&
+      ghostJavascriptButton.textContent === 'Disattiva JavaScript');
+    await selectMode('GHOST');
+    ghostPrefs = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
+    record('ghost-javascript-override-survives-reselect', ghostPrefs.javascriptEnabled === true);
+    ghostJavascriptButton.click();
+    await waitFor(async () => (await browser.runtime.sendMessage({
+      type: 'get-mode-diagnostics'
+    })).javascriptEnabled === false && ghostJavascriptWarning.hidden &&
+      ghostJavascriptButton.textContent === 'Attiva JavaScript');
+    record('ghost-javascript-disable-from-sidebar', ghostJavascriptWarning.hidden === true &&
+      ghostJavascriptButton.textContent === 'Attiva JavaScript');
 
     const adsBefore = (await getStatus()).adsEnabled;
     adsButton.click();

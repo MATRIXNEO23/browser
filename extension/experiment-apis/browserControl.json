@@ -32,6 +32,17 @@
         ]
       },
       {
+        "name": "setGhostJavascriptEnabled",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "enabled",
+            "type": "boolean"
+          }
+        ]
+      },
+      {
         "name": "getProcessStats",
         "type": "function",
         "async": true,

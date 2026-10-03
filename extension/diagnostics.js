@@ -95,6 +95,11 @@ async function verify() {
     if (mode === 'GHOST') {
       check('GHOST: cookie di terze parti bloccati (pref)', prefs.ghostCookieBehavior, 1);
       check('GHOST: First Party Isolation', prefs.ghostFpi, true);
+      row(modeEl, 'GHOST: JavaScript globale', prefs.javascriptEnabled === undefined
+        ? 'Non leggibile' : prefs.javascriptEnabled
+          ? 'Attivo · override globale, protezione ridotta'
+          : 'Disattivato', prefs.javascriptEnabled === undefined
+          ? 'unknown' : prefs.javascriptEnabled ? 'unknown' : 'pass');
       check('GHOST: WebAssembly abilitato', prefs.ghostWasm, false);
       check('GHOST: HTTP/3 abilitato', prefs.ghostHttp3, false);
       check('GHOST: Alt-Svc abilitato', prefs.ghostAltSvc, false);
