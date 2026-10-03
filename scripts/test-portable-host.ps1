@@ -84,7 +84,26 @@ function Test-ExpectedGeckoHostResidue {
       (Join-Path $env:APPDATA "Mozilla\Firefox\Crash Reports\crash_helper_server.log"),
       (Join-Path $env:APPDATA "Mozilla\Firefox\Pending Pings")
     )
-    return $path -in $expectedPaths
+    if ($path -in $expectedPaths) { return $true }
+
+    # Gecko's defaultagent task uses a persistent, non-browsing profile by design.
+    # Allow only its known crash/telemetry directories; all other profile data
+    # such as prefs, databases, cookies, and history remains an audit failure.
+    $taskProfiles = Join-Path $env:APPDATA "Mozilla\Firefox\Background Tasks Profiles"
+    if ($path -eq $taskProfiles) { return $true }
+    $prefix = [regex]::Escape($taskProfiles) + "\\([^\\]+MozillaBackgroundTask-[A-Fa-f0-9]+-defaultagent)(?:\\(.*))?$"
+    $match = [regex]::Match($path, $prefix, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($match.Success) {
+      $relative = $match.Groups[2].Value.Replace("/", "\\").TrimEnd("\\")
+      if (-not $relative) { return $true }
+      return $relative -in @(
+        "crashes",
+        "datareporting",
+        "datareporting\glean",
+        "datareporting\glean\tmp"
+      )
+    }
+    return $false
   }
 
   if ($Category -eq "registry") {
