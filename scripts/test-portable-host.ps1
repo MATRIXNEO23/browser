@@ -151,7 +151,7 @@ foreach ($category in @("files", "registry", "services", "tasks")) {
 }
 
 if ($expectedResidues.Count) {
-  Write-Host "Expected Gecko startup metadata classified; no external profile data accepted:"
+  Write-Host "Known Gecko task metadata classified; no external browsing profile accepted:"
   $expectedResidues | ForEach-Object { Write-Host "  ~ $_" }
 }
 if ($unexpectedChanges.Count) {
