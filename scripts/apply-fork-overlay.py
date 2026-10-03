@@ -63,6 +63,50 @@ def patch_browser_chrome(path: Path, project: Path):
     path.write_text(text, encoding="utf-8")
 
 
+def audit_native_app_menu(firefox: Path, project: Path):
+    markup_path = firefox / "browser" / "base" / "content" / "appmenu-viewcache.inc.xhtml"
+    if not markup_path.is_file():
+        raise RuntimeError("Pinned Gecko native app menu markup is missing")
+
+    markup = markup_path.read_text(encoding="utf-8")
+    css = (project / "fork" / "browser-chrome.css").read_text(encoding="utf-8")
+    hidden_ids = (
+        "appMenu-new-ai-window-button",
+        "appMenu-new-classic-window-button",
+        "appMenu-chats-history-button",
+    )
+    preserved_ids = (
+        "appMenu-new-tab-button2",
+        "appMenu-new-window-button2",
+        "appMenu-new-private-window-button2",
+        "appMenu-bookmarks-button",
+        "appMenu-history-button",
+        "appMenu-downloads-button",
+        "appMenu-passwords-button",
+        "appMenu-extensions-themes-button",
+        "appMenu-settings-button",
+        "appMenu-more-button2",
+        "appMenu-help-button2",
+    )
+
+    required_items = (*hidden_ids, *preserved_ids)
+    missing_items = [item for item in required_items if f'id="{item}"' not in markup]
+    if missing_items:
+        raise RuntimeError(
+            "Pinned Gecko app menu changed; re-audit native menu IDs before applying FILUM overlay: "
+            + ", ".join(missing_items)
+        )
+
+    for item in hidden_ids:
+        selector = f"#appMenu-mainView #{item}"
+        if selector not in css:
+            raise RuntimeError(f"Native Firefox app menu simplification is missing selector {selector}")
+
+    for item in preserved_ids:
+        if f"#{item}" in css:
+            raise RuntimeError(f"FILUM native menu overlay must preserve core Firefox command {item}")
+
+
 def patch_native_filum_button(path: Path):
     text = path.read_text(encoding="utf-8")
     if 'id="filum-sidebar-button"' in text:
@@ -364,14 +408,72 @@ var FilumPanel = {
         !this.box.hidden &&
         current.startsWith(expectedBase);
 
-      this.traceSelfTest(passed ? "PASS" : "FAIL:" + current);
+      if (!passed) {
+        throw new Error("FILUM panel did not reach its expected native browser surface");
+      }
 
-      return { passed, current };
+      const nativeMenu = await this.auditNativeAppMenu();
+      this.traceSelfTest("PASS:NATIVE_MENU_PASS:" + nativeMenu.join(","));
+
+      return { passed: true, current, nativeMenu };
     } catch (error) {
       this.traceSelfTest("FAIL:" + String(error));
       this.hide();
       return { passed: false, error: String(error) };
     }
+  },
+
+  async auditNativeAppMenu() {
+    const popup = document.getElementById("appMenu-popup");
+    const button = document.getElementById("PanelUI-menu-button");
+    if (!popup || !button) {
+      throw new Error("Native Firefox app menu controls are missing");
+    }
+
+    if (popup.state !== "open") {
+      const opened = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Native Firefox app menu did not open")), 5000);
+        popup.addEventListener("popupshown", () => {
+          clearTimeout(timer);
+          resolve();
+        }, { once: true });
+      });
+      button.click();
+      await opened;
+    }
+
+    const hiddenIds = [
+      "appMenu-new-ai-window-button",
+      "appMenu-new-classic-window-button",
+      "appMenu-chats-history-button",
+    ];
+    const requiredIds = [
+      "appMenu-new-tab-button2",
+      "appMenu-new-window-button2",
+      "appMenu-new-private-window-button2",
+      "appMenu-bookmarks-button",
+      "appMenu-history-button",
+      "appMenu-downloads-button",
+      "appMenu-passwords-button",
+      "appMenu-extensions-themes-button",
+      "appMenu-settings-button",
+      "appMenu-more-button2",
+      "appMenu-help-button2",
+    ];
+    const isVisible = element => {
+      if (!element || element.hidden || element.closest("[hidden]")) return false;
+      const style = window.getComputedStyle(element);
+      return style.display !== "none" && style.visibility !== "hidden" && style.visibility !== "collapse";
+    };
+
+    const visibleUnsupported = hiddenIds.filter(id => isVisible(document.getElementById(id)));
+    const missingCore = requiredIds.filter(id => !isVisible(document.getElementById(id)));
+    if (visibleUnsupported.length || missingCore.length) {
+      throw new Error("Native app menu mismatch: " + JSON.stringify({ visibleUnsupported, missingCore }));
+    }
+
+    button.click();
+    return requiredIds;
   },
 };
 
@@ -428,6 +530,8 @@ def main():
     project = Path(args.project_root).resolve() if args.project_root else Path(__file__).resolve().parents[1]
 
     upstream = json.loads((project / "fork" / "UPSTREAM.json").read_text(encoding="utf-8"))
+
+    audit_native_app_menu(firefox, project)
 
     branding_base = firefox / "browser" / "branding" / "browser"
     if branding_base.exists():

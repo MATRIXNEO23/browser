@@ -158,7 +158,23 @@ require_text(
     "#filum-panel-box",
     "#filum-panel-browser",
     "#resource-controller_matrixneo23_browser-browser-action",
+    "#appMenu-mainView #appMenu-new-ai-window-button",
+    "#appMenu-mainView #appMenu-new-classic-window-button",
+    "#appMenu-mainView #appMenu-chats-history-button",
     "data:image/svg+xml,"
+)
+require_text(
+    "packaging/Start-FILUM.cmd",
+    "%~dp0",
+    "FILUM_PROFILE",
+    "FILUM_TEMP",
+    "-no-remote",
+    "-profile"
+)
+require_text(
+    "packaging/README-PORTABLE.txt",
+    "Start-FILUM.cmd",
+    "Do not launch browser.exe directly"
 )
 require_text("scripts/generate-brand-assets.py", "Image.open", "firefox.ico", "default{size}.png")
 require_text(
@@ -183,6 +199,9 @@ require_text(
     '"Extension:InitBrowser"',
     "policy.getURL(this.panelPath)",
     "FilumPanel.runSelfTest",
+    "audit_native_app_menu",
+    "auditNativeAppMenu",
+    "PASS:NATIVE_MENU_PASS",
     "navigator-toolbox.inc.xhtml",
     "browser-box.inc.xhtml",
     "browser.js",
@@ -221,7 +240,43 @@ require_text(
     'TOR_VERSION="15.0.24"',
     'TOR_FILE="tor-expert-bundle-windows-x86_64-$TOR_VERSION.tar.gz"',
     "e9dc6ccc93cd6afa507193f4de284d6424233ff5102155cd2c94b259e8a22b65",
-    "Verify bundled TOR executable"
+    "Verify bundled TOR executable",
+    "Firefox application updater payload is absent",
+    "updater.exe",
+    "updater.ini",
+    "update-settings.ini",
+    "maintenanceservice.exe",
+    "maintenanceservice_installer.exe",
+    "default-browser-agent.exe",
+    "Extension security updates must remain enabled",
+    "packaging/Start-FILUM.cmd",
+    "Verify portable profile survives moving the package",
+    "FILUM_PORTABLE_PROFILE_SENTINEL",
+    "Portable profile A-to-B move: PASS",
+    "Validated final Windows ZIP SHA256",
+    "Compress-Archive -Path $sourceRoot",
+    "Final ZIP has an unexpected root layout",
+    "Final ZIP contains the CI profile or temporary files",
+    "test-portable-host.ps1"
+)
+require_text(
+    "scripts/test-portable-host.ps1",
+    "Get-FilumHostSnapshot",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "Get-Service",
+    "Get-ScheduledTask",
+    "registry",
+    "services",
+    "tasks"
+)
+require_text(
+    "docs/FILUM_SITE_PRIVACY_SCOPE_2026-10-03.md",
+    "Per-tab/domain",
+    "Global preference",
+    "UNKNOWN",
+    "No verified site-level exception"
 )
 
 if errors:

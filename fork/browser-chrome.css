@@ -118,6 +118,15 @@
   opacity: .92;
 }
 
+/* Native Firefox app menu: hide unsupported AI-window choices only.
+ * Keep its standard navigation, library, addon, settings, help, and exit commands.
+ */
+#appMenu-mainView #appMenu-new-ai-window-button,
+#appMenu-mainView #appMenu-new-classic-window-button,
+#appMenu-mainView #appMenu-chats-history-button {
+  display: none !important;
+}
+
 #sidebar-box {
   border-inline-end: 1px solid var(--browser-product-line) !important;
   background: var(--browser-product-bg) !important;

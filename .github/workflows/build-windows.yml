@@ -132,9 +132,28 @@ jobs:
           rm -rf dist
           mkdir -p dist/stage/Browser
           cp -a "$RUNTIME"/. dist/stage/Browser/
+          cp packaging/Start-FILUM.cmd packaging/README-PORTABLE.txt dist/stage/Browser/
 
           # Do not expose the upstream artifact executable as a second browser entry point.
           rm -f dist/stage/Browser/firefox.exe
+
+          # FILUM updates are managed at product level. Remove only Mozilla's
+          # standalone application updater and maintenance-service payload;
+          # keep Gecko runtime, add-on updates and system add-on security updates.
+          rm -f \
+            dist/stage/Browser/updater.exe \
+            dist/stage/Browser/updater.ini \
+            dist/stage/Browser/update-settings.ini \
+            dist/stage/Browser/maintenanceservice.exe \
+            dist/stage/Browser/maintenanceservice_installer.exe \
+            dist/stage/Browser/default-browser-agent.exe
+
+          for updater_file in updater.exe updater.ini update-settings.ini maintenanceservice.exe maintenanceservice_installer.exe default-browser-agent.exe; do
+            if [ -e "dist/stage/Browser/$updater_file" ]; then
+              echo "Firefox-only updater component remains in package: $updater_file"
+              exit 1
+            fi
+          done
 
           mkdir -p dist/stage/Browser/distribution
           cp distribution/policies.json dist/stage/Browser/distribution/policies.json
@@ -370,23 +389,47 @@ jobs:
             throw "Bundled Tor executable did not report a Tor version."
           }
 
+      - name: Verify Firefox application updater payload is absent
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $updaterFiles = @(
+            "updater.exe",
+            "updater.ini",
+            "update-settings.ini",
+            "maintenanceservice.exe",
+            "maintenanceservice_installer.exe",
+            "default-browser-agent.exe"
+          )
+          foreach ($name in $updaterFiles) {
+            $path = Join-Path $env:APP_DIR $name
+            if (Test-Path $path) { throw "Mozilla-only updater component is still packaged: $name" }
+          }
+          $policies = Get-Content (Join-Path $env:APP_DIR "distribution/policies.json") -Raw | ConvertFrom-Json
+          if (-not $policies.policies.DisableAppUpdate) { throw "Firefox application update policy is not disabled." }
+          if ($policies.policies.ExtensionUpdate -eq $false) { throw "Extension security updates must remain enabled." }
+          if ($policies.policies.DisableSystemAddonUpdate -eq $true) { throw "Gecko system add-on updates must remain enabled." }
+          Write-Host "Mozilla application updater payload absent; extension and system add-on update policies preserved."
+
       - name: Launch Browser runtime smoke test
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
 
-          $profile = Join-Path $env:RUNNER_TEMP "browser-smoke-profile"
+          $hostSnapshot = Join-Path $env:RUNNER_TEMP "filum-portable-host-baseline.json"
+          & (Join-Path $env:GITHUB_WORKSPACE "scripts/test-portable-host.ps1") -Phase Before -SnapshotPath $hostSnapshot
+
+          $profile = Join-Path $env:APP_DIR "profile"
           New-Item -ItemType Directory -Force -Path $profile | Out-Null
 
-          'user_pref("filum.selftest.enabled", true);' | Set-Content (Join-Path $profile "user.js") -Encoding ascii
+          @(
+            'user_pref("filum.selftest.enabled", true);',
+            'user_pref("filum.portability.marker", "FILUM_PORTABLE_PROFILE_SENTINEL");'
+          ) | Set-Content (Join-Path $profile "user.js") -Encoding ascii
 
-          $args = @(
-            "-no-remote",
-            "-new-instance",
-            "-profile", $profile
-          )
-
-          $launcher = Start-Process -FilePath $env:BROWSER_EXE -ArgumentList $args -PassThru
+          $portableLauncher = Join-Path $env:APP_DIR "Start-FILUM.cmd"
+          if (-not (Test-Path $portableLauncher)) { throw "Start-FILUM.cmd missing from package." }
+          $launcher = Start-Process -FilePath $portableLauncher -PassThru
           $deadline = (Get-Date).AddSeconds(20)
           $alive = $false
 
@@ -500,8 +543,37 @@ jobs:
               throw "FILUM control self-test failed: $detail"
             }
 
+            $nativeMenuDeadline = (Get-Date).AddSeconds(20)
+            $nativeMenuPassed = $false
+            while ((Get-Date) -lt $nativeMenuDeadline) {
+              if (Test-Path $prefsPath) {
+                $prefsText = Get-Content $prefsPath -Raw
+                $panelState = [regex]::Match(
+                  $prefsText,
+                  'user_pref\("filum\.selftest\.panel",\s*"((?:\\.|[^"])*)"\);'
+                )
+                if ($panelState.Success -and $panelState.Groups[1].Value -match '^PASS:NATIVE_MENU_PASS:') {
+                  $nativeMenuPassed = $true
+                  Write-Host "Native Firefox app menu self-test: $($panelState.Groups[1].Value)"
+                  break
+                }
+                if ($panelState.Success -and $panelState.Groups[1].Value -match '^FAIL:') {
+                  throw "Native Firefox app menu self-test failed: $($panelState.Groups[1].Value)"
+                }
+              }
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $nativeMenuPassed) {
+              throw "Native Firefox app menu self-test did not report PASS."
+            }
+
+            $portableTemp = Join-Path $env:APP_DIR "temp"
+            if (-not (Test-Path $portableTemp)) { throw "Portable launcher did not create its package-local temp directory." }
+
             Write-Host "Windows Browser runtime launch passed."
             Write-Host "Profile initialized with $($profileFiles.Count) entries."
+            Write-Host "Portable profile path: $profile"
+            Write-Host "Portable TEMP/TMP path: $portableTemp"
             Write-Host "FILUM core runtime activation passed."
             Write-Host "FILUM native panel loaded and ran the functional control report."
             Write-Host "FILUM sidebar controls functional test passed."
@@ -516,6 +588,100 @@ jobs:
               Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
             }
           }
+
+      - name: Verify portable profile survives moving the package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sourceRoot = $env:APP_DIR
+          $sourceProfile = Join-Path $sourceRoot "profile"
+          $prefs = Join-Path $sourceProfile "prefs.js"
+          if (-not (Test-Path $prefs)) { throw "Portable profile prefs.js missing after smoke." }
+          if (-not (Select-String -Path $prefs -SimpleMatch "FILUM_PORTABLE_PROFILE_SENTINEL" -Quiet)) {
+            throw "Portable profile sentinel was not persisted in prefs.js."
+          }
+          $prefsLines = [System.IO.File]::ReadAllLines($prefs)
+          $prefsLines = $prefsLines | Where-Object { $_ -notmatch '^user_pref\("filum\.selftest\.enabled",' }
+          [System.IO.File]::WriteAllLines(
+            $prefs,
+            [string[]]$prefsLines,
+            [System.Text.UTF8Encoding]::new($false)
+          )
+          foreach ($relative in @("places.sqlite", "extensions.json")) {
+            if (-not (Test-Path (Join-Path $sourceProfile $relative))) {
+              throw "Portable profile data file missing before move: $relative"
+            }
+          }
+
+          Remove-Item -Force (Join-Path $sourceProfile "user.js")
+          $movedRoot = Join-Path (Split-Path -Parent $sourceRoot) "FILUM-portable-moved"
+          if (Test-Path $movedRoot) { Remove-Item -Recurse -Force $movedRoot }
+          Move-Item -Path $sourceRoot -Destination $movedRoot
+          $movedProfile = Join-Path $movedRoot "profile"
+          $launcherPath = Join-Path $movedRoot "Start-FILUM.cmd"
+          if (-not (Test-Path $launcherPath)) { throw "Portable launcher missing after moving package." }
+
+          $launcher = Start-Process -FilePath $launcherPath -PassThru
+          $browserPath = Join-Path $movedRoot "browser.exe"
+          $deadline = (Get-Date).AddSeconds(30)
+          $browserProcess = $null
+          try {
+            while ((Get-Date) -lt $deadline) {
+              $browserProcess = Get-CimInstance Win32_Process | Where-Object {
+                $_.Name -ieq "browser.exe" -and $_.ExecutablePath -and
+                ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($browserPath))
+              } | Select-Object -First 1
+              if ($browserProcess) { break }
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $browserProcess) { throw "FILUM did not start after moving the package folder." }
+            if ($browserProcess.CommandLine -notlike "*$movedProfile*") {
+              throw "Moved FILUM process is not using its package-local profile: $($browserProcess.CommandLine)"
+            }
+            Start-Sleep -Seconds 5
+          }
+          finally {
+            Get-CimInstance Win32_Process | Where-Object {
+              $_.Name -ieq "browser.exe" -and $_.ExecutablePath -and
+              ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($browserPath))
+            } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            if ($launcher -and -not $launcher.HasExited) {
+              Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          if (-not (Select-String -Path (Join-Path $movedProfile "prefs.js") -SimpleMatch "FILUM_PORTABLE_PROFILE_SENTINEL" -Quiet)) {
+            throw "The moved package did not retain its persisted profile preference."
+          }
+          if (-not (Test-Path (Join-Path $movedRoot "temp"))) { throw "Moved package-local temp directory missing." }
+          & (Join-Path $env:GITHUB_WORKSPACE "scripts/test-portable-host.ps1") -Phase After -SnapshotPath (Join-Path $env:RUNNER_TEMP "filum-portable-host-baseline.json")
+          Write-Host "Portable profile A-to-B move: PASS"
+          Write-Host "Moved profile: $movedProfile"
+
+          # Rebuild the downloadable ZIP from the exact Windows-tested files,
+          # excluding the temporary CI profile and TEMP directory.
+          Remove-Item -Recurse -Force (Join-Path $movedRoot "profile"), (Join-Path $movedRoot "temp") -ErrorAction SilentlyContinue
+          Move-Item -Path $movedRoot -Destination $sourceRoot
+          $finalZip = Join-Path $env:GITHUB_WORKSPACE "artifact/Browser-Windows-x64.zip"
+          Compress-Archive -Path $sourceRoot -DestinationPath $finalZip -CompressionLevel Optimal -Force
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zipCheck = [System.IO.Compression.ZipFile]::OpenRead($finalZip)
+          try {
+            $zipEntries = @($zipCheck.Entries | ForEach-Object { $_.FullName })
+            if ($zipEntries -notcontains "Browser/browser.exe") { throw "Final ZIP has an unexpected root layout." }
+            if ($zipEntries | Where-Object { $_ -match '^Browser/(profile|temp)/' }) {
+              throw "Final ZIP contains the CI profile or temporary files."
+            }
+            $forbiddenNames = @("updater.exe", "updater.ini", "update-settings.ini", "maintenanceservice.exe", "maintenanceservice_installer.exe", "default-browser-agent.exe")
+            $remainingUpdaterFiles = @($zipEntries | Where-Object { ($_.Split('/')[-1]) -in $forbiddenNames })
+            if ($remainingUpdaterFiles.Count) { throw "Final ZIP contains Mozilla app-updater payload: $($remainingUpdaterFiles -join ', ')" }
+          }
+          finally {
+            $zipCheck.Dispose()
+          }
+          $finalHash = (Get-FileHash $finalZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$finalHash  Browser-Windows-x64.zip" | Set-Content (Join-Path $env:GITHUB_WORKSPACE "artifact/SHA256SUMS.txt") -Encoding ascii
+          Write-Host "Validated final Windows ZIP SHA256: $finalHash"
 
       - name: Upload validated final Browser
         uses: actions/upload-artifact@v4
