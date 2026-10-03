@@ -269,7 +269,9 @@ require_text(
     "Get-ScheduledTask",
     "registry",
     "services",
-    "tasks"
+    "tasks",
+    "Expected Gecko startup metadata classified; no external profile data accepted.",
+    "unclassified profile, registry, service or scheduled-task changes"
 )
 require_text(
     "docs/FILUM_SITE_PRIVACY_SCOPE_2026-10-03.md",
