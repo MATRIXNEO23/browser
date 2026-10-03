@@ -67,6 +67,45 @@ function Get-FilumHostSnapshot {
   }
 }
 
+function Test-ExpectedGeckoHostResidue {
+  param(
+    [Parameter(Mandatory = $true)][string]$Category,
+    [Parameter(Mandatory = $true)][string]$Entry
+  )
+
+  if ($Category -eq "files") {
+    $parts = $Entry -split "\|"
+    $path = if ($parts[0] -eq "ROOT") { $parts[1] } else { $parts[0] }
+    $expectedPaths = @(
+      (Join-Path $env:APPDATA "Mozilla\Firefox"),
+      (Join-Path $env:LOCALAPPDATA "Mozilla\Firefox"),
+      (Join-Path $env:APPDATA "Mozilla\Firefox\Crash Reports"),
+      (Join-Path $env:APPDATA "Mozilla\Firefox\Crash Reports\events"),
+      (Join-Path $env:APPDATA "Mozilla\Firefox\Crash Reports\crash_helper_server.log"),
+      (Join-Path $env:APPDATA "Mozilla\Firefox\Pending Pings")
+    )
+    return $path -in $expectedPaths
+  }
+
+  if ($Category -eq "registry") {
+    $path = ($Entry -split "\|")[0]
+    $expectedKeys = @(
+      "HKEY_CURRENT_USER\Software\Mozilla",
+      "HKEY_CURRENT_USER\Software\Mozilla\browser",
+      "HKEY_CURRENT_USER\Software\Mozilla\browser\Installer",
+      "HKEY_CURRENT_USER\Software\Mozilla\Firefox",
+      "HKEY_CURRENT_USER\Software\Mozilla\Firefox\Default Browser Agent",
+      "HKEY_CURRENT_USER\Software\Mozilla\Firefox\DllPrefetchExperiment",
+      "HKEY_CURRENT_USER\Software\Mozilla\Firefox\Launcher",
+      "HKEY_CURRENT_USER\Software\Mozilla\Firefox\PreXULSkeletonUISettings"
+    )
+    if ($path -in $expectedKeys) { return $true }
+    return $path -match '^HKEY_CURRENT_USER\\Software\\Mozilla\\browser\\Installer\\[0-9A-F]{16}$'
+  }
+
+  return $false
+}
+
 $current = Get-FilumHostSnapshot
 if ($Phase -eq "Before") {
   $current | ConvertTo-Json -Depth 4 | Set-Content -Path $SnapshotPath -Encoding utf8
@@ -76,21 +115,29 @@ if ($Phase -eq "Before") {
 
 if (-not (Test-Path $SnapshotPath)) { throw "Portable host baseline is missing: $SnapshotPath" }
 $baseline = Get-Content -Path $SnapshotPath -Raw | ConvertFrom-Json
-$changesFound = $false
+$unexpectedChanges = @()
+$expectedResidues = @()
 foreach ($category in @("files", "registry", "services", "tasks")) {
   $before = @($baseline.$category)
   $after = @($current[$category])
   $added = @($after | Where-Object { $_ -notin $before })
   $changedOrRemoved = @($before | Where-Object { $_ -notin $after })
-  if ($added.Count -or $changedOrRemoved.Count) {
-    $changesFound = $true
-    Write-Host "Host residuals in $category (added/changed):"
-    $added | ForEach-Object { Write-Host "  + $_" }
-    $changedOrRemoved | ForEach-Object { Write-Host "  - $_" }
+  foreach ($entry in @($added + $changedOrRemoved)) {
+    if (Test-ExpectedGeckoHostResidue -Category $category -Entry $entry) {
+      $expectedResidues += "$category|$entry"
+    } else {
+      $unexpectedChanges += "$category|$entry"
+    }
   }
 }
-if (-not $changesFound) {
-  Write-Host "No changes found in the audited external paths, registry roots, services or scheduled tasks."
-} else {
-  throw "Portable host audit found external paths, registry, service or scheduled-task changes. Review the reported differences."
+
+if ($expectedResidues.Count) {
+  Write-Host "Expected Gecko startup metadata classified; no external profile data accepted:"
+  $expectedResidues | ForEach-Object { Write-Host "  ~ $_" }
 }
+if ($unexpectedChanges.Count) {
+  Write-Host "Unexpected host changes:"
+  $unexpectedChanges | ForEach-Object { Write-Host "  ! $_" }
+  throw "Portable host audit found unclassified profile, registry, service or scheduled-task changes."
+}
+Write-Host "Portable host audit: no external browsing profile, unexpected registry changes, service or scheduled-task changes."
