@@ -21,3 +21,14 @@ The validated #146 archive had no user-facing portable launcher. Its Windows smo
 ## Boundaries
 
 The portable profile is used when starting `Start-FILUM.cmd`. Direct execution of the bundled `browser.exe` bypasses this launcher and may use Gecko's normal Windows profile paths. The host snapshot covers conventional Mozilla/Firefox/Browser/FILUM paths and named registry/service/task entries; it does not claim exhaustive observation of every possible Windows write. Any residual reported by the runner must be classified before calling the package fully portable.
+
+
+## CI #150 finding and corrected audit (2026-10-03)
+
+- Windows build, native Firefox app-menu self-test, runtime controls, Tor bootstrap/egress, and absence of standalone Firefox updater payload all passed.
+- The A→B script moved and reopened the package, then failed on an assertion that MozillaBackgroundTask-...-defaultagent should disappear. The prior label “temporary profile” was incorrect.
+- Gecko's background-task source explicitly excludes defaultagent from ephemeral-profile tasks and creates a persistent profile for it; the task reports Windows default-browser telemetry and may show its own notification. FILUM already ships DisableDefaultBrowserAgent: true, so the task is policy-disabled. The six standalone Mozilla updater/default-agent executables are removed from the package.
+- Corrected the host classifier to allow only the known defaultagent profile root and the observed crashes / datareporting/glean/tmp directories. Any other content under that profile (including preferences, cookies, history, or databases) remains unclassified and fails the audit. Scheduled tasks and services must still show no changes.
+- Added a manual smoke-only workflow input reuse_build_run_id so the Windows package from #150 (37151771099) can be rechecked without rebuilding Gecko. The smoke must still recreate and hash the final ZIP from the tested files. No artifact from #150 is a final validated download because the final upload step was never reached.
+- Next decisive check: dispatch the existing Windows workflow with reuse_build_run_id=37151771099; require the host audit, A→B move, final ZIP SHA-256 and artifact upload all to pass. The native Firefox menu self-test already reported PASS:NATIVE_MENU_PASS.
+- Source basis: Gecko background task code defines defaultagent as non-ephemeral; DisableDefaultBrowserAgent is the policy that stops its task behavior. See https://searchfox.org/mozilla-central/source/toolkit/components/backgroundtasks/BackgroundTasks.cpp, https://searchfox.org/mozilla-central/source/toolkit/mozapps/defaultagent/BackgroundTask_defaultagent.sys.mjs, and https://firefox-admin-docs.mozilla.org/reference/policies/disabledefaultbrowseragent/.
