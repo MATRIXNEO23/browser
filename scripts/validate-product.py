@@ -257,6 +257,9 @@ require_text(
     "Compress-Archive -Path $sourceRoot",
     "Final ZIP has an unexpected root layout",
     "Final ZIP contains the CI profile or temporary files",
+    "refusing to kill possible background tasks",
+    "temporary default-agent background-task profile did not clean itself up.",
+    "CloseMainWindow",
     "test-portable-host.ps1"
 )
 require_text(
