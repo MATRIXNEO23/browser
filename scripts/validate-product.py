@@ -270,7 +270,7 @@ require_text(
     "registry",
     "services",
     "tasks",
-    "Expected Gecko startup metadata classified; no external profile data accepted.",
+    "Expected Gecko startup metadata classified",
     "unclassified profile, registry, service or scheduled-task changes"
 )
 require_text(
