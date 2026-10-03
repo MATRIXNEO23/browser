@@ -405,3 +405,11 @@ Action artifact digests are for the downloaded ZIP wrappers. They are not interc
 - Verifiche locali PASS: `node --check` per browserControl, background, sidebar, diagnostics, audit e Marionette; parsing JSON dello schema bridge; `node scripts/audit-functional.cjs`; `python3 scripts/validate-product.py`; `python3 scripts/audit-wiring.py`; `git diff --check`. Il self-test Windows non è stato eseguito in questo ambiente.
 - File coinvolti: `extension/experiment-apis/browserControl.js`, `extension/experiment-apis/browserControl.json`, `extension/background.js`, `extension/sidebar.html`, `extension/sidebar.css`, `extension/sidebar.js`, `extension/diagnostics.js`, `scripts/audit-functional.cjs`, `scripts/test-runtime-marionette.cjs`, `build/RELEASE_TRIGGER`, questo file.
 - La modifica utente preesistente a `releases/FILUM-Windows-x64-117.zip` resta esclusa da staging e commit.
+
+### CI #145 — build Windows e test runtime JavaScript GHOST (2026-10-03)
+
+- Commit testato su `main`: `c14d20afd02cfcc1b280a2573f36ba871836d33d`. Run [#145](https://github.com/MATRIXNEO23/browser/actions/runs/37090354985): `build` **success**, `smoke-windows` **success**, `release` **skipped**.
+- Il self-test Windows ha verificato PASS per `ghost-javascript-toggle-visible-while-off`, attivazione e disattivazione dalla sidebar, mantenimento dell’override dopo la riselezione GHOST e ripristino delle preferenze native uscendo da GHOST. Ha verificato inoltre Tor bootstrap al 100%, compatibilità FPI/cookie/WASM/HTTP3/Alt-Svc, egress `HTTP 200; IsTor=true` e transizioni modalità.
+- Runner: Windows Server 2025 (`10.0.26100`). Il test conferma l’interattività del pannello FILUM con JavaScript disattivato sul runner CI; non è una prova su Windows 10 locale.
+- Artefatto finale scaricabile: `Browser-Windows-x64-final`, ID `11262198195`, dimensione 161,315,908 byte, digest ZIP artefatto `sha256:40f657b22a7dc3eb741c86fc8295d0267c9b378191812a175ae83b5354819e17`, scadenza 2026-11-02 UTC. SHA-256 del pacchetto browser verificato dal job: `b1809200be7ea5c563baf1a46eb8a9e3af1066beac175b4c8b6fcf2befc29ec7`.
+- Nessuna release formale pubblicata; il job `release` è rimasto disabilitato/skipped. Lo ZIP utente locale è stato escluso dal commit e dal pacchetto.
