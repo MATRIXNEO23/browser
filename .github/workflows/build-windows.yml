@@ -138,6 +138,14 @@ jobs:
 
           mkdir -p dist/stage/Browser/distribution
           cp distribution/policies.json dist/stage/Browser/distribution/policies.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          policy = json.loads(Path("dist/stage/Browser/distribution/policies.json").read_text())["policies"]
+          assert policy.get("DisableAppUpdate") is True, "FILUM package must disable Firefox application updates"
+          assert policy.get("ExtensionUpdate") is not False, "Do not disable extension security updates"
+          assert policy.get("DisableSystemAddonUpdate") is not True, "Do not disable Gecko system add-on updates"
+          PY
           cp firefox-src/browser/branding/browser/firefox.ico dist/stage/Browser/Browser.ico
 
           # Preserve MPL and third-party licensing material with the distribution.
@@ -519,7 +527,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   release:
-    if: ${{ false }}
+    if: false
     needs: [build, smoke-windows]
     runs-on: ubuntu-latest
 
@@ -544,5 +552,5 @@ jobs:
             artifact/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Browser Windows x64 $SHORT" \
-            --notes "Stable Browser Windows x64 build. Passed source completeness gate, native package validation, built-in core verification, bundled Tor verification, SHA256 verification and Windows runtime/profile smoke test. Source commit: $GITHUB_SHA"
+            --title "FILUM Windows x64 privacy build $SHORT" \
+            --notes "FILUM Windows x64 privacy build. Passed product and wiring gates, native package validation, Gecko runtime smoke and Tor bootstrap checks. The FILUM Policy Engine includes four protection presets with independently configurable global controls. Per-site overrides remain explicitly unavailable where Gecko does not expose a verified control; Canvas uses Gecko RFP and is broader than Canvas alone. Source commit: $GITHUB_SHA"

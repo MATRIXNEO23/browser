@@ -102,6 +102,13 @@ require_text(
 )
 require_text("extension/newtab.js", "browser.search.search", "smart-search.html", "library.html", "addons.html")
 policies = json.loads((ROOT / "distribution/policies.json").read_text(encoding="utf-8"))
+policy_values = policies.get("policies", {})
+if policy_values.get("DisableAppUpdate") is not True:
+    raise SystemExit("Native Firefox application updates must be disabled for FILUM.")
+if policy_values.get("ExtensionUpdate") is False:
+    raise SystemExit("FILUM must not disable extension security updates with native app updates.")
+if policy_values.get("DisableSystemAddonUpdate") is True:
+    raise SystemExit("FILUM must not disable Gecko system add-on updates with native app updates.")
 homepage = policies.get("policies", {}).get("Homepage", {})
 expected_newtab = "moz-extension://5db2d283-fbda-489c-9f1f-f77a0a674080/newtab.html"
 if homepage.get("URL") != expected_newtab or homepage.get("StartPage") != "homepage":

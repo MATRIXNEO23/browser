@@ -69,11 +69,12 @@ async function verify() {
   featuresEl.replaceChildren();
   torEl.replaceChildren();
   try {
-    const [status, prefs, proxy, settings, fingerprinting, tracking, cookies, webRtc, referrers] = await Promise.all([
+    const [status, prefs, proxy, settings, policyStatus, fingerprinting, tracking, cookies, webRtc, referrers] = await Promise.all([
       browser.runtime.sendMessage({ type: 'get-status' }),
       browser.runtime.sendMessage({ type: 'get-mode-diagnostics' }),
       browser.proxy.settings.get({}),
       browser.runtime.sendMessage({ type: 'get-advanced-settings' }),
+      browser.runtime.sendMessage({ type: 'get-privacy-policy' }),
       readPrivacy(browser.privacy.websites.resistFingerprinting),
       readPrivacy(browser.privacy.websites.trackingProtectionMode),
       readPrivacy(browser.privacy.websites.cookieConfig),
@@ -81,17 +82,19 @@ async function verify() {
       readPrivacy(browser.privacy.websites.referrersEnabled)
     ]);
     const mode = status.mode;
-    const privateMode = mode === 'PRIVATE' || mode === 'GHOST';
     const expectedAutoplay = mode === 'TURBO' || mode === 'GHOST' ? 5 : 1;
     const check = (label, actual, expected) => row(modeEl, label,
       actual === undefined ? 'Non leggibile' : `${String(actual)} · atteso ${String(expected)}`,
       actual === undefined ? 'unknown' : actual === expected ? 'pass' : 'fail');
     row(modeEl, 'Modalità selezionata', mode);
     row(modeEl, 'HTTPS-only (controllo indipendente)',
-      `${String(prefs.httpsOnly)} · base modalità ${String(privateMode)}`);
-    check('Resistenza fingerprint (preferenza)', prefs.fingerprintResistance, privateMode);
-    check('Cookie senza archiviazione persistente (preferenza)',
-      prefs.cookieNoPersistentStorage, mode === 'GHOST');
+      `${String(prefs.httpsOnly)} · base modalità ${String(mode === 'PRIVATE' || mode === 'GHOST')}`);
+    row(modeEl, 'Livello protezione', policyStatus.level);
+    check('Resistenza fingerprint (preferenza)', prefs.fingerprintResistance,
+      policyStatus.features.canvas.effective === 'protected' || status.torEnabled);
+    row(modeEl, 'Cookie senza archiviazione persistente', mode === 'GHOST'
+      ? `${String(prefs.cookieNoPersistentStorage)} · richiesto; effetto runtime NOT VERIFIED`
+      : 'non richiesto', 'unknown');
     if (mode === 'GHOST') {
       check('GHOST: cookie di terze parti bloccati (pref)', prefs.ghostCookieBehavior, 1);
       check('GHOST: First Party Isolation', prefs.ghostFpi, true);
@@ -107,9 +110,22 @@ async function verify() {
     check('Autoplay (preferenza)', prefs.autoplay, expectedAutoplay);
     check('Prefetch disabilitato', prefs.prefetch, false);
     check('DNS prefetch disabilitato', prefs.dnsPrefetch, true);
-    check('Resistenza fingerprint (API privacy)', fingerprinting, privateMode);
-    check('Protezione tracciamento', tracking, 'always');
-    check('WebRTC abilitato', webRtc, false);
+    check('JavaScript effettivo', prefs.javascriptEnabled,
+      policyStatus.features.javascript.effective === 'full');
+    check('WebGL disabilitato', prefs.webglDisabled,
+      policyStatus.features.webgl.effective === 'blocked');
+    check('WebGL 2 abilitato', prefs.webgl2Enabled,
+      policyStatus.features.webgl.effective === 'normal');
+    check('Resistenza fingerprint (API privacy)', fingerprinting,
+      policyStatus.features.canvas.effective === 'protected' || status.torEnabled);
+    check('Protezione tracciamento', tracking,
+      policyStatus.features.tracking.effective === 'strict' ? 'always' : 'private_browsing');
+    check('WebRTC abilitato', webRtc,
+      policyStatus.features.webrtc.effective !== 'blocked');
+    for (const [feature, item] of Object.entries(policyStatus.features)) {
+      row(featuresEl, `Policy ${feature}`, `preset=${item.preset}; manual=${item.manual || '—'}; effettivo=${item.effective}; verificato=${item.verified || 'NOT VERIFIED'}`,
+        item.verified === 'PASS' ? 'pass' : item.verified === 'FAIL' ? 'fail' : 'unknown');
+    }
     check('Referrer abilitati', referrers, mode !== 'GHOST');
     row(modeEl, 'Schede background attive / limite',
       `${status.status?.activeBackground ?? '—'} / ${status.status?.limit ?? '—'}`);

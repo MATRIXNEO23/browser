@@ -349,6 +349,60 @@ this.browserControl = class extends ExtensionAPI {
         throw error;
       }
     };
+    const applyPrivacyPreferences = serializedPolicy => {
+      let policy;
+      try { policy = JSON.parse(serializedPolicy); }
+      catch (_) { throw new TypeError("Privacy policy must be valid JSON"); }
+      if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
+        throw new TypeError("Privacy policy must be an object");
+      }
+      const definitions = {
+        "javascript.enabled": ["javascriptEnabled", "bool"],
+        "privacy.resistFingerprinting": ["fingerprintingResistance", "bool"],
+        "webgl.disabled": ["webglDisabled", "bool"],
+        "webgl.enable-webgl2": ["webgl2Enabled", "bool"]
+      };
+      const writes = Object.entries(definitions).filter(([, [key]]) =>
+        Object.prototype.hasOwnProperty.call(policy, key));
+      for (const key of Object.keys(policy)) {
+        if (!Object.values(definitions).some(([allowed]) => allowed === key)) {
+          throw new TypeError(`Unsupported native privacy preference: ${key}`);
+        }
+      }
+      for (const [name, [key]] of writes) {
+        if (typeof policy[key] !== "boolean") throw new TypeError(`${key} must be boolean`);
+      }
+      const snapshot = Object.fromEntries(writes.map(([name]) => [name, {
+        hasUserValue: Services.prefs.prefHasUserValue(name),
+        value: Services.prefs.getBoolPref(name, false)
+      }]));
+      const restore = () => {
+        const errors = [];
+        for (const [name, entry] of Object.entries(snapshot)) {
+          try {
+            if (entry.hasUserValue) Services.prefs.setBoolPref(name, entry.value);
+            else if (Services.prefs.prefHasUserValue(name)) Services.prefs.clearUserPref(name);
+          } catch (error) { errors.push(`${name}: ${error?.message || error}`); }
+        }
+        if (errors.length) throw new Error(`Privacy policy rollback incomplete: ${errors.join("; ")}`);
+      };
+      try {
+        for (const [name, [key]] of writes) Services.prefs.setBoolPref(name, policy[key]);
+        Services.prefs.savePrefFile(null);
+      } catch (error) {
+        try { restore(); Services.prefs.savePrefFile(null); }
+        catch (rollbackError) {
+          throw new Error(`${error?.message || error}; ${rollbackError?.message || rollbackError}`);
+        }
+        throw error;
+      }
+      return {
+        javascriptEnabled: Services.prefs.getBoolPref("javascript.enabled", true),
+        fingerprintingResistance: Services.prefs.getBoolPref("privacy.resistFingerprinting", false),
+        webglDisabled: Services.prefs.getBoolPref("webgl.disabled", false),
+        webgl2Enabled: Services.prefs.getBoolPref("webgl.enable-webgl2", true)
+      };
+    };
 
     return {
       browserControl: {
@@ -386,6 +440,10 @@ this.browserControl = class extends ExtensionAPI {
           setBool("javascript.enabled", enabled);
           Services.prefs.savePrefFile(null);
           return { enabled: Services.prefs.getBoolPref("javascript.enabled", true) };
+        },
+
+        async applyPrivacyPreferences(serializedPolicy) {
+          return applyPrivacyPreferences(serializedPolicy);
         },
 
         async startTor() {
@@ -570,6 +628,8 @@ this.browserControl = class extends ExtensionAPI {
             ghostCookieBehavior: Services.prefs.getIntPref("network.cookie.cookieBehavior", 5),
             ghostFpi: Services.prefs.getBoolPref("privacy.firstparty.isolate", false),
             javascriptEnabled: Services.prefs.getBoolPref("javascript.enabled", true),
+            webglDisabled: Services.prefs.getBoolPref("webgl.disabled", false),
+            webgl2Enabled: Services.prefs.getBoolPref("webgl.enable-webgl2", true),
             ghostWasm: Services.prefs.getBoolPref("javascript.options.wasm", true),
             ghostHttp3: Services.prefs.getBoolPref("network.http.http3.enable", true),
             ghostAltSvc: Services.prefs.getBoolPref("network.http.altsvc.enabled", true),

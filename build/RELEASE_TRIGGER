@@ -1,5 +1,5 @@
-release_request: final
-source_head_before_trigger: b0c7023b2b8a2ed7e57a2d3a346499f4348f23df
+release_request: none
+source_head_before_trigger: b9e95d35dcfd7e3c77618400f057689ba2479f7c
 product_gate: required
 webextension_panel_context: required
 all_sidebar_controls_selftest: required
@@ -8,5 +8,8 @@ custom_dns: required
 compact_sidebar: required
 approved_cyber_background: unchanged
 windows_runtime_smoke: required
-stable_release_only: false
-rerun_reason: ghost_global_javascript_off_windows_runtime_test_2026_10_03
+privacy_policy_engine: four_levels_and_independent_controls
+privacy_settings_readback: required
+tor_independent_fail_closed: required
+stable_release_only: true
+rerun_reason: filum_privacy_policy_engine_and_disable_gecko_app_update_windows_smoke_2026_10_03

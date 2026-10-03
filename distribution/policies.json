@@ -5,6 +5,7 @@
       "StartPage": "homepage",
       "Locked": false
     },
+    "DisableAppUpdate": true,
     "DisableTelemetry": true,
     "DisableFirefoxStudies": true,
     "DisableDefaultBrowserAgent": true,

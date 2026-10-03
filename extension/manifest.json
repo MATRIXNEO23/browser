@@ -22,6 +22,7 @@
   ],
   "background": {
     "scripts": [
+      "policy-engine.js",
       "background.js"
     ]
   },

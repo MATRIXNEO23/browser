@@ -636,6 +636,15 @@ for (const button of document.querySelectorAll('[data-internal-page]')) {
   });
 }
 
+document.getElementById('privacy-settings').addEventListener('click', async () => {
+  try {
+    const result = await browser.runtime.sendMessage({ type: 'open-privacy-settings' });
+    if (!result?.opened) throw new Error('Pagina Protezione non aperta.');
+  } catch (error) {
+    setPanelStatus('Protezione: ' + errorText(error), true);
+  }
+});
+
 document.getElementById('addons-installed').addEventListener('click', async () => {
   try {
     await browser.runtime.sendMessage({ type: 'open-addons-installed' });
@@ -807,6 +816,7 @@ async function runControlSelfTest() {
   const initialAdvanced = await browser.runtime.sendMessage({
     type: 'get-advanced-settings'
   });
+  const initialPrivacyPolicy = await browser.runtime.sendMessage({ type: 'get-privacy-policy' });
   const initialProxy = (await browser.proxy.settings.get({})).value;
 
   try {
@@ -847,6 +857,7 @@ async function runControlSelfTest() {
       const privacy = await browser.privacy.websites.resistFingerprinting.get({});
       const webRtc = await browser.privacy.network.peerConnectionEnabled.get({});
       const health = (await getStatus()).modeHealth;
+      const policy = await browser.runtime.sendMessage({ type: 'get-privacy-policy' });
       const protectedMode = mode === 'PRIVATE' || mode === 'GHOST';
       const expectedAutoplay = mode === 'TURBO' || mode === 'GHOST' ? 5 : 1;
 
@@ -855,12 +866,12 @@ async function runControlSelfTest() {
         button.classList.contains('active') &&
           button.getAttribute('aria-pressed') === 'true' &&
           applied.httpsOnly === protectedMode &&
-          applied.fingerprintResistance === protectedMode &&
+          applied.fingerprintResistance === (policy.features.canvas.effective === 'protected') &&
           applied.autoplay === expectedAutoplay &&
-          privacy.value === protectedMode &&
-          webRtc.value === false && health?.ok,
+          privacy.value === (policy.features.canvas.effective === 'protected') &&
+          webRtc.value === (policy.features.webrtc.effective !== 'blocked') && health?.ok,
         JSON.stringify({ selected: mode, applied, fingerprintPrivacy: privacy.value,
-          webRTCEnabled: webRtc.value, issues: health?.issues || [] })
+          policy: policy.features, webRTCEnabled: webRtc.value, issues: health?.issues || [] })
       );
     }
 
@@ -870,28 +881,36 @@ async function runControlSelfTest() {
     });
     await selectMode('GHOST');
     let ghostPrefs = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
+    const initialGhostJavascriptEnabled = ghostPrefs.javascriptEnabled === true;
+    const toggledGhostJavascriptEnabled = !initialGhostJavascriptEnabled;
     record('ghost-hardening-active', matchesGhostHardening(ghostPrefs),
       JSON.stringify(Object.fromEntries(hardeningKeys.map(key => [key, ghostPrefs[key]]))));
     record('ghost-javascript-toggle-visible-while-off',
-      ghostPrefs.javascriptEnabled === false && !ghostJavascriptControl.hidden &&
-        !ghostJavascriptButton.disabled && ghostJavascriptButton.textContent === 'Attiva JavaScript');
+      !ghostJavascriptControl.hidden && !ghostJavascriptButton.disabled &&
+        ghostJavascriptButton.textContent === (initialGhostJavascriptEnabled
+          ? 'Disattiva JavaScript' : 'Attiva JavaScript'));
     ghostJavascriptButton.click();
     await waitFor(async () => (await browser.runtime.sendMessage({
       type: 'get-mode-diagnostics'
-    })).javascriptEnabled === true && !ghostJavascriptWarning.hidden &&
-      ghostJavascriptButton.textContent === 'Disattiva JavaScript');
-    record('ghost-javascript-enable-from-sidebar', ghostJavascriptWarning.hidden === false &&
-      ghostJavascriptButton.textContent === 'Disattiva JavaScript');
+    })).javascriptEnabled === toggledGhostJavascriptEnabled &&
+      ghostJavascriptButton.textContent === (toggledGhostJavascriptEnabled
+        ? 'Disattiva JavaScript' : 'Attiva JavaScript'));
+    record('ghost-javascript-enable-from-sidebar',
+      ghostJavascriptButton.textContent === (toggledGhostJavascriptEnabled
+        ? 'Disattiva JavaScript' : 'Attiva JavaScript'));
     await selectMode('GHOST');
     ghostPrefs = await browser.runtime.sendMessage({ type: 'get-mode-diagnostics' });
-    record('ghost-javascript-override-survives-reselect', ghostPrefs.javascriptEnabled === true);
+    record('ghost-javascript-override-survives-reselect',
+      ghostPrefs.javascriptEnabled === toggledGhostJavascriptEnabled);
     ghostJavascriptButton.click();
     await waitFor(async () => (await browser.runtime.sendMessage({
       type: 'get-mode-diagnostics'
-    })).javascriptEnabled === false && ghostJavascriptWarning.hidden &&
-      ghostJavascriptButton.textContent === 'Attiva JavaScript');
-    record('ghost-javascript-disable-from-sidebar', ghostJavascriptWarning.hidden === true &&
-      ghostJavascriptButton.textContent === 'Attiva JavaScript');
+    })).javascriptEnabled === initialGhostJavascriptEnabled &&
+      ghostJavascriptButton.textContent === (initialGhostJavascriptEnabled
+        ? 'Disattiva JavaScript' : 'Attiva JavaScript'));
+    record('ghost-javascript-disable-from-sidebar',
+      ghostJavascriptButton.textContent === (initialGhostJavascriptEnabled
+        ? 'Disattiva JavaScript' : 'Attiva JavaScript'));
 
     const adsBefore = (await getStatus()).adsEnabled;
     adsButton.click();
@@ -1242,6 +1261,18 @@ async function runControlSelfTest() {
       browser.runtime.getURL('library.html'));
     await verifyLauncher('diagnostics', 'diagnostics',
       browser.runtime.getURL('diagnostics.html'));
+    const priorSettingsRuntime = await browser.runtime.sendMessage({
+      type: 'get-privacy-settings-runtime'
+    });
+    await verifyLauncher('privacy-settings', 'privacy-settings',
+      browser.runtime.getURL('privacy-settings.html'));
+    const settingsRuntime = await waitFor(async () => {
+      const current = await browser.runtime.sendMessage({ type: 'get-privacy-settings-runtime' });
+      return current?.sequence > (priorSettingsRuntime?.sequence || 0) ? current : false;
+    }, 10000, 100).catch(() => null);
+    record('privacy-settings-controls-rendered', settingsRuntime?.levels === 4 &&
+      settingsRuntime?.controls === 6 && settingsRuntime.features.length === 6,
+      JSON.stringify(settingsRuntime));
 
     for (const [name, buttonId, url] of [
       ['internal-settings', 'settings', 'about:preferences'],
@@ -1308,6 +1339,13 @@ async function runControlSelfTest() {
         type: 'set-hardware-acceleration',
         enabled: !!initialAdvanced.hardwareAcceleration
       });
+    } catch (_) {}
+
+    try {
+      await browser.runtime.sendMessage({ type: 'set-privacy-policy', change: {
+        type: 'set-feature', feature: 'javascript',
+        value: initialPrivacyPolicy.features.javascript.manual || 'preset'
+      } });
     } catch (_) {}
   }
 

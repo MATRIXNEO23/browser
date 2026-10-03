@@ -43,6 +43,17 @@
         ]
       },
       {
+        "name": "applyPrivacyPreferences",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "serializedPolicy",
+            "type": "string"
+          }
+        ]
+      },
+      {
         "name": "getProcessStats",
         "type": "function",
         "async": true,

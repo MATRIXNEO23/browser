@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
+const policyEngine = require('../extension/policy-engine.js');
 
 const source = fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8');
 const sidebarSource = fs.readFileSync(path.join(__dirname, '../extension/sidebar.js'), 'utf8');
@@ -14,9 +15,46 @@ function section(start, end) {
 }
 
 async function main() {
+  assert.deepEqual(policyEngine.LEVELS, ['normal', 'protected', 'strong', 'maximum']);
+  assert.equal(policyEngine.resolve(null, 'NORMAL').features.webgl.effective, 'normal');
+  assert.equal(policyEngine.resolve({ level: 'protected' }, 'NORMAL').features.webgl.effective, 'limited');
+  assert.equal(policyEngine.resolve({ level: 'strong' }, 'NORMAL').features.webrtc.effective, 'blocked');
+  let policyState = null;
+  assert.equal(policyEngine.resolve(policyState, 'GHOST').features.javascript.effective, 'blocked');
+  policyState = policyEngine.update(policyState, 'GHOST', {
+    type: 'set-feature', feature: 'javascript', value: 'full'
+  });
+  assert.equal(policyEngine.resolve(policyState, 'GHOST').features.javascript.manual, 'full');
+  policyState = policyEngine.update(policyState, 'GHOST', { type: 'set-level', level: 'strong' });
+  assert.equal(policyEngine.resolve(policyState, 'GHOST').features.javascript.effective, 'full',
+    'manual control must override the selected protection preset');
+  policyState = policyEngine.update(policyState, 'GHOST', {
+    type: 'set-feature', feature: 'javascript', value: 'preset'
+  });
+  assert.equal(policyEngine.resolve(policyState, 'GHOST').features.javascript.effective, 'full',
+    'returning to preset must restore its current feature value');
+  assert.equal(policyEngine.resolve(policyState, 'NORMAL').features.javascript.effective, 'full');
+  assert.equal(policyEngine.resolve(null, 'GHOST', { torEnabled: true }).features.webrtc.effective, 'blocked',
+    'Tor policy must fail closed on WebRTC independently of the selected level');
+  assert.equal(policyEngine.resolve(null, 'NORMAL').features.javascript.siteOverride, 'UNSUPPORTED',
+    'the policy engine must identify unavailable per-site overrides honestly');
+
   const bridgeFunctions = bridgeSchema[0].functions.map(item => item.name);
   assert.ok(bridgeFunctions.includes('applyGhostHardening'), 'privileged bridge must expose GHOST hardening');
   assert.ok(bridgeFunctions.includes('setGhostJavascriptEnabled'), 'privileged bridge must expose the GHOST JavaScript toggle');
+  assert.ok(bridgeFunctions.includes('applyPrivacyPreferences'), 'privileged bridge must apply native policy preferences');
+  const privacySettingsHtml = fs.readFileSync(path.join(__dirname, '../extension/privacy-settings.html'), 'utf8');
+  const privacySettingsJs = fs.readFileSync(path.join(__dirname, '../extension/privacy-settings.js'), 'utf8');
+  assert.match(privacySettingsHtml, /data-level="normal"[\s\S]*data-level="maximum"/,
+    'privacy settings must expose all four protection presets');
+  for (const feature of Object.keys(policyEngine.FEATURES)) {
+    assert.ok(privacySettingsHtml.includes(`data-feature="${feature}"`),
+      `privacy settings must expose independently configurable ${feature}`);
+  }
+  assert.match(privacySettingsJs, /type: 'set-level'[\s\S]*type: 'set-feature'/,
+    'privacy controls must write individual overrides and preset changes');
+  assert.match(privacySettingsHtml, /non sono esposte[\s\S]*in modo verificato/,
+    'unsupported per-site overrides must be disclosed instead of simulated');
   const hardeningStart = bridgeSource.indexOf('const applyGhostHardening = isActive =>');
   const hardeningEnd = bridgeSource.indexOf('\n\n    return {\n      browserControl:', hardeningStart);
   const hardeningCode = bridgeSource.slice(hardeningStart, hardeningEnd);
@@ -42,6 +80,41 @@ async function main() {
     'javascript.enabled must be included in the existing native preference snapshot');
   assert.match(bridgeSource, /javascriptEnabled: Services\.prefs\.getBoolPref\("javascript\.enabled", true\)/,
     'mode diagnostics must expose the effective global JavaScript preference');
+  const policyPreferenceStart = bridgeSource.indexOf('const applyPrivacyPreferences = serializedPolicy =>');
+  const policyPreferenceEnd = bridgeSource.indexOf('\n\n    return {\n      browserControl:', policyPreferenceStart);
+  const policyPreferenceCode = bridgeSource.slice(policyPreferenceStart, policyPreferenceEnd);
+  const nativeValues = new Map([
+    ['javascript.enabled', true], ['privacy.resistFingerprinting', false],
+    ['webgl.disabled', false], ['webgl.enable-webgl2', true]
+  ]);
+  let failNativeWrite = 'webgl.disabled';
+  const nativeServices = { prefs: {
+    prefHasUserValue: name => nativeValues.has(name),
+    getBoolPref: (name, fallback) => nativeValues.has(name) ? nativeValues.get(name) : fallback,
+    setBoolPref(name, value) {
+      if (name === failNativeWrite) { failNativeWrite = null; throw new Error('pref locked'); }
+      nativeValues.set(name, value);
+    },
+    clearUserPref(name) { nativeValues.delete(name); },
+    savePrefFile() {}
+  } };
+  const applyNativePrivacy = vm.runInNewContext(`${policyPreferenceCode}; applyPrivacyPreferences`, {
+    Services: nativeServices, JSON, Object, TypeError, Error
+  });
+  assert.throws(() => applyNativePrivacy(JSON.stringify({
+    javascriptEnabled: false, fingerprintingResistance: true,
+    webglDisabled: true, webgl2Enabled: false
+  })), /pref locked/);
+  assert.deepEqual([...nativeValues.values()], [true, false, false, true],
+    'native privacy preference failure must rollback every earlier write');
+  const appliedNative = applyNativePrivacy(JSON.stringify({
+    javascriptEnabled: false, fingerprintingResistance: true,
+    webglDisabled: false, webgl2Enabled: false
+  }));
+  assert.deepEqual(JSON.parse(JSON.stringify(appliedNative)), {
+    javascriptEnabled: false, fingerprintingResistance: true,
+    webglDisabled: false, webgl2Enabled: false
+  }, 'native privacy preference writes must return actual readback');
   assert.match(source, /message\.mode === 'GHOST' && previousMode !== 'GHOST'[\s\S]{0,180}applyGhostHardening\(true\)/,
     'reselecting GHOST must not reapply hardening and reset the temporary JavaScript override');
   assert.match(source, /set-ghost-javascript[\s\S]{0,180}setGhostJavascript\(message\.enabled\)/,
@@ -59,9 +132,12 @@ async function main() {
   ]) {
     assert.ok(sidebarSource.includes(`'${check}'`), `Windows runtime self-test must include ${check}`);
   }
+  assert.match(sidebarSource, /privacy-settings\.html/,
+    'the sidebar must launch the native FILUM protection settings page');
   for (const check of [
     'ghost-javascript-toggle-visible-while-off', 'ghost-javascript-enable-from-sidebar',
-    'ghost-javascript-override-survives-reselect', 'ghost-javascript-disable-from-sidebar'
+    'ghost-javascript-override-survives-reselect', 'ghost-javascript-disable-from-sidebar',
+    'privacy-settings-controls-rendered'
   ]) {
     assert.ok(sidebarSource.includes(`'${check}'`), `Windows runtime self-test must include ${check}`);
   }
@@ -291,13 +367,18 @@ async function main() {
       webRTCIPHandlingPolicy: modePrivacySetting
     }
   };
+  context.PRIVACY_POLICY_STORAGE_KEY = 'filumPrivacyPolicy';
+  context.FilumPolicyEngine = policyEngine;
+  browser.browserControl.applyPrivacyPreferences = async serialized => JSON.parse(serialized);
   vm.runInContext(section('async function applyRuntimePrivacy(mode)', 'async function getModeHealth('), context);
   for (const mode of ['NORMAL', 'TURBO', 'PRIVATE', 'GHOST']) {
     const previousWrites = modeWebRtcWrites.length;
     const previousFingerprintWrites = modeFingerprintWrites.length;
     await vm.runInContext(`applyRuntimePrivacy('${mode}')`, context);
     assert.equal(modeWebRtcWrites.length, previousWrites + 1, `${mode} must write the WebRTC setting`);
-    assert.equal(modeWebRtcWrites[modeWebRtcWrites.length - 1], false, `${mode} must disable WebRTC`);
+    const shouldBlockWebRtc = mode === 'PRIVATE' || mode === 'GHOST';
+    assert.equal(modeWebRtcWrites[modeWebRtcWrites.length - 1], !shouldBlockWebRtc,
+      `${mode} WebRTC must match the resolved profile`);
     assert.equal(modeFingerprintWrites.length, previousFingerprintWrites + 1, `${mode} must write the fingerprint resistance setting`);
     const expectedRfp = mode === 'PRIVATE' || mode === 'GHOST';
     assert.equal(modeFingerprintWrites[modeFingerprintWrites.length - 1], expectedRfp,

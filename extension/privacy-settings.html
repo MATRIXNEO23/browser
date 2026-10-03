@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protezione · FILUM</title>
+  <link rel="stylesheet" href="privacy-settings.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <strong>FILUM</strong>
+      <span id="mode">Caricamento…</span>
+    </header>
+    <section class="intro">
+      <p class="eyebrow">IMPOSTAZIONI · PROTEZIONE</p>
+      <h1>Protezione</h1>
+      <p>Scegli un livello iniziale e regola ogni funzione separatamente. Le modifiche si applicano subito e restano salvate.</p>
+      <p id="status" role="status" aria-live="polite">Lettura impostazioni…</p>
+    </section>
+    <section class="card">
+      <h2>Livello di base</h2>
+      <div class="levels" role="group" aria-label="Livello di protezione">
+        <button data-level="normal"><b>Normale</b><small>Compatibilità massima</small></button>
+        <button data-level="protected"><b>Protetto</b><small>Privacy equilibrata</small></button>
+        <button data-level="strong"><b>Forte</b><small>Riduce più segnali</small></button>
+        <button data-level="maximum"><b>Massimo</b><small>Restrizioni più forti</small></button>
+      </div>
+      <p id="level-source" class="muted"></p>
+    </section>
+    <section class="card">
+      <h2>Controlli indipendenti</h2>
+      <p class="muted">“Segui profilo” usa il valore del livello selezionato. Un valore scelto qui prevale sul profilo.</p>
+      <div id="controls" class="controls">
+        <label class="control" data-feature="javascript"><span><b>JavaScript</b><small>Globale per tutte le schede</small></span><select aria-label="JavaScript"></select></label>
+        <label class="control" data-feature="canvas"><span><b>Canvas e fingerprinting</b><small>RFP è una protezione Gecko più ampia del solo Canvas</small></span><select aria-label="Canvas e fingerprinting"></select></label>
+        <label class="control" data-feature="webgl"><span><b>WebGL</b><small>Limitato disattiva WebGL 2; può incidere su siti grafici</small></span><select aria-label="WebGL"></select></label>
+        <label class="control" data-feature="webrtc"><span><b>WebRTC</b><small>Tor forza il blocco per evitare traffico fuori dal proxy</small></span><select aria-label="WebRTC"></select></label>
+        <label class="control" data-feature="tracking"><span><b>Protezione tracciamento</b><small>Standard del browser oppure sempre attiva</small></span><select aria-label="Protezione tracciamento"></select></label>
+        <label class="control" data-feature="cookies"><span><b>Cookie di terze parti</b><small>Partizionamento o blocco</small></span><select aria-label="Cookie di terze parti"></select></label>
+      </div>
+    </section>
+    <section class="card notice">
+      <h2>Disponibilità per sito</h2>
+      <p>Le eccezioni JavaScript, Canvas, WebGL e WebRTC per singolo sito non sono esposte da questo motore in modo verificato. FILUM non mostra un controllo che sembra attivo ma non applica la modifica.</p>
+      <p id="tor-note" class="muted">Tor è configurato separatamente dalla rete e dal livello di protezione.</p>
+    </section>
+    <section class="card advanced">
+      <h2>Stato applicato</h2>
+      <div id="verification" class="verification"></div>
+      <p class="muted">“PASS” indica che il valore richiesto coincide con la lettura effettiva della preferenza o dell’API. Non equivale a un test comportamentale su ogni sito.</p>
+    </section>
+  </main>
+  <script src="policy-engine.js"></script>
+  <script src="privacy-settings.js"></script>
+</body>
+</html>

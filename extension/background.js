@@ -1,5 +1,6 @@
 const MODE_LIMITS = { NORMAL: 3, TURBO: 3, PRIVATE: 3, GHOST: 3 };
 const DEFAULT_MODE = 'NORMAL';
+const PRIVACY_POLICY_STORAGE_KEY = 'filumPrivacyPolicy';
 const ADS_RULESET_ID = 'ads_basic';
 const URLHAUS_MALWARE_RULESET_ID = 'urlhaus_malware_basic';
 const SITE_BLOCK_RULE_PRIORITY = 1000;
@@ -17,6 +18,7 @@ const TAVILY_MONTHLY_LIMIT = 1000;
 
 let sessionBlockCount = 0;
 let sessionBlockCounterAvailable = false;
+let latestPrivacySettingsRuntime = null;
 const siteBlockRulesByKey = new Map();
 let siteBlockUpdateQueue = Promise.resolve();
 
@@ -538,76 +540,92 @@ async function enforceBackgroundLimit() {
 }
 
 async function applyRuntimePrivacy(mode) {
-  const safeSet = async (setting, value) => {
-    try {
-      await setting.set({ value });
-    } catch (error) {
-      console.warn('Privacy setting not applied', error);
-    }
-  };
-
-  if (mode === 'NORMAL') {
-    await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
-    await safeSet(browser.privacy.websites.cookieConfig, {
-      behavior: 'reject_trackers_and_partition_foreign'
-    });
-    await updateRFPState(mode);
-    await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
-    await safeSet(browser.privacy.websites.referrersEnabled, true);
-    await safeSet(browser.privacy.network.networkPredictionEnabled, false);
-    await safeSet(browser.privacy.network.peerConnectionEnabled, false);
-    await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'default_public_interface_only');
-    return;
+  const torEnabled = !!(await browser.storage.local.get('torEnabled')).torEnabled;
+  const resolved = await resolvePrivacyPolicy(mode, torEnabled || torStarting);
+  const { features } = resolved;
+  const webgl = features.webgl.effective;
+  const nativeResult = await browser.browserControl.applyPrivacyPreferences(JSON.stringify({
+    javascriptEnabled: features.javascript.effective === 'full',
+    fingerprintingResistance: features.canvas.effective === 'protected',
+    webglDisabled: webgl === 'blocked',
+    webgl2Enabled: webgl === 'normal'
+  }));
+  if (nativeResult.javascriptEnabled !== (features.javascript.effective === 'full') ||
+      nativeResult.fingerprintingResistance !== (features.canvas.effective === 'protected') ||
+      nativeResult.webglDisabled !== (webgl === 'blocked') ||
+      nativeResult.webgl2Enabled !== (webgl === 'normal')) {
+    throw new Error('Readback mismatch applying native privacy policy');
   }
 
-  if (mode === 'TURBO') {
-    await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
-    await safeSet(browser.privacy.websites.cookieConfig, {
-      behavior: 'reject_trackers_and_partition_foreign'
-    });
-    await updateRFPState(mode);
-    await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
-    await safeSet(browser.privacy.websites.referrersEnabled, true);
-    await safeSet(browser.privacy.network.networkPredictionEnabled, false);
-    await safeSet(browser.privacy.network.peerConnectionEnabled, false);
-    await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'default_public_interface_only');
-    return;
-  }
-
-  if (mode === 'PRIVATE') {
-    await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
-    await safeSet(browser.privacy.websites.cookieConfig, {
-      behavior: 'reject_trackers_and_partition_foreign'
-    });
-    await updateRFPState(mode);
-    await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
-    await safeSet(browser.privacy.websites.referrersEnabled, true);
-    await safeSet(browser.privacy.network.networkPredictionEnabled, false);
-    await safeSet(browser.privacy.network.peerConnectionEnabled, false);
-    await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'disable_non_proxied_udp');
-    return;
-  }
-
-  if (mode === 'GHOST') {
-    await safeSet(browser.privacy.websites.trackingProtectionMode, 'always');
-    await safeSet(browser.privacy.websites.cookieConfig, {
-      behavior: 'reject_third_party'
-    });
-    await updateRFPState(mode);
-    await safeSet(browser.privacy.websites.hyperlinkAuditingEnabled, false);
-    await safeSet(browser.privacy.websites.referrersEnabled, false);
-    await safeSet(browser.privacy.network.networkPredictionEnabled, false);
-    await safeSet(browser.privacy.network.peerConnectionEnabled, false);
-    await safeSet(browser.privacy.network.webRTCIPHandlingPolicy, 'disable_non_proxied_udp');
-  }
+  await browser.privacy.websites.trackingProtectionMode.set({ value:
+    features.tracking.effective === 'strict' ? 'always' : 'private_browsing' });
+  await browser.privacy.websites.cookieConfig.set({ value: {
+    behavior: features.cookies.effective === 'third-party-blocked'
+      ? 'reject_third_party' : 'reject_trackers_and_partition_foreign'
+  } });
+  await browser.privacy.websites.hyperlinkAuditingEnabled.set({ value: false });
+  await browser.privacy.websites.referrersEnabled.set({ value: mode !== 'GHOST' });
+  await browser.privacy.network.networkPredictionEnabled.set({ value: false });
+  const webrtc = features.webrtc.effective;
+  await browser.privacy.network.peerConnectionEnabled.set({ value: webrtc !== 'blocked' });
+  await browser.privacy.network.webRTCIPHandlingPolicy.set({
+    value: webrtc === 'allow' ? 'default_public_interface_only' : 'disable_non_proxied_udp'
+  });
+  // RFP reflects the resolved Canvas/fingerprinting control, while Tor can only strengthen it.
+  await browser.privacy.websites.resistFingerprinting.set({
+    value: features.canvas.effective === 'protected' || torEnabled
+  });
+  return resolved;
 }
 
-async function updateRFPState(mode, isTorActive) {
-  const storedTorActive = !!(await browser.storage.local.get('torEnabled')).torEnabled;
-  const torActive = isTorActive === true || torStarting || storedTorActive;
-  const shouldEnableRFP = mode === 'PRIVATE' || mode === 'GHOST' || torActive;
-  await browser.privacy.websites.resistFingerprinting.set({ value: shouldEnableRFP });
-  return shouldEnableRFP;
+async function resolvePrivacyPolicy(mode, torEnabled = false) {
+  const stored = (await browser.storage.local.get(PRIVACY_POLICY_STORAGE_KEY))[PRIVACY_POLICY_STORAGE_KEY];
+  return FilumPolicyEngine.resolve(stored, mode, { torEnabled });
+}
+
+async function getPrivacyPolicyStatus(mode = undefined) {
+  const currentMode = mode || await getMode();
+  const torEnabled = !!(await browser.storage.local.get('torEnabled')).torEnabled;
+  const state = (await browser.storage.local.get(PRIVACY_POLICY_STORAGE_KEY))[PRIVACY_POLICY_STORAGE_KEY];
+  const resolved = FilumPolicyEngine.resolve(state, currentMode, { torEnabled: torEnabled || torStarting });
+  const prefs = await browser.browserControl.getModeDiagnostics();
+  const actual = {
+    javascript: prefs.javascriptEnabled ? 'full' : 'blocked',
+    canvas: prefs.fingerprintResistance ? 'protected' : 'standard',
+    webgl: prefs.webglDisabled ? 'blocked' : prefs.webgl2Enabled ? 'normal' : 'limited'
+  };
+  const fields = { ...resolved.features };
+  for (const feature of Object.keys(actual)) {
+    fields[feature] = { ...fields[feature],
+      verified: actual[feature] === fields[feature].effective ? 'PASS' : 'FAIL',
+      actual: actual[feature] };
+  }
+  const [peerConnection, webRtcPolicy, tracking, cookies] = await Promise.all([
+    browser.privacy.network.peerConnectionEnabled.get({}),
+    browser.privacy.network.webRTCIPHandlingPolicy.get({}),
+    browser.privacy.websites.trackingProtectionMode.get({}),
+    browser.privacy.websites.cookieConfig.get({})
+  ]);
+  actual.webrtc = !peerConnection.value ? 'blocked'
+    : webRtcPolicy.value === 'disable_non_proxied_udp' ? 'protect'
+      : webRtcPolicy.value === 'default_public_interface_only' ? 'allow' : null;
+  actual.tracking = tracking.value === 'always' ? 'strict'
+    : tracking.value === 'private_browsing' ? 'baseline' : null;
+  actual.cookies = cookies.value?.behavior === 'reject_third_party' ? 'third-party-blocked'
+    : cookies.value?.behavior === 'reject_trackers_and_partition_foreign' ? 'partitioned' : null;
+  for (const feature of ['webrtc', 'tracking', 'cookies']) {
+    fields[feature] = { ...fields[feature], actual: actual[feature] || null,
+      verified: actual[feature] === null ? 'NOT VERIFIED'
+        : actual[feature] === fields[feature].effective ? 'PASS' : 'FAIL' };
+  }
+  return {
+    ...resolved,
+    manualLevel: typeof state?.level === 'string',
+    torEnabled: torEnabled || torStarting,
+    configuration: FilumPolicyEngine.normalizeState(state, currentMode),
+    features: fields,
+    siteOverrides: 'UNSUPPORTED'
+  };
 }
 
 async function getModeHealth(mode, torEnabled) {
@@ -625,10 +643,17 @@ async function getModeHealth(mode, torEnabled) {
 
   try {
     const prefs = await browser.browserControl.getModeDiagnostics();
-    const protectedMode = mode === 'PRIVATE' || mode === 'GHOST';
-    const expectedRFP = protectedMode || torEnabled;
+    const policy = await resolvePrivacyPolicy(mode, torEnabled);
+    const expectedRFP = policy.features.canvas.effective === 'protected' || torEnabled;
+    const expectedWebRtc = policy.features.webrtc.effective !== 'blocked' && !torEnabled;
     expect('Autoplay', prefs.autoplay, mode === 'TURBO' || mode === 'GHOST' ? 5 : 1);
     expect('Fingerprint (preferenza)', prefs.fingerprintResistance, expectedRFP);
+    expect('JavaScript (preferenza)', prefs.javascriptEnabled,
+      policy.features.javascript.effective === 'full');
+    expect('WebGL disabilitato', prefs.webglDisabled,
+      policy.features.webgl.effective === 'blocked');
+    expect('WebGL 2 abilitato', prefs.webgl2Enabled,
+      policy.features.webgl.effective === 'normal');
     expect('Prefetch', prefs.prefetch, false);
     expect('DNS prefetch', prefs.dnsPrefetch, true);
     expect('Cookie senza archiviazione persistente', prefs.cookieNoPersistentStorage, mode === 'GHOST');
@@ -644,10 +669,12 @@ async function getModeHealth(mode, torEnabled) {
       read('Hyperlink auditing', browser.privacy.websites.hyperlinkAuditingEnabled)
     ]);
     if (fingerprint !== undefined) expect('Fingerprint', fingerprint, expectedRFP);
-    if (tracking !== undefined) expect('Protezione tracciamento', tracking, 'always');
+    if (tracking !== undefined) expect('Protezione tracciamento', tracking,
+      policy.features.tracking.effective === 'strict' ? 'always' : 'private_browsing');
     if (cookies !== undefined) {
       expect('Protezione cookie', cookies?.behavior,
-        mode === 'GHOST' ? 'reject_third_party' : 'reject_trackers_and_partition_foreign');
+        policy.features.cookies.effective === 'third-party-blocked'
+          ? 'reject_third_party' : 'reject_trackers_and_partition_foreign');
     }
     if (mode === 'GHOST') {
       expect('Cookie behavior hardening', prefs.ghostCookieBehavior, 1);
@@ -656,10 +683,10 @@ async function getModeHealth(mode, torEnabled) {
       expect('HTTP/3', prefs.ghostHttp3, false);
       expect('Alt-Svc', prefs.ghostAltSvc, false);
     }
-    if (webRtc !== undefined) expect('WebRTC', webRtc, false);
+    if (webRtc !== undefined) expect('WebRTC', webRtc, expectedWebRtc);
     if (referrers !== undefined) expect('Referrer', referrers, mode !== 'GHOST');
     if (webRtcPolicy !== undefined) expect('Policy WebRTC', webRtcPolicy,
-      mode === 'PRIVATE' || mode === 'GHOST'
+      policy.features.webrtc.effective !== 'allow' || torEnabled
         ? 'disable_non_proxied_udp' : 'default_public_interface_only');
     if (prediction !== undefined) expect('Predizione rete', prediction, false);
     if (auditing !== undefined) expect('Hyperlink auditing', auditing, false);
@@ -681,7 +708,21 @@ async function setGhostJavascript(enabled) {
     if (await getMode() !== 'GHOST') {
       throw new Error('Il controllo JavaScript è disponibile solo in modalità GHOST.');
     }
-    const result = await browser.browserControl.setGhostJavascriptEnabled(enabled);
+    const previous = (await browser.storage.local.get(PRIVACY_POLICY_STORAGE_KEY))[PRIVACY_POLICY_STORAGE_KEY];
+    const next = FilumPolicyEngine.update(previous, 'GHOST', {
+      type: 'set-feature', feature: 'javascript', value: enabled ? 'full' : 'blocked'
+    });
+    await browser.storage.local.set({ [PRIVACY_POLICY_STORAGE_KEY]: next });
+    let result;
+    try {
+      await applyRuntimePrivacy('GHOST');
+      result = { enabled: (await browser.browserControl.getModeDiagnostics()).javascriptEnabled };
+    } catch (error) {
+      if (previous === undefined) await browser.storage.local.remove(PRIVACY_POLICY_STORAGE_KEY);
+      else await browser.storage.local.set({ [PRIVACY_POLICY_STORAGE_KEY]: previous });
+      await applyRuntimePrivacy('GHOST').catch(() => {});
+      throw error;
+    }
     let reloaded = false;
     try {
       const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
@@ -1133,7 +1174,50 @@ browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'resource-sweep') scheduleEnforcement();
 });
 
-browser.runtime.onMessage.addListener(async (message) => {
+browser.runtime.onMessage.addListener(async (message, sender) => {
+  if (message?.type === 'open-privacy-settings') {
+    const tab = await browser.tabs.create({ url: browser.runtime.getURL('privacy-settings.html') });
+    return { opened: !!tab?.id };
+  }
+  if (message?.type === 'get-privacy-policy') return getPrivacyPolicyStatus();
+  if (message?.type === 'privacy-settings-ready') {
+    if (sender?.url !== browser.runtime.getURL('privacy-settings.html')) return { ok: false };
+    latestPrivacySettingsRuntime = {
+      at: Date.now(),
+      sequence: (latestPrivacySettingsRuntime?.sequence || 0) + 1,
+      levels: Number(message.levels) || 0,
+      controls: Number(message.controls) || 0,
+      features: Array.isArray(message.features) ? message.features : []
+    };
+    return { ok: true };
+  }
+  if (message?.type === 'get-privacy-settings-runtime') return latestPrivacySettingsRuntime;
+  if (message?.type === 'set-privacy-policy') {
+    return queueControlTransition(async () => {
+      const mode = await getMode();
+      const previous = (await browser.storage.local.get(PRIVACY_POLICY_STORAGE_KEY))[PRIVACY_POLICY_STORAGE_KEY];
+      const next = FilumPolicyEngine.update(previous, mode, message.change);
+      await browser.storage.local.set({ [PRIVACY_POLICY_STORAGE_KEY]: next });
+      try {
+        await applyRuntimePrivacy(mode);
+        const torEnabled = !!(await browser.storage.local.get('torEnabled')).torEnabled;
+        const status = await getPrivacyPolicyStatus(mode);
+        const failed = Object.entries(status.features)
+          .filter(([, feature]) => feature.verified === 'FAIL');
+        if (failed.length) {
+          throw new Error(`Readback mismatch: ${failed.map(([name]) => name).join(', ')}`);
+        }
+        const modeHealth = await getModeHealth(mode, torEnabled);
+        if (!modeHealth.ok) throw new Error(`Policy non completa: ${modeHealth.issues.join('; ')}`);
+        return { ok: true, status, modeHealth };
+      } catch (error) {
+        if (previous === undefined) await browser.storage.local.remove(PRIVACY_POLICY_STORAGE_KEY);
+        else await browser.storage.local.set({ [PRIVACY_POLICY_STORAGE_KEY]: previous });
+        await applyRuntimePrivacy(mode).catch(() => {});
+        throw error;
+      }
+    });
+  }
   if (message?.type === 'get-block-count') return getBlockCount();
   if (message?.type === 'get-site-block-status') {
     const tab = await getActiveSiteBlockTab();
