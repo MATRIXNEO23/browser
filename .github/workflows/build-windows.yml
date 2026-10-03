@@ -580,12 +580,29 @@ jobs:
 
           }
           finally {
-            Get-CimInstance Win32_Process | Where-Object {
-              $_.Name -ieq "browser.exe" -and
-              $_.ExecutablePath -and
-              ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($env:BROWSER_EXE))
-            } | ForEach-Object {
-              Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+            $mainBrowser = Get-CimInstance Win32_Process | Where-Object {
+              $_.Name -ieq "browser.exe" -and $_.ExecutablePath -and
+              ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($env:BROWSER_EXE)) -and
+              $_.CommandLine -like "*$profile*"
+            } | Select-Object -First 1
+            if ($mainBrowser) {
+              $mainProcess = Get-Process -Id $mainBrowser.ProcessId -ErrorAction SilentlyContinue
+              if ($mainProcess -and $mainProcess.MainWindowHandle -ne 0) {
+                $null = $mainProcess.CloseMainWindow()
+              }
+            }
+            $shutdownDeadline = (Get-Date).AddSeconds(60)
+            do {
+              $remainingBrowsers = @(Get-CimInstance Win32_Process | Where-Object {
+                $_.Name -ieq "browser.exe" -and $_.ExecutablePath -and
+                [System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($env:BROWSER_EXE)
+              })
+              if (-not $remainingBrowsers.Count) { break }
+              Start-Sleep -Seconds 1
+            } while ((Get-Date) -lt $shutdownDeadline)
+            if ($remainingBrowsers.Count) {
+              $remaining = ($remainingBrowsers | ForEach-Object { $_.CommandLine }) -join " | "
+              throw "Gecko did not exit cleanly; refusing to kill possible background tasks: $remaining"
             }
           }
 
@@ -641,10 +658,30 @@ jobs:
             Start-Sleep -Seconds 5
           }
           finally {
-            Get-CimInstance Win32_Process | Where-Object {
+            $mainBrowser = Get-CimInstance Win32_Process | Where-Object {
               $_.Name -ieq "browser.exe" -and $_.ExecutablePath -and
-              ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($browserPath))
-            } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+              ([System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($browserPath)) -and
+              $_.CommandLine -like "*$movedProfile*"
+            } | Select-Object -First 1
+            if ($mainBrowser) {
+              $mainProcess = Get-Process -Id $mainBrowser.ProcessId -ErrorAction SilentlyContinue
+              if ($mainProcess -and $mainProcess.MainWindowHandle -ne 0) {
+                $null = $mainProcess.CloseMainWindow()
+              }
+            }
+            $shutdownDeadline = (Get-Date).AddSeconds(60)
+            do {
+              $remainingBrowsers = @(Get-CimInstance Win32_Process | Where-Object {
+                $_.Name -ieq "browser.exe" -and $_.ExecutablePath -and
+                [System.IO.Path]::GetFullPath($_.ExecutablePath) -eq [System.IO.Path]::GetFullPath($browserPath)
+              })
+              if (-not $remainingBrowsers.Count) { break }
+              Start-Sleep -Seconds 1
+            } while ((Get-Date) -lt $shutdownDeadline)
+            if ($remainingBrowsers.Count) {
+              $remaining = ($remainingBrowsers | ForEach-Object { $_.CommandLine }) -join " | "
+              throw "Gecko did not exit cleanly after package move; refusing to kill possible background tasks: $remaining"
+            }
             if ($launcher -and -not $launcher.HasExited) {
               Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue
             }
@@ -654,6 +691,16 @@ jobs:
             throw "The moved package did not retain its persisted profile preference."
           }
           if (-not (Test-Path (Join-Path $movedRoot "temp"))) { throw "Moved package-local temp directory missing." }
+          $taskProfileRoot = Join-Path $env:APPDATA "Mozilla\Firefox\Background Tasks Profiles"
+          $taskProfileDeadline = (Get-Date).AddSeconds(45)
+          while ((Test-Path $taskProfileRoot) -and
+            (Get-ChildItem -LiteralPath $taskProfileRoot -Force -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -match "MozillaBackgroundTask-.*-defaultagent" })) {
+            if ((Get-Date) -ge $taskProfileDeadline) {
+              throw "Gecko's temporary default-agent background-task profile did not clean itself up."
+            }
+            Start-Sleep -Seconds 1
+          }
           & (Join-Path $env:GITHUB_WORKSPACE "scripts/test-portable-host.ps1") -Phase After -SnapshotPath (Join-Path $env:RUNNER_TEMP "filum-portable-host-baseline.json")
           Write-Host "Portable profile A-to-B move: PASS"
           Write-Host "Moved profile: $movedProfile"
