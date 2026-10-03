@@ -16,7 +16,7 @@ The validated #146 archive had no user-facing portable launcher. Its Windows smo
 ## Verification status
 
 - Local checks PASS: product gate, overlay Python compilation, workflow YAML parsing, and `git diff --check`.
-- Windows runtime and move test: pending. The launcher and profile relocation are not declared verified until the Windows workflow succeeds.
+- CI #147: native Firefox app-menu assertion, startup, and updater absence passed. The first host snapshot correctly exposed Gecko startup artifacts in `%APPDATA%\\Mozilla\\Firefox` (crash-helper log/directories and `Pending Pings`) and per-user Mozilla registry keys; the strict zero-difference gate failed at host audit, so profile A→B and final ZIP recreation did not run.\n- The host audit now classifies only those exact Gecko startup artifacts/registry keys as expected metadata. Any external browsing profile, other registry delta, service or scheduled-task change remains a failure. The latest Windows runtime, A→B and final ZIP/hash are pending the next run.
 
 ## Boundaries
 
