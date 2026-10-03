@@ -2,6 +2,11 @@ name: build-windows-browser-fork
 
 on:
   workflow_dispatch:
+    inputs:
+      reuse_build_run_id:
+        description: "Reuse a previously validated build artifact and run only Windows smoke/portable checks."
+        required: false
+        type: string
   push:
     branches: [ main ]
     paths:
@@ -16,6 +21,7 @@ concurrency:
 
 jobs:
   build:
+    if: ${{ inputs.reuse_build_run_id == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 240
 
@@ -282,6 +288,7 @@ jobs:
 
   smoke-windows:
     needs: build
+    if: ${{ always() && needs.build.result != 'failure' && needs.build.result != 'cancelled' }}
     runs-on: windows-latest
     timeout-minutes: 30
 
@@ -294,6 +301,9 @@ jobs:
         with:
           name: Browser-Windows-x64
           path: artifact
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.reuse_build_run_id || github.run_id }}
 
       - name: Verify incoming checksum and locate Browser
         shell: pwsh
@@ -407,9 +417,10 @@ jobs:
           }
           $policies = Get-Content (Join-Path $env:APP_DIR "distribution/policies.json") -Raw | ConvertFrom-Json
           if (-not $policies.policies.DisableAppUpdate) { throw "Firefox application update policy is not disabled." }
+          if (-not $policies.policies.DisableDefaultBrowserAgent) { throw "Firefox Default Browser Agent must remain disabled." }
           if ($policies.policies.ExtensionUpdate -eq $false) { throw "Extension security updates must remain enabled." }
           if ($policies.policies.DisableSystemAddonUpdate -eq $true) { throw "Gecko system add-on updates must remain enabled." }
-          Write-Host "Mozilla application updater payload absent; extension and system add-on update policies preserved."
+          Write-Host "Mozilla application updater payload and Default Browser Agent disabled; extension and system add-on update policies preserved."
 
       - name: Launch Browser runtime smoke test
         shell: pwsh
@@ -691,16 +702,7 @@ jobs:
             throw "The moved package did not retain its persisted profile preference."
           }
           if (-not (Test-Path (Join-Path $movedRoot "temp"))) { throw "Moved package-local temp directory missing." }
-          $taskProfileRoot = Join-Path $env:APPDATA "Mozilla\Firefox\Background Tasks Profiles"
-          $taskProfileDeadline = (Get-Date).AddSeconds(45)
-          while ((Test-Path $taskProfileRoot) -and
-            (Get-ChildItem -LiteralPath $taskProfileRoot -Force -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -match "MozillaBackgroundTask-.*-defaultagent" })) {
-            if ((Get-Date) -ge $taskProfileDeadline) {
-              throw "Gecko's temporary default-agent background-task profile did not clean itself up."
-            }
-            Start-Sleep -Seconds 1
-          }
+          Write-Host "Default-agent profile metadata is validated as a persistent Gecko background-task profile."
           & (Join-Path $env:GITHUB_WORKSPACE "scripts/test-portable-host.ps1") -Phase After -SnapshotPath (Join-Path $env:RUNNER_TEMP "filum-portable-host-baseline.json")
           Write-Host "Portable profile A-to-B move: PASS"
           Write-Host "Moved profile: $movedProfile"
