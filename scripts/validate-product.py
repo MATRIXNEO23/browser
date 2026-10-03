@@ -258,7 +258,9 @@ require_text(
     "Final ZIP has an unexpected root layout",
     "Final ZIP contains the CI profile or temporary files",
     "refusing to kill possible background tasks",
-    "temporary default-agent background-task profile did not clean itself up.",
+    "Default-agent profile metadata is validated as a persistent Gecko background-task profile.",
+    "reuse_build_run_id",
+    "Firefox Default Browser Agent must remain disabled.",
     "CloseMainWindow",
     "test-portable-host.ps1"
 )
@@ -274,6 +276,8 @@ require_text(
     "services",
     "tasks",
     "Expected Gecko startup metadata classified",
+    "persistent, non-browsing profile by design",
+    "MozillaBackgroundTask-[A-Fa-f0-9]+-defaultagent",
     "unclassified profile, registry, service or scheduled-task changes"
 )
 require_text(
