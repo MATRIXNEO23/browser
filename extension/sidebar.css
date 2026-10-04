@@ -312,6 +312,12 @@ button.active {
   opacity: .58;
 }
 
+.site-protection-control { margin: 4px 0; padding: 7px; border: 1px solid #20262e; border-radius: 9px; background: #0d1115; }
+#site-protection-status { display: block; margin-bottom: 5px; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+#site-protection-status[data-override="true"] { color: var(--accent); }
+#site-protection-status[data-partial="true"] { color: #f2d69b; }
+.site-protection-control button { width: 100%; margin: 0; }
+
 .status {
   margin-top: 5px;
   padding: 6px 7px;

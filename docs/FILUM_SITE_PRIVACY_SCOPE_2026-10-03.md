@@ -1,35 +1,55 @@
-# FILUM site-level privacy controls — 2026-10-03
+# FILUM per-site privacy controls
 
-## Verified scope
+## Scope and resolution
 
-FILUM must describe a control as site-specific only when Gecko applies it to
-the relevant origin or tab. Existing controls are not evidence that every
-privacy preference has per-site scope.
+Site overrides are keyed by the exact HTTP(S) origin: scheme, host and port.
+Paths and query strings do not create separate records; sibling subdomains and
+alternate ports remain separate. This matches Gecko's principal/permission
+boundary and avoids widening an exception to an eTLD+1.
 
-| Control | Scope verified | Current conclusion |
+Resolution order is:
+
+1. Non-negotiable Tor hard constraints.
+2. Exact-origin site override where Gecko has a verified native permission.
+3. Manual global feature override.
+4. Global protection preset.
+5. Current mode default.
+
+The UI shows requested, source, effective and verified values. It reports
+`PASS` only after Gecko readback. A site-level preset can request a different
+value for global-only features, but the effective value remains global and is
+reported `UNSUPPORTED`; the UI never presents those as working per-site
+switches.
+
+## Controls
+
+| Control | Granularity implemented | Evidence shown |
 |---|---|---|
-| Ads/malware Smart Toggle | DNR session rule scoped to current tab and initiator domain | Per-tab/domain. It does not change Tor or Gecko privacy preferences. |
-| Tracking protection | Gecko has an origin permission/allow-list path for `trackingprotection`; private-browsing entries can be session-scoped | Native per-site exception exists. FILUM should retain the native shield/site-permission route; do not label a global pref as a per-site toggle. |
-| JavaScript | Current FILUM setting changes `javascript.enabled` | Global preference. No verified site permission API wired by FILUM. |
-| Canvas / RFP | Current mode changes Gecko fingerprinting preferences | Global/mode scope. No verified site-level exception wired by FILUM. |
-| WebGL | Current mode changes Gecko preferences | Global/mode scope. No verified site-level exception wired by FILUM. |
-| WebRTC | Current mode changes Gecko preferences | Global/mode scope. No verified site-level exception wired by FILUM. |
-| Cookies | FILUM hardening changes `network.cookie.cookieBehavior` | Global preference. Per-origin cookie permission support in the pinned build has not been verified here; classify as `UNKNOWN`, do not promise per-site control. |
+| Protection level | Exact origin; native exceptions only where available | Gecko permission readback per supported feature |
+| Canvas/RFP | Exact-origin Canvas permission; temporary exception only; denied while Tor is active | `canvas` permission and RFP state |
+| Tracking protection | Exact-origin Gecko `trackingprotection` allow permission | Gecko permission readback |
+| JavaScript, WebGL, WebRTC, cookies | Global preference or mode-scoped; no fabricated per-site exception | `UNSUPPORTED` when a site preset differs |
+| Ads/malware Smart Toggle | Per-tab/domain DNR session rule | Independent from privacy presets |
 
-## UI and product decision
+The contextual popup opens only when the user presses the current-site control.
+FILUM does not claim to identify every blocked request or feature, so it does
+not issue speculative prompts. A central manager lists, searches, and removes
+site overrides and can restore all sites to the global policy.
 
-Keep independent preferences independently configurable in the FILUM controls,
-but label them as browser-wide or mode-scoped unless Gecko provides a verified
-origin permission. Preserve native Firefox site-permission surfaces for the
-permissions Gecko already supports. Do not add a custom per-site JavaScript,
-Canvas, WebGL, WebRTC, or cookie toggle based only on a preference name.
+## Persistence and Tor
 
-## Evidence and limits
+Persistent records live in the FILUM profile's `storage.local`. Temporary
+records use `storage.session` and Gecko `EXPIRE_SESSION` permissions, so they
+expire with the browser session. Tor activation removes FILUM-managed Canvas
+allow permissions before Tor starts, refuses activation if an unmanaged Gecko
+Canvas allow permission exists, and restores FILUM-managed exceptions after
+Tor stops. Site presets do not change the global mode or global policy.
 
-- The pinned source audit found Gecko's `ContentBlockingAllowList` permission
-  path for tracking-protection exceptions.
-- The extension schemas in the pinned checkout do not provide a general
-  `contentSettings` API that could transparently turn global preferences into
-  site-specific ones.
-- Runtime confirmation of the native tracking-protection shield remains part
-  of the Windows UI smoke; no new per-site controls are claimed by this change.
+This feature does not manage Firefox private-window or non-default container
+overrides; those tabs are excluded so permission origin attributes are not
+collapsed across containers. The FILUM `PRIVATE` protection mode remains
+supported. Runtime Windows validation is
+still needed for Gecko permission behavior and the contextual popup; static
+tests alone do not establish a browser runtime pass. Controls without a native
+origin permission are `UNKNOWN` as site-specific capabilities. No verified site-level exception
+exists for JavaScript, WebGL, WebRTC, or cookies.

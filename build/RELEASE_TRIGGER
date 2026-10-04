@@ -1,5 +1,8 @@
 release_request: none
-source_head_before_trigger: 5f462a2dcda60b93ba6c8527f369c88b41d17c83
+source_head_before_trigger: b479f2094ce5773c2424b73c1ff56460ffcd7791
+site_contextual_protection: required
+site_origin_isolation: scheme_host_port
+site_override_diagnostics: requested_source_effective_verified
 product_gate: required
 webextension_panel_context: required
 all_sidebar_controls_selftest: required
@@ -12,4 +15,4 @@ privacy_policy_engine: four_levels_and_independent_controls
 privacy_settings_readback: required
 tor_independent_fail_closed: required
 stable_release_only: true
-rerun_reason: graceful_gecko_background_task_cleanup_windows_2026_10_03
+rerun_reason: contextual_site_protection_runtime_validation_2026_10_04

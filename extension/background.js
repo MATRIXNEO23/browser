@@ -1,6 +1,8 @@
 const MODE_LIMITS = { NORMAL: 3, TURBO: 3, PRIVATE: 3, GHOST: 3 };
 const DEFAULT_MODE = 'NORMAL';
 const PRIVACY_POLICY_STORAGE_KEY = 'filumPrivacyPolicy';
+const SITE_OVERRIDES_KEY = 'filumSitePrivacyOverrides';
+const SITE_SESSION_KEY = 'filumSitePrivacySessionOverrides';
 const ADS_RULESET_ID = 'ads_basic';
 const URLHAUS_MALWARE_RULESET_ID = 'urlhaus_malware_basic';
 const SITE_BLOCK_RULE_PRIORITY = 1000;
@@ -624,8 +626,220 @@ async function getPrivacyPolicyStatus(mode = undefined) {
     torEnabled: torEnabled || torStarting,
     configuration: FilumPolicyEngine.normalizeState(state, currentMode),
     features: fields,
-    siteOverrides: 'UNSUPPORTED'
+    siteOverrides: 'EXACT_ORIGIN · Canvas e tracking solo con permesso Gecko readback'
   };
+}
+
+function normalizeSiteStore(value) {
+  const sites = {};
+  for (const [origin, item] of Object.entries(value?.sites || {})) {
+    if (FilumPolicyEngine.normalizeOrigin(origin) !== origin || !item || typeof item !== 'object') continue;
+    const override = FilumPolicyEngine.normalizeSiteOverride(item);
+    if (override) sites[origin] = { ...override, permissions: item.permissions || {}, updatedAt: item.updatedAt || 0 };
+  }
+  return { version: 1, sites };
+}
+
+async function readSiteStores() {
+  const [local, session] = await Promise.all([
+    browser.storage.local.get(SITE_OVERRIDES_KEY),
+    browser.storage.session ? browser.storage.session.get(SITE_SESSION_KEY) : Promise.resolve({})
+  ]);
+  return { persistent: normalizeSiteStore(local[SITE_OVERRIDES_KEY]),
+    session: normalizeSiteStore(session[SITE_SESSION_KEY]), sessionAvailable: !!browser.storage.session };
+}
+
+async function writeSiteStore(scope, store) {
+  const storage = scope === 'session' ? browser.storage.session : browser.storage.local;
+  const key = scope === 'session' ? SITE_SESSION_KEY : SITE_OVERRIDES_KEY;
+  if (!storage) throw new Error('Le eccezioni temporanee non sono disponibili.');
+  if (Object.keys(store.sites).length) await storage.set({ [key]: store });
+  else await storage.remove(key);
+}
+
+async function siteStatus(origin = undefined, tabId = undefined, windowId = undefined) {
+  const tab = Number.isSafeInteger(tabId) ? await browser.tabs.get(tabId).catch(() => null)
+    : (await browser.tabs.query({ active: true, lastFocusedWindow: true }))[0];
+  const actualOrigin = FilumPolicyEngine.normalizeOrigin(tab?.url || tab?.pendingUrl || '');
+  if (!tab || !actualOrigin || (origin && origin !== actualOrigin) ||
+      (Number.isInteger(windowId) && tab.windowId !== windowId)) {
+    return { available: false, reason: 'Scheda corrente non HTTP(S) o origine cambiata.' };
+  }
+  if (tab.incognito) return { available: false, reason: 'Eccezioni sito disabilitate nelle finestre private Firefox.', origin: actualOrigin };
+  if (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default') {
+    return { available: false, reason: 'Override sito non disponibile nei contenitori Firefox.', origin: actualOrigin };
+  }
+  const stores = await readSiteStores();
+  const override = stores.session.sites[actualOrigin] || stores.persistent.sites[actualOrigin] || null;
+  const scope = stores.session.sites[actualOrigin] ? 'session'
+    : stores.persistent.sites[actualOrigin] ? 'persistent' : null;
+  const mode = await getMode();
+  const [global, native] = await Promise.all([
+    getPrivacyPolicyStatus(mode), browser.browserControl.getSitePrivacyPermissions(actualOrigin)
+  ]);
+  const torEnabled = !!(await browser.storage.local.get('torEnabled')).torEnabled || torStarting;
+  const actual = Object.fromEntries(Object.entries(global.features)
+    .map(([key, value]) => [key, value.actual ?? value.effective]));
+  if (native.permissions.canvas.action === 'allow') actual.canvas = 'standard';
+  if (native.permissions.tracking.action === 'allow') actual.tracking = 'baseline';
+  const owned = override?.permissions || {};
+  const resolved = FilumPolicyEngine.resolveSite(global.configuration, mode, override, {
+    torEnabled, actual,
+    sitePermissions: { canvas: native.permissions.canvas.action, tracking: native.permissions.tracking.action },
+    ownedSitePermissions: {
+      canvas: owned.canvas?.action === native.permissions.canvas.action,
+      tracking: owned.tracking?.action === native.permissions.tracking.action
+    }
+  });
+  return { ...resolved, available: true, origin: actualOrigin, host: new URL(actualOrigin).host,
+    tabId: tab.id, windowId: tab.windowId, mode, globalLevel: global.level,
+    manualGlobalLevel: global.manualLevel, overrideScope: scope, persistentOverride: stores.persistent.sites[actualOrigin] || null,
+    sessionOverride: stores.session.sites[actualOrigin] || null, sessionAvailable: stores.sessionAvailable,
+    nativePermissionOverride: Object.values(native.permissions).some(permission => permission.action !== 'none'),
+    torCanvasConflict: torEnabled && native.permissions.canvas.action === 'allow',
+    nativePermissions: native.permissions };
+}
+
+function sitePermissionRequests(level, global) {
+  const preset = FilumPolicyEngine.PRESETS[level];
+  const result = {};
+  if (preset?.canvas === 'standard' && global.features.canvas.effective === 'protected') result.canvas = 'allow';
+  if (preset?.tracking === 'baseline' && global.features.tracking.effective === 'strict') result.tracking = 'allow';
+  return result;
+}
+
+async function applySitePermissions(origin, oldRecord, desired, scope, torEnabled) {
+  const current = await browser.browserControl.getSitePrivacyPermissions(origin);
+  const changes = [];
+  const owned = {};
+  for (const feature of ['canvas', 'tracking']) {
+    const actual = current.permissions[feature];
+    const previous = oldRecord?.permissions?.[feature];
+    const requested = desired[feature];
+    if (actual.action !== 'none' && !previous) {
+      if (actual.action === requested && requested === 'allow') continue;
+      if (requested) throw new Error(`Gecko ha già un permesso ${feature} per questo sito; non verrà sovrascritto.`);
+      continue;
+    }
+    if (previous && actual.action !== previous.action && !(previous.suspendedByTor && actual.action === 'none')) {
+      throw new Error(`Il permesso ${feature} è stato modificato fuori da FILUM.`);
+    }
+    if (requested === 'allow' && torEnabled && feature === 'canvas') {
+      owned[feature] = { action: 'allow', scope, suspendedByTor: true };
+      if (actual.action === 'allow') changes.push({ feature, action: 'remove', scope, expected: actual });
+    } else if (requested === 'allow') {
+      owned[feature] = { action: 'allow', scope, suspendedByTor: false };
+      if (actual.action !== 'allow' || actual.scope !== scope) changes.push({ feature, action: 'allow', scope, expected: actual });
+    } else if (previous && actual.action !== 'none') {
+      changes.push({ feature, action: 'remove', scope, expected: actual });
+    }
+  }
+  const readback = changes.length
+    ? await browser.browserControl.setSitePrivacyPermissions(JSON.stringify({ origin, changes })) : current;
+  for (const feature of Object.keys(owned)) owned[feature].expireType = readback.permissions[feature].expireType;
+  return owned;
+}
+
+async function setSiteOverride(tabId, origin, windowId, request) {
+  return queueControlTransition(async () => {
+    const tab = await browser.tabs.get(tabId);
+    const active = (await browser.tabs.query({ active: true, windowId }))[0];
+    if (!tab || tab.incognito || (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default') ||
+        active?.id !== tabId || tab.windowId !== windowId ||
+        FilumPolicyEngine.normalizeOrigin(tab.url || tab.pendingUrl || '') !== origin) throw new Error('La scheda o origine è cambiata.');
+    if (request.operation && request.operation !== 'canvas-exception') throw new Error('Operazione per-sito non supportata.');
+    const exceptionOnly = request.operation === 'canvas-exception';
+    if ((!exceptionOnly && !FilumPolicyEngine.LEVELS.includes(request.level)) || !['session', 'persistent'].includes(request.scope)) throw new Error('Livello o durata non validi.');
+    if (exceptionOnly && request.scope !== 'session') throw new Error('L’eccezione Canvas è solo temporanea.');
+    const stores = await readSiteStores();
+    const oldScope = stores.session.sites[origin] ? 'session' : stores.persistent.sites[origin] ? 'persistent' : null;
+    if (oldScope && oldScope !== request.scope) throw new Error('Rimuovi prima l’override esistente per cambiare durata.');
+    if (request.scope === 'session' && !stores.sessionAvailable) throw new Error('storage.session non disponibile.');
+    const tor = !!(await browser.storage.local.get('torEnabled')).torEnabled || torStarting;
+    const global = await getPrivacyPolicyStatus(await getMode());
+    const before = stores[request.scope].sites[origin] || null;
+    if (tor && exceptionOnly) throw new Error('Tor mantiene Canvas RFP attiva; l’eccezione è disabilitata.');
+    const level = exceptionOnly ? before?.level || null : request.level;
+    const canvasException = exceptionOnly ? 'allow-extract' : before?.canvasException || null;
+    const wanted = sitePermissionRequests(level, global);
+    if (canvasException) wanted.canvas = 'allow';
+    const native = await applySitePermissions(origin, before, wanted, request.scope, tor);
+    const record = { level, canvasException, permissions: native, updatedAt: Date.now() };
+    const next = { ...stores[request.scope], sites: { ...stores[request.scope].sites, [origin]: record } };
+    try { await writeSiteStore(request.scope, next); }
+    catch (error) {
+      await applySitePermissions(origin, record,
+        Object.fromEntries(Object.entries(before?.permissions || {}).map(([key, p]) => [key, p.action])),
+        request.scope, tor).catch(rollback => { throw new Error(`${error.message}; rollback failed: ${rollback.message}`); });
+      throw error;
+    }
+    await browser.tabs.reload(tabId).catch(() => {});
+    return siteStatus(origin, tabId, windowId);
+  });
+}
+
+async function removeSiteOverride(origin, scope = 'all') {
+  return queueControlTransition(async () => {
+    if (FilumPolicyEngine.normalizeOrigin(origin) !== origin || !['session', 'persistent', 'all'].includes(scope)) throw new Error('Origine/durata non valida.');
+    const stores = await readSiteStores();
+    const scopes = scope === 'all' ? ['session', 'persistent'] : [scope];
+    const oldScope = stores.session.sites[origin] ? 'session' : stores.persistent.sites[origin] ? 'persistent' : null;
+    for (const item of scopes) {
+      const record = stores[item].sites[origin];
+      if (!record) continue;
+      const next = { ...stores[item], sites: { ...stores[item].sites } };
+      delete next.sites[origin];
+      await writeSiteStore(item, next);
+      try {
+        await applySitePermissions(origin, record, {}, item,
+          !!(await browser.storage.local.get('torEnabled')).torEnabled || torStarting);
+      } catch (error) {
+        await writeSiteStore(item, stores[item]).catch(rollback => {
+          throw new Error(`${error.message}; storage rollback failed: ${rollback.message}`);
+        });
+        throw error;
+      }
+    }
+    return { removed: !!oldScope };
+  });
+}
+
+async function listSiteOverrides() {
+  const stores = await readSiteStores();
+  const origins = new Set([...Object.keys(stores.persistent.sites), ...Object.keys(stores.session.sites)]);
+  return [...origins].sort().map(origin => ({ origin,
+    persistent: stores.persistent.sites[origin] || null, session: stores.session.sites[origin] || null }));
+}
+
+async function syncSiteOverridesForTor(enabled) {
+  const stores = await readSiteStores();
+  if (enabled) {
+    const owned = new Set(['persistent', 'session'].flatMap(scope => Object.entries(stores[scope].sites)
+      .filter(([, record]) => record.permissions?.canvas?.action === 'allow').map(([origin]) => origin)));
+    const allows = await browser.browserControl.getCanvasAllowPermissionOrigins();
+    const unmanaged = allows.find(item => !owned.has(item.origin));
+    if (unmanaged) throw new Error(`Tor bloccato: permesso Canvas Gecko esterno su ${unmanaged.origin}.`);
+  }
+  const global = await getPrivacyPolicyStatus(await getMode());
+  for (const scope of ['persistent', 'session']) {
+    const nextSites = { ...stores[scope].sites };
+    let changed = false;
+    for (const [origin, record] of Object.entries(stores[scope].sites)) {
+      const desired = sitePermissionRequests(record.level, global);
+      if (record.canvasException) desired.canvas = 'allow';
+      const permissions = await applySitePermissions(origin, record, desired, scope, enabled);
+      nextSites[origin] = { ...record, permissions };
+      changed = true;
+    }
+    if (changed) await writeSiteStore(scope, { ...stores[scope], sites: nextSites });
+  }
+}
+
+function trustedFilumPage(sender, filename) {
+  try {
+    const url = new URL(sender?.url || '');
+    return url.origin === new URL(browser.runtime.getURL('/')).origin && url.pathname.endsWith(`/${filename}`);
+  } catch (_) { return false; }
 }
 
 async function getModeHealth(mode, torEnabled) {
@@ -963,6 +1177,7 @@ async function restoreStaleTorState() {
       'torPreviousProxy', 'torPreviousSecureDns', 'torPreviousSecureDnsUri'
     ]);
     torAuthSuspended = false;
+    await syncSiteOverridesForTor(false);
   }
 }
 
@@ -977,6 +1192,7 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
   ]);
 
   if (enabled && saved.torEnabled) {
+    await syncSiteOverridesForTor(true);
     await applyRuntimePrivacy(await getMode(), true);
     const process = await browser.browserControl.getTorStatus();
 
@@ -1001,6 +1217,7 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
       await browser.browserControl.stopTor();
     } catch (_) {}
     await applyRuntimePrivacy(await getMode(), false);
+    await syncSiteOverridesForTor(false);
     if (!keepAuthSuspended) {
       torAuthSuspended = false;
       await restoreSocksAuthProfile();
@@ -1020,6 +1237,7 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
 
     torStarting = true;
     try {
+      await syncSiteOverridesForTor(true);
       // Raise RFP before Tor starts, so the transition never sends proxied traffic with RFP off.
       await applyRuntimePrivacy(await getMode());
       const process = await browser.browserControl.startTor();
@@ -1067,6 +1285,7 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
           'torPreviousProxy', 'torPreviousSecureDns', 'torPreviousSecureDnsUri'
         ]);
         await applyRuntimePrivacy(await getMode());
+        await syncSiteOverridesForTor(false);
         if (!keepAuthSuspended) {
           torAuthSuspended = false;
           await restoreSocksAuthProfile();
@@ -1092,6 +1311,7 @@ async function setTorEnabled(enabled, keepAuthSuspended = false) {
   ]);
 
   await applyRuntimePrivacy(await getMode());
+  await syncSiteOverridesForTor(false);
   if (!keepAuthSuspended) {
     torAuthSuspended = false;
     await restoreSocksAuthProfile();
@@ -1108,6 +1328,13 @@ async function initialize() {
   } catch (_) {}
 
   await restoreStaleTorState();
+  if ((await browser.storage.local.get('torEnabled')).torEnabled) {
+    try { await syncSiteOverridesForTor(true); }
+    catch (error) { console.error('Tor site protection recovery failed', error); }
+  } else {
+    try { await syncSiteOverridesForTor(false); }
+    catch (error) { console.warn('Unable to restore site permissions at startup', error); }
+  }
   try { await restoreSocksAuthProfile(); }
   catch (error) { console.warn('Unable to restore SOCKS5 auth profile', error); }
   try { await applyDarkTheme(); }
@@ -1175,6 +1402,45 @@ browser.alarms.onAlarm.addListener((alarm) => {
 });
 
 browser.runtime.onMessage.addListener(async (message, sender) => {
+  if (message?.type === 'get-site-protection') {
+    if (!['sidebar.html', 'diagnostics.html', 'site-protection.html'].some(page => trustedFilumPage(sender, page))) return { available: false };
+    return siteStatus(message.origin, message.tabId, message.windowId);
+  }
+  if (message?.type === 'open-site-protection') {
+    if (!trustedFilumPage(sender, 'sidebar.html')) throw new Error('Popup non autorizzato.');
+    const tab = await browser.tabs.get(message.tabId);
+    if (tab.incognito || (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default') ||
+        FilumPolicyEngine.normalizeOrigin(tab.url || '') !== message.origin) throw new Error('La scheda è cambiata o usa un contenitore non supportato.');
+    const url = new URL(browser.runtime.getURL('site-protection.html'));
+    url.searchParams.set('origin', message.origin);
+    url.searchParams.set('tabId', String(tab.id));
+    url.searchParams.set('windowId', String(tab.windowId));
+    const popup = await browser.windows.create({ url: url.href, type: 'popup', width: 620, height: 760, focused: true });
+    return { opened: !!popup?.id };
+  }
+  if (message?.type === 'set-site-override') {
+    if (!trustedFilumPage(sender, 'site-protection.html')) throw new Error('Modifica sito non autorizzata.');
+    return setSiteOverride(message.tabId, message.origin, message.windowId, message.request || {});
+  }
+  if (message?.type === 'get-site-overrides') {
+    if (!trustedFilumPage(sender, 'site-overrides.html')) return { records: [] };
+    return { records: await listSiteOverrides(), globalLevel: (await getPrivacyPolicyStatus()).level };
+  }
+  if (message?.type === 'remove-site-override') {
+    if (!['site-protection.html', 'site-overrides.html'].some(page => trustedFilumPage(sender, page))) throw new Error('Rimozione non autorizzata.');
+    return removeSiteOverride(message.origin, message.scope);
+  }
+  if (message?.type === 'remove-all-site-overrides') {
+    if (!trustedFilumPage(sender, 'site-overrides.html')) throw new Error('Rimozione non autorizzata.');
+    const records = await listSiteOverrides();
+    for (const record of records) await removeSiteOverride(record.origin, 'all');
+    return { removed: records.length };
+  }
+  if (message?.type === 'open-site-overrides') {
+    if (!['sidebar.html', 'site-protection.html'].some(page => trustedFilumPage(sender, page))) throw new Error('Apertura non autorizzata.');
+    const tab = await browser.tabs.create({ url: browser.runtime.getURL('site-overrides.html') });
+    return { opened: !!tab?.id };
+  }
   if (message?.type === 'open-privacy-settings') {
     const tab = await browser.tabs.create({ url: browser.runtime.getURL('privacy-settings.html') });
     return { opened: !!tab?.id };

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protezione sito · FILUM</title>
+  <link rel="stylesheet" href="site-protection.css">
+</head>
+<body>
+  <main>
+    <header><b>FILUM</b><h1>Protezione del sito</h1></header>
+    <p id="origin" class="origin">Caricamento…</p>
+    <p id="summary" role="status">Lettura preferenze…</p>
+    <section>
+      <h2>Livello solo per questo sito</h2>
+      <p id="global" class="muted"></p>
+      <div class="levels">
+        <button data-level="normal">Normale</button>
+        <button data-level="protected">Protetto</button>
+        <button data-level="strong">Forte</button>
+        <button data-level="maximum">Massimo</button>
+      </div>
+      <label for="scope">Durata</label>
+      <select id="scope">
+        <option value="session">Temporaneo · fino alla chiusura del browser</option>
+        <option value="persistent">Ricorda nel profilo FILUM</option>
+      </select>
+      <button id="apply" class="primary">Applica al sito</button>
+    </section>
+    <section id="canvas-section" hidden>
+      <h2>Eccezione Canvas</h2>
+      <p>Consente l’estrazione Canvas solo per questa origine. Può disattivare la randomizzazione RFP per il sito. È temporanea e non disponibile con Tor.</p>
+      <button id="canvas">Consenti Canvas temporaneamente</button>
+    </section>
+    <section>
+      <h2>Valori per questo sito</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Funzione</th><th>REQUESTED</th><th>SOURCE</th><th>EFFECTIVE</th><th>VERIFIED</th></tr></thead>
+          <tbody id="features"></tbody>
+        </table>
+      </div>
+      <p class="muted">JavaScript, WebGL, WebRTC e cookie restano globali o legati alla modalità quando Gecko non offre un permesso per origine verificato.</p>
+    </section>
+    <p class="notice">FILUM non può rilevare in modo affidabile ogni blocco globale. Questo popup si apre su tua richiesta; non attribuisce automaticamente il problema a una funzione specifica.</p>
+    <footer><button id="restore">Ripristina globale</button><button id="manage">Gestisci siti…</button></footer>
+    <p id="message" role="status" aria-live="polite"></p>
+  </main>
+  <script src="site-protection.js"></script>
+</body>
+</html>

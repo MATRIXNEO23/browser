@@ -275,7 +275,7 @@ require_text(
     "registry",
     "services",
     "tasks",
-    "Expected Gecko startup metadata classified",
+    "Known Gecko task metadata classified; no external browsing profile accepted:",
     "persistent, non-browsing profile by design",
     "MozillaBackgroundTask-[A-Fa-f0-9]+-defaultagent",
     "unclassified profile, registry, service or scheduled-task changes"

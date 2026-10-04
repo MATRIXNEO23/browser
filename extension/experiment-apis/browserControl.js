@@ -404,6 +404,89 @@ this.browserControl = class extends ExtensionAPI {
       };
     };
 
+    const sitePrincipal = origin => {
+      let parsed;
+      try { parsed = new URL(origin); } catch (_) { throw new TypeError('Canonical HTTP(S) origin required'); }
+      if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== origin ||
+          parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+        throw new TypeError('Canonical HTTP(S) origin required');
+      }
+      const uri = Services.io.newURI(`${origin}/`);
+      return Services.scriptSecurityManager.createContentPrincipal(uri, {});
+    };
+    const readSitePermission = (principal, type) => {
+      const items = Services.perms.getAllForPrincipal(principal).filter(item => item.type === type);
+      if (items.length > 1) throw new Error(`Ambiguous ${type} permission`);
+      const item = items[0];
+      if (!item) return { action: 'none', scope: null, expireType: null };
+      return { action: item.capability === Services.perms.ALLOW_ACTION ? 'allow'
+        : item.capability === Services.perms.DENY_ACTION ? 'block' : 'unknown',
+        scope: item.expireType === Services.perms.EXPIRE_SESSION ? 'session'
+          : item.expireType === Services.perms.EXPIRE_NEVER ? 'persistent' : 'other',
+        expireType: item.expireType };
+    };
+    const getSitePrivacyPermissions = origin => {
+      const principal = sitePrincipal(origin);
+      return { origin, permissions: {
+        canvas: readSitePermission(principal, 'canvas'),
+        tracking: readSitePermission(principal, 'trackingprotection')
+      } };
+    };
+    const getCanvasAllowPermissionOrigins = () => Services.perms.getAllByTypes(['canvas'])
+      .filter(item => item.type === 'canvas' && item.capability === Services.perms.ALLOW_ACTION)
+      .map(item => ({ origin: item.principal.origin, expireType: item.expireType }))
+      .filter(item => /^https?:\/\//.test(item.origin || ''));
+    const setSitePrivacyPermissions = serialized => {
+      const request = JSON.parse(serialized);
+      if (!request || !Array.isArray(request.changes) || request.changes.length > 2) throw new TypeError('Invalid permission transaction');
+      const principal = sitePrincipal(request.origin);
+      const definitions = { canvas: ['canvas', ['allow', 'block', 'remove']], tracking: ['trackingprotection', ['allow', 'remove']] };
+      const changes = request.changes.map(change => {
+        const [type, actions] = definitions[change?.feature] || [];
+        if (!type || !actions.includes(change.action) || !change.expected ||
+            (change.action !== 'remove' && !['session', 'persistent'].includes(change.scope))) throw new TypeError('Unsupported site permission change');
+        return { ...change, type };
+      });
+      if (new Set(changes.map(c => c.type)).size !== changes.length) throw new TypeError('Duplicate permission type');
+      const before = Object.fromEntries(changes.map(c => [c.type, readSitePermission(principal, c.type)]));
+      for (const change of changes) {
+        const old = before[change.type];
+        if (old.action !== change.expected.action || old.expireType !== change.expected.expireType) throw new Error('Gecko permission changed outside FILUM');
+      }
+      const write = (type, state) => {
+        if (state.action === 'none') return Services.perms.removeFromPrincipal(principal, type);
+        const action = state.action === 'allow' ? Services.perms.ALLOW_ACTION : Services.perms.DENY_ACTION;
+        Services.perms.addFromPrincipal(principal, type, action, state.expireType, 0);
+      };
+      try {
+        for (const change of changes) {
+          if (change.action === 'remove') Services.perms.removeFromPrincipal(principal, change.type);
+          else Services.perms.addFromPrincipal(principal, change.type,
+            change.action === 'allow' ? Services.perms.ALLOW_ACTION : Services.perms.DENY_ACTION,
+            change.scope === 'session' ? Services.perms.EXPIRE_SESSION : Services.perms.EXPIRE_NEVER, 0);
+        }
+        const result = getSitePrivacyPermissions(request.origin);
+        for (const change of changes) {
+          const actual = result.permissions[change.feature];
+          const expectedAction = change.action === 'remove' ? 'none' : change.action;
+          const expectedExpiry = change.action === 'remove' ? null
+            : change.scope === 'session' ? Services.perms.EXPIRE_SESSION : Services.perms.EXPIRE_NEVER;
+          if (actual.action !== expectedAction || actual.expireType !== expectedExpiry) throw new Error(`Gecko readback failed for ${change.feature}`);
+        }
+        return result;
+      } catch (error) {
+        const rollbackErrors = [];
+        for (const [type, snapshot] of Object.entries(before)) {
+          try { write(type, snapshot); }
+          catch (rollbackError) { rollbackErrors.push(rollbackError?.message || String(rollbackError)); }
+        }
+        if (rollbackErrors.length) {
+          throw new Error(`${error?.message || String(error)}; permission rollback failed: ${rollbackErrors.join('; ')}`);
+        }
+        throw error;
+      }
+    };
+
     return {
       browserControl: {
         async applyMode(mode) {
@@ -445,6 +528,10 @@ this.browserControl = class extends ExtensionAPI {
         async applyPrivacyPreferences(serializedPolicy) {
           return applyPrivacyPreferences(serializedPolicy);
         },
+
+        async getSitePrivacyPermissions(origin) { return getSitePrivacyPermissions(origin); },
+        async getCanvasAllowPermissionOrigins() { return getCanvasAllowPermissionOrigins(); },
+        async setSitePrivacyPermissions(serialized) { return setSitePrivacyPermissions(serialized); },
 
         async startTor() {
           try {

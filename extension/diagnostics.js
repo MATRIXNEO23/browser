@@ -1,6 +1,7 @@
 const modeEl = document.getElementById('mode');
 const torEl = document.getElementById('tor');
 const featuresEl = document.getElementById('features');
+const siteProtectionEl = document.getElementById('site-protection');
 const checkedEl = document.getElementById('checked');
 const refreshButton = document.getElementById('refresh');
 const copyButton = document.getElementById('copy');
@@ -8,7 +9,8 @@ let report = '';
 
 function formatReport() {
   const blocks = [
-    ['Modalità', modeEl], ['Altre funzioni', featuresEl], ['Rete Tor', torEl]
+    ['Modalità', modeEl], ['Altre funzioni', featuresEl],
+    ['Protezione del sito corrente', siteProtectionEl], ['Rete Tor', torEl]
   ];
   return ['FILUM · Diagnostica', `Data: ${new Date().toISOString()}`,
     `Esito: ${checkedEl.textContent}`,
@@ -67,10 +69,12 @@ async function verify() {
   checkedEl.textContent = 'Lettura dello stato reale…';
   modeEl.replaceChildren();
   featuresEl.replaceChildren();
+  siteProtectionEl.replaceChildren();
   torEl.replaceChildren();
   try {
-    const [status, prefs, proxy, settings, policyStatus, fingerprinting, tracking, cookies, webRtc, referrers] = await Promise.all([
+    const [status, site, prefs, proxy, settings, policyStatus, fingerprinting, tracking, cookies, webRtc, referrers] = await Promise.all([
       browser.runtime.sendMessage({ type: 'get-status' }),
+      browser.runtime.sendMessage({ type: 'get-site-protection' }),
       browser.runtime.sendMessage({ type: 'get-mode-diagnostics' }),
       browser.proxy.settings.get({}),
       browser.runtime.sendMessage({ type: 'get-advanced-settings' }),
@@ -82,6 +86,21 @@ async function verify() {
       readPrivacy(browser.privacy.websites.referrersEnabled)
     ]);
     const mode = status.mode;
+    if (site?.available) {
+      row(siteProtectionEl, 'Origine', site.origin);
+      row(siteProtectionEl, 'Livello globale', site.globalLevel);
+      row(siteProtectionEl, 'Override sito', site.overrideScope || 'nessuno');
+      row(siteProtectionEl, 'Livello effettivo sito', site.effectiveLevel);
+      for (const [feature, item] of Object.entries(site.features || {})) {
+        row(siteProtectionEl, `${feature}: REQUESTED`, item.requested);
+        row(siteProtectionEl, `${feature}: SOURCE`, item.source);
+        row(siteProtectionEl, `${feature}: EFFECTIVE`, item.effective);
+        row(siteProtectionEl, `${feature}: VERIFIED`, item.verified,
+          item.verified === 'PASS' ? 'pass' : item.verified === 'FAIL' ? 'fail' : 'unknown');
+      }
+    } else {
+      row(siteProtectionEl, 'Stato', site?.reason || 'Nessuna scheda HTTP(S) disponibile');
+    }
     const expectedAutoplay = mode === 'TURBO' || mode === 'GHOST' ? 5 : 1;
     const check = (label, actual, expected) => row(modeEl, label,
       actual === undefined ? 'Non leggibile' : `${String(actual)} · atteso ${String(expected)}`,

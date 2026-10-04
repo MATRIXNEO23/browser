@@ -37,14 +37,59 @@ async function main() {
   assert.equal(policyEngine.resolve(null, 'GHOST', { torEnabled: true }).features.webrtc.effective, 'blocked',
     'Tor policy must fail closed on WebRTC independently of the selected level');
   assert.equal(policyEngine.resolve(null, 'NORMAL').features.javascript.siteOverride, 'UNSUPPORTED',
-    'the policy engine must identify unavailable per-site overrides honestly');
+    'the policy engine must identify unavailable per-site JavaScript overrides honestly');
+  assert.equal(policyEngine.normalizeOrigin('https://Example.org:443/path'), 'https://example.org',
+    'site policy must normalize to exact scheme/host/port origin');
+  assert.equal(policyEngine.normalizeOrigin('https://example.org.evil.test'), 'https://example.org.evil.test',
+    'site policy must not widen an origin to sibling domains');
+  assert.equal(policyEngine.normalizeOrigin('https://user:pass@example.org/path'), 'https://example.org',
+    'credentials must not become part of the site origin key');
+  assert.equal(policyEngine.normalizeSiteOverride({ level: 'unexpected' }), null,
+    'unknown site levels must be rejected');
+  const siteStrict = policyEngine.resolveSite({ level: 'maximum' }, 'NORMAL', { level: 'normal' }, {
+    actual: { javascript: 'blocked', canvas: 'protected', webgl: 'blocked', webrtc: 'blocked', tracking: 'strict', cookies: 'third-party-blocked' },
+    sitePermissions: {}, torEnabled: false
+  });
+  assert.equal(siteStrict.features.javascript.effective, 'blocked',
+    'site preset must not pretend global JavaScript can be overridden per origin');
+  assert.equal(siteStrict.features.javascript.verified, 'UNSUPPORTED',
+    'non-granular site requests must be reported as unsupported');
+  const nativeCanvasPermission = policyEngine.resolveSite({ level: 'maximum' }, 'GHOST', { level: 'normal' }, {
+    actual: { javascript: 'blocked', canvas: 'standard', webgl: 'blocked', webrtc: 'blocked', tracking: 'strict', cookies: 'third-party-blocked' },
+    sitePermissions: { canvas: 'allow' }, ownedSitePermissions: { canvas: false }, torEnabled: false
+  });
+  assert.match(nativeCanvasPermission.features.canvas.source, /outside FILUM policy/,
+    'pre-existing Gecko permissions must not be misattributed to FILUM');
+  const torSite = policyEngine.resolveSite({ level: 'maximum' }, 'GHOST', { level: 'normal' }, {
+    actual: { javascript: 'blocked', canvas: 'standard', webgl: 'blocked', webrtc: 'blocked', tracking: 'strict', cookies: 'third-party-blocked' },
+    sitePermissions: { canvas: 'allow' }, torEnabled: true
+  });
+  assert.equal(torSite.features.canvas.effective, 'standard',
+    'a conflicting unmanaged permission must be reported as observed rather than falsely claimed blocked');
+  assert.equal(torSite.features.canvas.verified, 'FAIL',
+    'an unmanaged Canvas allow permission must be reported as a Tor constraint conflict');
 
   const bridgeFunctions = bridgeSchema[0].functions.map(item => item.name);
   assert.ok(bridgeFunctions.includes('applyGhostHardening'), 'privileged bridge must expose GHOST hardening');
   assert.ok(bridgeFunctions.includes('setGhostJavascriptEnabled'), 'privileged bridge must expose the GHOST JavaScript toggle');
   assert.ok(bridgeFunctions.includes('applyPrivacyPreferences'), 'privileged bridge must apply native policy preferences');
+  for (const name of ['getSitePrivacyPermissions', 'getCanvasAllowPermissionOrigins', 'setSitePrivacyPermissions']) {
+    assert.ok(bridgeFunctions.includes(name), `privileged bridge must expose ${name}`);
+  }
   const privacySettingsHtml = fs.readFileSync(path.join(__dirname, '../extension/privacy-settings.html'), 'utf8');
   const privacySettingsJs = fs.readFileSync(path.join(__dirname, '../extension/privacy-settings.js'), 'utf8');
+  const siteProtectionHtml = fs.readFileSync(path.join(__dirname, '../extension/site-protection.html'), 'utf8');
+  const siteProtectionJs = fs.readFileSync(path.join(__dirname, '../extension/site-protection.js'), 'utf8');
+  const siteOverridesJs = fs.readFileSync(path.join(__dirname, '../extension/site-overrides.js'), 'utf8');
+  const diagnosticsJs = fs.readFileSync(path.join(__dirname, '../extension/diagnostics.js'), 'utf8');
+  assert.match(siteProtectionHtml, /REQUESTED[\s\S]*SOURCE[\s\S]*EFFECTIVE[\s\S]*VERIFIED/,
+    'contextual popup must expose resolved policy provenance and readback');
+  assert.match(siteProtectionJs, /type: 'set-site-override'/,
+    'contextual popup must update the active site override');
+  assert.match(siteOverridesJs, /type: 'remove-all-site-overrides'/,
+    'central site manager must support restoring all overrides');
+  assert.match(diagnosticsJs, /REQUESTED|requested/,
+    'diagnostics must include contextual site policy fields');
   assert.match(privacySettingsHtml, /data-level="normal"[\s\S]*data-level="maximum"/,
     'privacy settings must expose all four protection presets');
   for (const feature of Object.keys(policyEngine.FEATURES)) {
@@ -186,7 +231,8 @@ async function main() {
   const proxyListeners = new Set();
   let currentProxy = { proxyType: 'manual', socks: '127.0.0.1:19050', socksVersion: 5, proxyDNS: true };
   let currentDns = 'off';
-  const context = vm.createContext({ URL, browser, ghostRecordQueue: Promise.resolve(), logSecurityEvent() {}, console: { warn() {} } });
+  const context = vm.createContext({ URL, browser, ghostRecordQueue: Promise.resolve(),
+    async syncSiteOverridesForTor() {}, logSecurityEvent() {}, console: { warn() {}, error() {}, log() {} } });
   vm.runInContext(section('function matchesRestoredProxy(', 'function localUsageDay('), context);
   vm.runInContext(section('async function endGhostSession()', 'async function setTorEnabled('), context);
   await assert.rejects(vm.runInContext('endGhostSession()', context), /cleanup failed/);
@@ -684,6 +730,7 @@ async function main() {
     classList: { toggle() {} }, setAttribute(name, value) { this.attributes[name] = value; } });
   const ui = Object.fromEntries([
     'modeWarning', 'blockCounterEl', 'siteBlockDomainEl', 'siteBlockButton', 'adsButton',
+    'siteProtectionStatusEl', 'siteProtectionOpenButton',
     'urlhausMalwareButton', 'torButton', 'dnsProvider', 'secureDns',
     'dnsEndpoint', 'applyDns', 'torStatus', 'dnsStatus'
   ].map(name => [name, element()]));
@@ -942,6 +989,7 @@ async function main() {
     Date, navigator: { clipboard: { async writeText(value) { copied.push(value); } } },
     modeEl: { querySelectorAll: () => [rowItem('Modalità selezionata', 'PRIVATE')] },
     featuresEl: { querySelectorAll: () => [rowItem('ADS', 'Attivo')] },
+    siteProtectionEl: { querySelectorAll: () => [rowItem('Origine', 'https://example.org')] },
     torEl: { querySelectorAll: () => [rowItem('Bootstrap', '100%')] },
     checkedEl: { textContent: 'Verifica completata' },
     copyButton: { textContent: '' }
@@ -952,6 +1000,7 @@ async function main() {
   await vm.runInContext('copyReport()', diagnosticContext);
   assert.match(copied[0], /Modalità selezionata: PRIVATE/);
   assert.match(copied[0], /ADS: Attivo/);
+  assert.match(copied[0], /Origine: https:\/\/example\.org/);
   assert.match(copied[0], /Bootstrap: 100%/);
   assert.equal(diagnosticContext.copyButton.textContent, 'Diagnostica copiata');
 

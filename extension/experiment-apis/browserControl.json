@@ -53,6 +53,12 @@
           }
         ]
       },
+      { "name": "getSitePrivacyPermissions", "type": "function", "async": true,
+        "parameters": [{ "name": "origin", "type": "string" }] },
+      { "name": "getCanvasAllowPermissionOrigins", "type": "function", "async": true,
+        "parameters": [] },
+      { "name": "setSitePrivacyPermissions", "type": "function", "async": true,
+        "parameters": [{ "name": "serialized", "type": "string" }] },
       {
         "name": "getProcessStats",
         "type": "function",

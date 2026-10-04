@@ -4,6 +4,8 @@ const resourceEl = document.getElementById('resource-stats');
 const blockCounterEl = document.getElementById('block-counter');
 const siteBlockDomainEl = document.getElementById('site-block-domain');
 const siteBlockButton = document.getElementById('site-block-toggle');
+const siteProtectionStatusEl = document.getElementById('site-protection-status');
+const siteProtectionOpenButton = document.getElementById('site-protection-open');
 const adsButton = document.getElementById('ads');
 const urlhausMalwareButton = document.getElementById('urlhaus-malware');
 const modeButtons = [...document.querySelectorAll('[data-mode]')];
@@ -80,6 +82,19 @@ function renderSiteBlockStatus(status) {
   siteBlockButton.title = available
     ? `Eccezione DNR limitata a questa scheda: ${siteBlockStatus.domain}`
     : 'Disponibile solo sulle schede HTTP o HTTPS';
+}
+
+function renderSiteProtectionStatus(status) {
+  const level = status?.torCanvasConflict ? 'partial' : status?.effectiveLevel || status?.globalLevel || '—';
+  const labels = { normal: 'NORMALE', protected: 'PROTETTO', strong: 'FORTE', maximum: 'MASSIMO', partial: 'PARZIALE' };
+  const override = !!status?.overrideScope;
+  const nativeOverride = !override && !!status?.nativePermissionOverride;
+  const state = status?.torCanvasConflict ? 'CONFLITTO CANVAS/TOR' : override ? 'override sito' : nativeOverride ? 'permesso Gecko' : 'globale';
+  siteProtectionStatusEl.textContent = `FILUM • ${labels[level] || level} • ${state}`;
+  siteProtectionStatusEl.dataset.override = String(override || nativeOverride);
+  siteProtectionStatusEl.dataset.partial = String(level === 'partial' || !!status?.torCanvasConflict);
+  siteProtectionStatusEl.title = status?.origin || status?.reason || '';
+  siteProtectionOpenButton.disabled = !status?.available;
 }
 
 function errorText(error) {
@@ -245,6 +260,12 @@ async function getStatus() {
   return browser.runtime.sendMessage({ type: 'get-status' });
 }
 
+async function refreshSiteProtectionStatus() {
+  const status = await browser.runtime.sendMessage({ type: 'get-site-protection' });
+  renderSiteProtectionStatus(status);
+  return status;
+}
+
 async function refresh() {
   try {
     const data = await getStatus();
@@ -367,6 +388,18 @@ diagnosticsButton.addEventListener('click', async () => {
     await browser.tabs.create({ url: browser.runtime.getURL('diagnostics.html') });
   } catch (error) {
     setPanelStatus('Diagnostica: ' + errorText(error), true);
+  }
+});
+
+siteProtectionOpenButton.addEventListener('click', async () => {
+  if (siteProtectionOpenButton.disabled) return;
+  try {
+    const status = await browser.runtime.sendMessage({ type: 'get-site-protection' });
+    if (!status?.available) throw new Error(status?.reason || 'Sito corrente non disponibile.');
+    const result = await browser.runtime.sendMessage({ type: 'open-site-protection', tabId: status.tabId, origin: status.origin });
+    if (!result?.opened) setPanelStatus('Popup protezione sito non aperto.', true);
+  } catch (error) {
+    setPanelStatus('Protezione sito: ' + errorText(error), true);
   }
 });
 
@@ -1380,6 +1413,7 @@ async function runControlSelfTest() {
 
 Promise.all([
   refresh(),
+  refreshSiteProtectionStatus(),
   loadAdvancedSettings(),
   loadNetworkSettings()
 ]).catch(error => {
@@ -1388,15 +1422,23 @@ Promise.all([
 
 setInterval(() => {
   refresh().catch(() => {});
+  refreshSiteProtectionStatus().catch(() => {});
 }, 5000);
 
-browser.tabs.onActivated.addListener(() => refresh().catch(() => {}));
+browser.tabs.onActivated.addListener(() => {
+  refresh().catch(() => {});
+  refreshSiteProtectionStatus().catch(() => {});
+});
 browser.tabs.onUpdated.addListener((_tabId, changeInfo) => {
   if ('url' in changeInfo || changeInfo.status === 'complete') {
     refresh().catch(() => {});
+    refreshSiteProtectionStatus().catch(() => {});
   }
 });
-browser.windows.onFocusChanged.addListener(() => refresh().catch(() => {}));
+browser.windows.onFocusChanged.addListener(() => {
+  refresh().catch(() => {});
+  refreshSiteProtectionStatus().catch(() => {});
+});
 
 if (new URL(location.href).searchParams.get('selftest') === '1') {
   setTimeout(() => {

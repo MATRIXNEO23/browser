@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Override per sito · FILUM</title>
+  <link rel="stylesheet" href="site-overrides.css">
+</head>
+<body>
+  <main>
+    <h1>Override per sito</h1>
+    <p id="summary">Caricamento…</p>
+    <label for="search">Cerca dominio/origine</label>
+    <input id="search" type="search">
+    <button id="remove-all">Ripristina tutti</button>
+    <p class="note">Le regole sono indicizzate per origine completa (schema, host e porta); non si estendono ai domini fratelli. Le sessioni scadono alla chiusura del browser.</p>
+    <section id="list"></section>
+    <p id="message" role="status"></p>
+  </main>
+  <script src="site-overrides.js"></script>
+</body>
+</html>
