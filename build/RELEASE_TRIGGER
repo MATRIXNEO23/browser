@@ -1,5 +1,5 @@
 release_request: none
-source_head_before_trigger: 0e94cad2662c00429d5c9552ef280a526cd0c210
+source_head_before_trigger: a5c524f7313e7e05a4a767da43673a0dd83dc711
 site_contextual_protection: required
 site_origin_isolation: scheme_host_port
 site_override_diagnostics: requested_source_effective_verified
@@ -11,8 +11,9 @@ custom_dns: required
 compact_sidebar: required
 approved_cyber_background: unchanged
 windows_runtime_smoke: required
+contextual_protection_event_test: itisatrap_tracking_protection
 privacy_policy_engine: four_levels_and_independent_controls
 privacy_settings_readback: required
 tor_independent_fail_closed: required
 stable_release_only: true
-rerun_reason: site_override_lifetime_copy_correction_2026_10_04
+rerun_reason: contextual_protection_event_signal_windows_runtime_2026_10_04

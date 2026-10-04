@@ -31,7 +31,7 @@ if manifest_path.is_file():
     permissions = set(manifest.get("permissions", []))
     required_permissions = {
         "tabs", "storage", "downloads", "theme", "declarativeNetRequest",
-        "management", "privacy", "browsingData", "history", "bookmarks",
+        "webRequest", "notifications", "management", "privacy", "browsingData", "history", "bookmarks",
         "search", "browserSettings", "proxy", "alarms"
     }
     missing = required_permissions - permissions
@@ -137,6 +137,7 @@ require_text(
     "AddonManager.PERM_CAN_UNINSTALL",
 )
 require_file("scripts/audit-addons.cjs")
+require_file("scripts/audit-protection-events.cjs")
 require_text(
     "fork/mozconfig.win64",
     "--with-app-name=browser",

@@ -10,6 +10,8 @@
     "theme",
     "declarativeNetRequest",
     "declarativeNetRequestFeedback",
+    "webRequest",
+    "notifications",
     "management",
     "privacy",
     "browsingData",
@@ -23,6 +25,7 @@
   "background": {
     "scripts": [
       "policy-engine.js",
+      "protection-events.js",
       "background.js"
     ]
   },

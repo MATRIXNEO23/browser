@@ -199,11 +199,14 @@ function extensionAsyncScript(body) {
             set: items => cloneFromPage(rawApi.storage.local.set(cloneForPage(items)))
           }
         },
-        proxy: {
-          settings: {
-            get: details => cloneFromPage(rawApi.proxy.settings.get(cloneForPage(details)))
-          }
+      proxy: {
+        settings: {
+          get: details => cloneFromPage(rawApi.proxy.settings.get(cloneForPage(details)))
         }
+      },
+      notifications: {
+        getAll: () => cloneFromPage(rawApi.notifications.getAll())
+      }
       };
       return await (${body})(api, input);
     })().then(value => finish(JSON.stringify({ value })), error =>
@@ -621,6 +624,47 @@ async function testGhostJavascript(client) {
   console.log('PASS: GHOST JavaScript off/on, same-mode selection, and snapshot restoration.');
 }
 
+async function testNativeProtectionNotification(client, extensionPage) {
+  const baseline = await extensionCall(client,
+    '(api) => api.runtime.sendMessage({ type: "get-privacy-policy" })');
+  const baselineTracking = baseline?.features?.tracking?.manual || 'preset';
+
+  const testWindow = (await client.command('WebDriver:NewWindow', { type: 'tab' })).handle;
+  try {
+    await extensionCall(client,
+      '(api) => api.runtime.sendMessage({ type: "set-privacy-policy", change: { type: "set-feature", feature: "tracking", value: "strict" } })');
+    await switchToWindow(client, testWindow);
+    await client.command('WebDriver:Navigate', {
+      url: 'https://www.itisatrap.org/firefox/its-a-tracker.html'
+    }, 60000);
+
+    const deadline = Date.now() + 30000;
+    let match = null;
+    while (Date.now() < deadline) {
+      await switchToWindow(client, extensionPage.handle);
+      const notifications = await extensionCall(client,
+        'async (api) => await api.notifications.getAll()');
+      match = Object.values(notifications || {}).find(item =>
+        item.title === 'FILUM · protezione tracciamento');
+      if (match) break;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    assert.ok(match,
+      'A real Firefox Tracking Protection event on the Mozilla test page did not create the FILUM notification.');
+    assert.match(match.message, /FILUM ha bloccato una richiesta/);
+    assert.doesNotMatch(match.message, /itisatrap|tracker/i,
+      'OS notification must not expose the website or blocked request hostname.');
+    console.log('PASS: Windows Gecko emitted a real classifier block and FILUM created the contextual tracking notification.');
+  } finally {
+    await extensionCall(client,
+      '(api, value) => api.runtime.sendMessage({ type: "set-privacy-policy", change: { type: "set-feature", feature: "tracking", value } })',
+      baselineTracking).catch(() => {});
+    await switchToWindow(client, testWindow).catch(() => {});
+    await client.command('WebDriver:CloseWindow').catch(() => {});
+    await switchToWindow(client, extensionPage.handle).catch(() => {});
+  }
+}
+
 async function main() {
   assertRuntimeInputs();
   const client = new MarionetteClient(PORT);
@@ -636,6 +680,7 @@ async function main() {
     for (const [name, test] of [
       ['Proxy authentication', () => testProxyAuthentication(client, extensionPage)],
       ['GHOST JavaScript', () => testGhostJavascript(client)],
+      ['Native protection notification', () => testNativeProtectionNotification(client, extensionPage)],
       ['Security logger', () => testSecurityLogger(client)]
     ]) {
       try {

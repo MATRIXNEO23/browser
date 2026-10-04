@@ -1401,6 +1401,36 @@ browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'resource-sweep') scheduleEnforcement();
 });
 
+async function openSiteProtectionForTab(tabId, expectedOrigin, eventClass = null) {
+  const tab = await browser.tabs.get(tabId);
+  const origin = FilumPolicyEngine.normalizeOrigin(tab.url || '');
+  if (tab.incognito || (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default') ||
+      !origin || origin !== expectedOrigin) {
+    throw new Error('La scheda è cambiata o usa un contenitore non supportato.');
+  }
+  const url = new URL(browser.runtime.getURL('site-protection.html'));
+  url.searchParams.set('origin', origin);
+  url.searchParams.set('tabId', String(tab.id));
+  url.searchParams.set('windowId', String(tab.windowId));
+  if (eventClass && FilumProtectionEvents.classLabel(eventClass)) {
+    url.searchParams.set('eventClass', eventClass);
+  }
+  const popup = await browser.windows.create({ url: url.href, type: 'popup', width: 620, height: 760, focused: true });
+  return { opened: !!popup?.id };
+}
+
+const protectionEventSignals = FilumProtectionEvents.create({
+  browser,
+  openSiteProtection: ({ tabId, origin, eventClass }) =>
+    openSiteProtectionForTab(tabId, origin, eventClass)
+});
+browser.tabs.onRemoved.addListener(tabId => protectionEventSignals.clearTab(tabId));
+browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if ('url' in changeInfo) {
+    protectionEventSignals.clearTab(tabId, FilumProtectionEvents.normalizeOrigin(changeInfo.url || tab?.url));
+  }
+});
+
 browser.runtime.onMessage.addListener(async (message, sender) => {
   if (message?.type === 'get-site-protection') {
     if (!['sidebar.html', 'diagnostics.html', 'site-protection.html'].some(page => trustedFilumPage(sender, page))) return { available: false };
@@ -1408,15 +1438,7 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
   }
   if (message?.type === 'open-site-protection') {
     if (!trustedFilumPage(sender, 'sidebar.html')) throw new Error('Popup non autorizzato.');
-    const tab = await browser.tabs.get(message.tabId);
-    if (tab.incognito || (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default') ||
-        FilumPolicyEngine.normalizeOrigin(tab.url || '') !== message.origin) throw new Error('La scheda è cambiata o usa un contenitore non supportato.');
-    const url = new URL(browser.runtime.getURL('site-protection.html'));
-    url.searchParams.set('origin', message.origin);
-    url.searchParams.set('tabId', String(tab.id));
-    url.searchParams.set('windowId', String(tab.windowId));
-    const popup = await browser.windows.create({ url: url.href, type: 'popup', width: 620, height: 760, focused: true });
-    return { opened: !!popup?.id };
+    return openSiteProtectionForTab(message.tabId, message.origin);
   }
   if (message?.type === 'set-site-override') {
     if (!trustedFilumPage(sender, 'site-protection.html')) throw new Error('Modifica sito non autorizzata.');

@@ -4,7 +4,15 @@ const query = new URLSearchParams(location.search);
 const origin = query.get('origin');
 const tabId = Number(query.get('tabId'));
 const windowId = Number(query.get('windowId'));
+const eventClass = query.get('eventClass');
 const labels = { normal: 'Normale', protected: 'Protetto', strong: 'Forte', maximum: 'Massimo' };
+const eventLabels = {
+  tracking: 'tracciamento', 'social-tracking': 'tracciamento social',
+  'email-tracking': 'tracciamento email', fingerprinting: 'fingerprinting',
+  cryptomining: 'cryptomining', malware: 'malware', phishing: 'phishing',
+  'content-blocking': 'protezione contenuti',
+  'unwanted-software': 'software indesiderato', 'harmful-content': 'contenuto dannoso'
+};
 const featureNames = {
   javascript: 'JavaScript', canvas: 'Canvas / RFP', webgl: 'WebGL',
   webrtc: 'WebRTC', tracking: 'Tracciamento', cookies: 'Cookie'
@@ -20,6 +28,12 @@ function say(text, error = false) {
 
 function render(status) {
   state = status;
+  const eventContext = document.getElementById('event-context');
+  const eventLabel = eventLabels[eventClass];
+  eventContext.hidden = !eventLabel;
+  eventContext.textContent = eventLabel
+    ? `Evento rilevato: Gecko ha bloccato una richiesta classificata come ${eventLabel} per questo sito. Qui puoi modificare il livello FILUM applicato a questa origine.`
+    : '';
   document.getElementById('origin').textContent = status.available
     ? `${status.host} · ${status.origin}` : status.reason;
   const level = labels[status.effectiveLevel] || status.effectiveLevel;
