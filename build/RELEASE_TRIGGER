@@ -1,5 +1,5 @@
 release_request: none
-source_head_before_trigger: b479f2094ce5773c2424b73c1ff56460ffcd7791
+source_head_before_trigger: 0e94cad2662c00429d5c9552ef280a526cd0c210
 site_contextual_protection: required
 site_origin_isolation: scheme_host_port
 site_override_diagnostics: requested_source_effective_verified
@@ -15,4 +15,4 @@ privacy_policy_engine: four_levels_and_independent_controls
 privacy_settings_readback: required
 tor_independent_fail_closed: required
 stable_release_only: true
-rerun_reason: contextual_site_protection_runtime_validation_2026_10_04
+rerun_reason: site_override_lifetime_copy_correction_2026_10_04

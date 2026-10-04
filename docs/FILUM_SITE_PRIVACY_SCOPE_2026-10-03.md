@@ -26,7 +26,7 @@ switches.
 | Control | Granularity implemented | Evidence shown |
 |---|---|---|
 | Protection level | Exact origin; native exceptions only where available | Gecko permission readback per supported feature |
-| Canvas/RFP | Exact-origin Canvas permission; temporary exception only; denied while Tor is active | `canvas` permission and RFP state |
+| Canvas/RFP | Exact-origin Gecko permission follows a site level's duration; standalone Canvas-only exception is temporary; blocked while Tor is active | `canvas` permission and RFP state |
 | Tracking protection | Exact-origin Gecko `trackingprotection` allow permission | Gecko permission readback |
 | JavaScript, WebGL, WebRTC, cookies | Global preference or mode-scoped; no fabricated per-site exception | `UNSUPPORTED` when a site preset differs |
 | Ads/malware Smart Toggle | Per-tab/domain DNR session rule | Independent from privacy presets |
